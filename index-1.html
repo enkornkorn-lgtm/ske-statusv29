@@ -1,0 +1,2255 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="สถานะรถ SKE">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="manifest" id="manifestLink">
+<title>สถานะรถ SKE</title>
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDE1EAH7Uf2cVOkguXW7vfObisEH3NMvh4",
+    authDomain: "ske-status.firebaseapp.com",
+    databaseURL: "https://ske-status-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "ske-status",
+    storageBucket: "ske-status.firebasestorage.app",
+    messagingSenderId: "857120529855",
+    appId: "1:857120529855:web:002cd6e5eed5c90f47d50a"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // ── Firebase helpers ──────────────────────────────────────────────────────────
+  window._fbReady = false;
+
+  // บันทึกข้อมูลพนักงานทั้งหมดขึ้น Firebase
+  window.fbSaveEmployees = function(emps) {
+    set(ref(db, 'employees'), emps).catch(e => console.error('fbSave error', e));
+  };
+
+  // บันทึก admin password
+  window.fbSaveAdminPw = function(pw) {
+    set(ref(db, 'adminPw'), pw).catch(e => console.error('fbSavePw error', e));
+  };
+
+  // บันทึกรายการแจ้งซ่อมขึ้น Firebase
+  window.fbSaveRepairs = function(list) {
+    set(ref(db, 'repairs'), list).catch(e => console.error('fbSaveRepairs error', e));
+  };
+
+  // บันทึกรายการเปลี่ยนถ่ายของเหลวขึ้น Firebase
+  window.fbSaveFluidLogs = function(list) {
+    set(ref(db, 'fluidLogs'), list).catch(e => console.error('fbSaveFluidLogs error', e));
+  };
+
+  // บันทึกรายการเบิกเงินพนักงานขึ้น Firebase
+  window.fbSaveCashRequests = function(list) {
+    set(ref(db, 'cashRequests'), list).catch(e => console.error('fbSaveCashRequests error', e));
+  };
+
+  // ดึงข้อมูลล่าสุดจาก Firebase ทันที (สำหรับปุ่มรีเฟรชของผู้ดูแล)
+  window.fbForceRefresh = function(cb) {
+    get(ref(db, 'employees')).then(snapshot => {
+      const data = snapshot.val();
+      if (data && Array.isArray(data) && data.length > 0) {
+        employees = data;
+        localStorage.setItem('ske_emp', JSON.stringify(employees));
+      }
+      if (typeof cb === 'function') cb(true);
+    }).catch(e => {
+      console.error('fbForceRefresh error', e);
+      if (typeof cb === 'function') cb(false);
+    });
+  };
+
+  // ฟัง realtime — เมื่อข้อมูลเปลี่ยนจากเครื่องอื่นจะอัพเดทอัตโนมัติ
+  onValue(ref(db, 'employees'), (snapshot) => {
+    const data = snapshot.val();
+    if (data && Array.isArray(data) && data.length > 0) {
+      // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ (ไม่เขียนทับด้วยข้อมูลเครื่อง)
+      employees = data;
+      localStorage.setItem('ske_emp', JSON.stringify(employees));
+      if (currentUser) {
+        const fresh = employees.find(e => e.id === currentUser.id);
+        if (fresh) { currentUser = {...currentUser, ...fresh}; saveU(); }
+      }
+      const dash = document.getElementById('dashboard');
+      const admin = document.getElementById('admin');
+      if (dash && !dash.classList.contains('hidden')) renderDashboard();
+      if (admin && !admin.classList.contains('hidden')) renderAdmin();
+    } else if (employees.length > 0) {
+      // Firebase ว่างจริงๆ (ครั้งแรกที่ใช้งาน) → อัพโหลดข้อมูลเครื่องขึ้นไปครั้งเดียว
+      set(ref(db, 'employees'), employees);
+    }
+    window._fbReady = true;
+  });
+
+  onValue(ref(db, 'adminPw'), (snapshot) => {
+    const pw = snapshot.val();
+    if (pw) { adminPw = pw; localStorage.setItem('ske_pw', pw); }
+  });
+
+  // ฟัง realtime — รายการแจ้งซ่อม
+  onValue(ref(db, 'repairs'), (snapshot) => {
+    const data = snapshot.val();
+    if (data && Array.isArray(data)) {
+      repairs = data;
+      localStorage.setItem('ske_repairs', JSON.stringify(repairs));
+      if (typeof updateMaintBadges === 'function') updateMaintBadges();
+      const m = document.getElementById('repairModal');
+      if (m && !m.classList.contains('hidden') && typeof renderRepairList === 'function') renderRepairList();
+    } else if (repairs.length > 0) {
+      set(ref(db, 'repairs'), repairs);
+    }
+  });
+
+  // ฟัง realtime — รายการเปลี่ยนถ่ายของเหลว
+  onValue(ref(db, 'fluidLogs'), (snapshot) => {
+    const data = snapshot.val();
+    if (data && Array.isArray(data)) {
+      fluidLogs = data;
+      localStorage.setItem('ske_fluid', JSON.stringify(fluidLogs));
+      if (typeof updateMaintBadges === 'function') updateMaintBadges();
+      const m = document.getElementById('fluidModal');
+      if (m && !m.classList.contains('hidden') && typeof renderFluidList === 'function') renderFluidList();
+    } else if (fluidLogs.length > 0) {
+      set(ref(db, 'fluidLogs'), fluidLogs);
+    }
+  });
+
+  // ฟัง realtime — รายการเบิกเงินพนักงาน
+  onValue(ref(db, 'cashRequests'), (snapshot) => {
+    const data = snapshot.val();
+    if (data && Array.isArray(data)) {
+      cashRequests = data;
+      localStorage.setItem('ske_cash', JSON.stringify(cashRequests));
+      if (typeof updateMaintBadges === 'function') updateMaintBadges();
+      if (typeof updateAdminCashBadge === 'function') updateAdminCashBadge();
+      const m = document.getElementById('cashModal');
+      if (m && !m.classList.contains('hidden') && typeof renderCashList === 'function') renderCashList();
+      const ap = document.getElementById('adminCashPanel');
+      if (ap && !ap.classList.contains('hidden') && typeof renderAdminCashList === 'function') renderAdminCashList();
+    } else if (cashRequests.length > 0) {
+      set(ref(db, 'cashRequests'), cashRequests);
+    }
+  });
+
+  // โหลดข้อมูลครั้งแรก (กรณี realtime ยังไม่ทัน)
+  get(ref(db, 'employees')).then(snapshot => {
+    const data = snapshot.val();
+    if (data && Array.isArray(data) && data.length > 0) {
+      // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ
+      employees = data;
+      localStorage.setItem('ske_emp', JSON.stringify(employees));
+    } else {
+      // Firebase ว่างจริงๆ → อัพโหลดข้อมูลที่มีอยู่ในเครื่อง (default หรือ localStorage)
+      window.fbSaveEmployees(employees);
+    }
+    window._fbReady = true;
+  }).catch(e => { window._fbReady = true; console.error('fbGet error', e); });
+
+  get(ref(db, 'adminPw')).then(snapshot => {
+    const pw = snapshot.val();
+    if (pw) { adminPw = pw; localStorage.setItem('ske_pw', pw); }
+    else if (adminPw !== 'admin1234') window.fbSaveAdminPw(adminPw);
+  });
+
+  get(ref(db, 'repairs')).then(snapshot => {
+    const data = snapshot.val();
+    if (data && Array.isArray(data)) {
+      repairs = data;
+      localStorage.setItem('ske_repairs', JSON.stringify(repairs));
+      if (typeof updateMaintBadges === 'function') updateMaintBadges();
+    } else if (repairs.length > 0) {
+      window.fbSaveRepairs(repairs);
+    }
+  }).catch(e => console.error('fbGet repairs error', e));
+
+  get(ref(db, 'fluidLogs')).then(snapshot => {
+    const data = snapshot.val();
+    if (data && Array.isArray(data)) {
+      fluidLogs = data;
+      localStorage.setItem('ske_fluid', JSON.stringify(fluidLogs));
+      if (typeof updateMaintBadges === 'function') updateMaintBadges();
+    } else if (fluidLogs.length > 0) {
+      window.fbSaveFluidLogs(fluidLogs);
+    }
+  }).catch(e => console.error('fbGet fluidLogs error', e));
+
+  get(ref(db, 'cashRequests')).then(snapshot => {
+    const data = snapshot.val();
+    if (data && Array.isArray(data)) {
+      cashRequests = data;
+      localStorage.setItem('ske_cash', JSON.stringify(cashRequests));
+      if (typeof updateMaintBadges === 'function') updateMaintBadges();
+    } else if (cashRequests.length > 0) {
+      window.fbSaveCashRequests(cashRequests);
+    }
+  }).catch(e => console.error('fbGet cashRequests error', e));
+
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:'Noto Sans Thai','Sarabun',sans-serif;background:#F5F6FA;color:#1a1a2e;min-height:100vh;min-height:100dvh;}
+button{font-family:'Noto Sans Thai','Sarabun',sans-serif;cursor:pointer;border:none;outline:none;}
+input,textarea,select{font-family:'Noto Sans Thai','Sarabun',sans-serif;outline:none;}
+textarea{resize:none;}
+.screen{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;}
+.hidden{display:none!important;}
+
+/* ── Splash ── */
+#splash{background:#fff;align-items:center;justify-content:center;gap:20px;}
+.splash-logo{width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,#F47920,#1E90D6,#7B2FBE);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 32px rgba(244,121,32,.35),0 4px 16px rgba(30,144,214,.2);}
+.splash-logo span{color:#fff;font-weight:900;font-size:34px;letter-spacing:-1px;}
+.splash-title{font-size:26px;font-weight:800;color:#1a1a2e;letter-spacing:1px;}
+.splash-sub{font-size:13px;color:#666;margin-top:4px;text-align:center;}
+.dots{display:flex;gap:6px;margin-top:12px;}
+.dot{width:8px;height:8px;border-radius:50%;animation:pulse 1.2s ease-in-out infinite;}
+.dot:nth-child(1){background:#F47920;}
+.dot:nth-child(2){background:#1E90D6;animation-delay:.2s;}
+.dot:nth-child(3){background:#7B2FBE;animation-delay:.4s;}
+@keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
+
+/* ── Topbar ── */
+.topbar{background:#fff;border-bottom:1px solid #E8EAF0;padding:0 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;height:56px;position:sticky;top:0;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.topbar-logo{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#F47920,#1E90D6,#7B2FBE);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.topbar-logo span{color:#fff;font-weight:900;font-size:12px;}
+.topbar-title{color:#1a1a2e;font-weight:800;font-size:15px;}
+.topbar-sub{color:#888;font-size:10px;}
+.topbar-back{width:36px;height:36px;border-radius:50%;background:#F0F2F8;display:flex;align-items:center;justify-content:center;font-size:18px;color:#1a1a2e;flex-shrink:0;}
+.badge-admin{background:#7B2FBE;color:#fff;font-size:10px;font-weight:700;border-radius:6px;padding:2px 8px;}
+.badge-num{background:#EF4444;color:#fff;font-size:10px;font-weight:700;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;margin-left:3px;vertical-align:middle;}
+
+/* ── Bottom Nav ── */
+.bottom-nav{background:#fff;border-top:1px solid #E8EAF0;display:flex;align-items:center;justify-content:space-around;padding:8px 0 max(8px,env(safe-area-inset-bottom));flex-shrink:0;box-shadow:0 -2px 8px rgba(0,0,0,.06);}
+.nav-btn{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;padding:4px 0;background:transparent;color:#999;font-size:10px;font-weight:600;border-radius:8px;}
+.nav-btn.active{color:#1E90D6;}
+.nav-btn .nav-icon{font-size:22px;line-height:1;}
+.nav-btn-red.active{color:#EF4444;}
+.nav-btn-purple.active{color:#7B2FBE;}
+.nav-btn-orange.active{color:#F47920;}
+
+/* ── Cards & Inputs ── */
+.card{background:#fff;border-radius:16px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);}
+.inp{width:100%;background:#F5F6FA;border:1.5px solid #E8EAF0;border-radius:10px;padding:11px 13px;color:#1a1a2e;font-size:14px;transition:border-color .2s;}
+.inp:focus{border-color:#1E90D6;background:#fff;}
+select.inp option{background:#fff;color:#1a1a2e;}
+.inp-label{color:#666;font-size:11px;font-weight:600;margin-bottom:5px;letter-spacing:.3px;}
+.section-label{color:#999;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;}
+
+/* ── Buttons ── */
+.btn{border-radius:12px;padding:12px 18px;font-weight:700;font-size:14px;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:opacity .15s;}
+.btn:active{opacity:.8;}
+.btn-orange{background:#F47920;color:#fff;}
+.btn-purple{background:#7B2FBE;color:#fff;}
+.btn-blue{background:#1E90D6;color:#fff;}
+.btn-gray{background:#F0F2F8;color:#555;}
+.btn-red{background:#EF4444;color:#fff;}
+.btn-green{background:#10B981;color:#fff;}
+.btn-full{width:100%;}
+.btn-sm{padding:7px 14px;font-size:12px;border-radius:8px;}
+.row-btns{display:flex;gap:8px;}
+
+/* ── Status Pill ── */
+.pill{border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap;}
+
+/* ── Employee Card ── */
+.emp-card{background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;border:1.5px solid #E8EAF0;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.emp-card.warn{border-color:#FCA5A5;background:#FFF5F5;}
+.emp-card.mine{border-color:#BAE6FD;background:#F0F9FF;}
+.emp-card-row{display:flex;align-items:center;gap:10px;}
+.you-badge{background:#1E90D6;color:#fff;font-size:9px;font-weight:700;border-radius:4px;padding:1px 6px;}
+.note-txt{color:#888;font-size:12px;margin-top:6px;padding-left:50px;}
+.time-txt{font-size:11px;margin-top:3px;padding-left:50px;color:#aaa;}
+.time-warn{color:#EF4444;}
+.empty-state{text-align:center;padding:40px 20px;color:#bbb;}
+.empty-state .empty-icon{font-size:48px;margin-bottom:12px;}
+.empty-state .empty-text{font-size:14px;}
+
+/* ── Avatar ── */
+.avatar{border-radius:50%;background:linear-gradient(135deg,#F47920,#1E90D6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;flex-shrink:0;}
+
+/* ── Login page ── */
+#login{background:#F5F6FA;overflow-y:auto;}
+.login-inner{max-width:420px;margin:0 auto;padding:24px 16px 100px;}
+.login-logo-wrap{display:flex;flex-direction:column;align-items:center;gap:14px;margin-bottom:28px;padding-top:8px;}
+.logo-lg{width:100px;height:100px;border-radius:50%;background:linear-gradient(135deg,#F47920,#1E90D6,#7B2FBE);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 28px rgba(244,121,32,.3);}
+.logo-lg span{color:#fff;font-weight:900;font-size:30px;}
+.emp-btn{background:#fff;border:1.5px solid #E8EAF0;border-radius:14px;padding:13px 14px;display:flex;align-items:center;gap:12px;width:100%;margin-bottom:10px;text-align:left;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.emp-btn:active{background:#F5F6FA;}
+
+/* ── My status card ── */
+.my-card{margin:0;padding:12px 16px 0;flex-shrink:0;}
+.my-card-inner{border-radius:18px;padding:16px;box-shadow:0 4px 16px rgba(0,0,0,.08);min-height:60px;}
+.status-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;}
+.status-opt{border-radius:10px;padding:9px 6px;font-size:12px;font-weight:600;border:2px solid #E8EAF0;background:#F5F6FA;color:#888;text-align:center;}
+.status-opt.sel{background:#fff;}
+.edit-panel{margin-top:14px;border-top:1px solid rgba(0,0,0,.08);padding-top:14px;}
+
+/* ── Province ── */
+.province-box{background:#fff;border:1.5px solid #D8B4FE;border-radius:12px;padding:12px;margin-top:10px;}
+.province-title{color:#7B2FBE;font-size:12px;font-weight:700;margin-bottom:8px;}
+.province-sel{width:100%;background:#F5F6FA;border:1.5px solid #D8B4FE;border-radius:10px;padding:10px 12px;color:#1a1a2e;font-size:14px;}
+
+/* ── Install Banner ── */
+.install-bar{background:linear-gradient(135deg,#EFF6FF,#F5F3FF);border:1.5px solid #BFDBFE;border-radius:14px;padding:13px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(30,144,214,.1);}
+.install-bar-icon{font-size:26px;flex-shrink:0;}
+.install-bar-text{flex:1;}
+.install-bar-title{color:#1a1a2e;font-weight:700;font-size:13px;}
+.install-bar-sub{color:#666;font-size:11px;margin-top:2px;}
+.install-bar-btn{background:#1E90D6;color:#fff;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;flex-shrink:0;}
+
+/* ── Admin ── */
+.admin-tab{display:flex;gap:8px;padding:12px 16px 0;flex-shrink:0;background:#F5F6FA;}
+.admin-tab-btn{flex:1;padding:10px;border-radius:10px;font-size:13px;font-weight:600;border:1.5px solid #E8EAF0;background:#fff;color:#888;}
+.admin-tab-btn.active{background:#7B2FBE;border-color:#7B2FBE;color:#fff;}
+.list-area{flex:1;overflow-y:auto;padding:14px 16px 20px;background:#F5F6FA;min-height:0;}
+
+/* ── msg ── */
+.msg-ok{color:#10B981;font-size:13px;margin-top:4px;}
+.msg-err{color:#EF4444;font-size:13px;margin-top:4px;}
+
+/* ── Tabs dashboard ── */
+.dash-tabs{display:flex;gap:6px;padding:10px 16px 0;flex-shrink:0;background:#F5F6FA;overflow-x:auto;}
+.dash-tab{flex:1;padding:8px 4px;border-radius:10px;font-size:12px;font-weight:600;border:1.5px solid #E8EAF0;background:#fff;color:#888;text-align:center;white-space:nowrap;}
+.dash-tab.active{background:#1E90D6;border-color:#1E90D6;color:#fff;}
+
+/* ── Quick action cards: แจ้งซ่อม / เปลี่ยนถ่ายของเหลว ── */
+.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 16px 0;flex-shrink:0;}
+.quick-card{background:#fff;border:1.5px solid #E8EAF0;border-radius:14px;padding:13px 10px;display:flex;flex-direction:column;align-items:center;gap:3px;box-shadow:0 2px 8px rgba(0,0,0,.04);text-align:center;position:relative;}
+.quick-card:active{background:#F5F6FA;}
+.quick-card-icon{font-size:24px;line-height:1;}
+.quick-card-title{font-size:12.5px;font-weight:700;color:#1a1a2e;margin-top:2px;}
+.quick-card-sub{font-size:10.5px;color:#888;font-weight:600;}
+.quick-card-sub.alert{color:#DC2626;}
+.quick-card-dot{position:absolute;top:8px;right:10px;background:#EF4444;color:#fff;font-size:10px;font-weight:800;border-radius:10px;min-width:18px;height:18px;padding:0 5px;display:flex;align-items:center;justify-content:center;}
+
+/* ── Maintenance sheets (แจ้งซ่อม / เปลี่ยนถ่ายของเหลว) ── */
+.maint-sheet{background:#fff;border-radius:22px 22px 0 0;padding:18px 16px max(18px,env(safe-area-inset-bottom));max-width:480px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 -6px 30px rgba(0,0,0,.2);}
+.maint-card{background:#fff;border-radius:14px;padding:13px 14px;margin-bottom:10px;border:1.5px solid #E8EAF0;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.maint-card.urgent{border-color:#FCA5A5;background:#FFF5F5;}
+.maint-card.fixed{opacity:.65;}
+.urgency-pill{border-radius:20px;padding:3px 9px;font-size:10px;font-weight:700;white-space:nowrap;}
+.maint-empty{text-align:center;padding:28px 16px;color:#bbb;}
+.maint-empty .empty-icon{font-size:38px;margin-bottom:8px;}
+</style>
+</head>
+<body>
+
+<!-- ══ SPLASH ══ -->
+<div id="splash" class="screen" style="display:flex;">
+  <div class="splash-logo"><span>SKE</span></div>
+  <div style="text-align:center;">
+    <div class="splash-title">สถานะรถ SKE</div>
+    <div class="splash-sub">SK EVO LOGISTICS</div>
+  </div>
+  <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+</div>
+
+<!-- ══ LOGIN ══ -->
+<div id="login" class="screen hidden">
+  <!-- topbar -->
+  <div class="topbar">
+    <div class="topbar-logo"><span>SKE</span></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS</div></div>
+  </div>
+
+  <div class="login-inner">
+    <div class="login-logo-wrap">
+      <div class="logo-lg"><span>SKE</span></div>
+      <div style="text-align:center;">
+        <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
+        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS</div>
+      </div>
+    </div>
+
+    <!-- Install Banner -->
+    <div id="installBar" class="install-bar hidden">
+      <div class="install-bar-icon">📲</div>
+      <div class="install-bar-text">
+        <div class="install-bar-title">เพิ่มลงหน้าจอหลัก</div>
+        <div class="install-bar-sub" id="installHint"></div>
+      </div>
+      <button class="install-bar-btn" onclick="doInstall()">ติดตั้ง</button>
+    </div>
+
+    <!-- Select -->
+    <div id="mode-select">
+      <div class="section-label">เลือกชื่อของคุณ</div>
+      <div id="loginMsg" class="msg-ok hidden"></div>
+      <div id="empList"></div>
+      <div class="row-btns" style="margin-top:14px;">
+        <button class="btn btn-orange" style="flex:1;" onclick="showMode('register')">+ ลงทะเบียน</button>
+        <button class="btn btn-purple" style="flex:1;" onclick="showMode('adminPw')">🔐 ผู้ดูแล</button>
+      </div>
+    </div>
+
+    <!-- Register -->
+    <div id="mode-register" class="hidden">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button class="topbar-back" onclick="showMode('select')">←</button>
+        <div class="section-label" style="margin:0;">ลงทะเบียนพนักงานใหม่</div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:13px;">
+        <div><div class="inp-label">ชื่อ-นามสกุล *</div><input class="inp" id="regName" placeholder="เช่น สมชาย ใจดี"></div>
+        <div><div class="inp-label">ทะเบียนรถ *</div><input class="inp" id="regPlate" placeholder="เช่น กข-1234"></div>
+        <div><div class="inp-label">เบอร์โทร</div><input class="inp" id="regPhone" type="tel" placeholder="เช่น 081-234-5678"></div>
+        <div>
+          <div class="inp-label">🔒 PIN 4 หลัก * <span style="font-size:10px;color:#888;font-weight:400;">(ใช้ยืนยันตัวตนทุกครั้งที่เข้าใช้งาน)</span></div>
+          <input class="inp" id="regPin" type="password" inputmode="numeric" maxlength="4" placeholder="ตั้ง PIN 4 หลัก">
+        </div>
+        <div>
+          <div class="inp-label">🔒 ยืนยัน PIN *</div>
+          <input class="inp" id="regPin2" type="password" inputmode="numeric" maxlength="4" placeholder="กรอก PIN อีกครั้ง">
+        </div>
+        <div id="regMsg" class="msg-err hidden"></div>
+        <button class="btn btn-orange btn-full" onclick="doRegister()">✓ ลงทะเบียน</button>
+        <button class="btn btn-gray btn-full" onclick="showMode('select')">← กลับ</button>
+      </div>
+    </div>
+
+    <!-- PIN Confirm -->
+    <div id="mode-pin" class="hidden">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button class="topbar-back" onclick="showMode('select')">←</button>
+        <div class="section-label" style="margin:0;">ยืนยันตัวตน</div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:13px;align-items:center;">
+        <div id="pinEmpInfo" style="text-align:center;padding:8px 0;"></div>
+        <div style="color:#555;font-size:13px;">กรอก PIN 4 หลักของคุณ</div>
+        <input class="inp" id="pinInput" type="password" inputmode="numeric" maxlength="4" placeholder="● ● ● ●" style="text-align:center;font-size:24px;letter-spacing:10px;width:160px;" onkeydown="if(event.key==='Enter')doConfirmPin()">
+        <div id="pinMsg" class="msg-err hidden"></div>
+        <button class="btn btn-blue btn-full" onclick="doConfirmPin()">✓ เข้าใช้งาน</button>
+        <button class="btn btn-gray btn-full" onclick="showMode('select')">← กลับ</button>
+      </div>
+    </div>
+
+    <!-- Admin PW -->
+    <div id="mode-adminPw" class="hidden">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button class="topbar-back" onclick="showMode('select')">←</button>
+        <div class="section-label" style="margin:0;">เข้าสู่ระบบผู้ดูแล</div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:13px;">
+        <div style="background:#F5F3FF;border:1px solid #D8B4FE;border-radius:10px;padding:10px 12px;font-size:12px;color:#6D28D9;">
+          🔑 รหัสผ่านเริ่มต้น: <b>admin1234</b><br>
+          <span style="color:#888;font-size:11px;">(เปลี่ยนได้ในหน้าตั้งค่าหลังเข้าระบบ)</span>
+        </div>
+        <div>
+          <div class="inp-label">รหัสผ่าน</div>
+          <div style="position:relative;">
+            <input class="inp" id="adminPwInput" type="password" placeholder="กรอกรหัสผ่าน" style="padding-right:44px;">
+            <button onclick="togglePwVis()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;cursor:pointer;color:#888;" id="pwEyeBtn">👁️</button>
+          </div>
+        </div>
+        <div id="adminPwMsg" class="msg-err hidden"></div>
+        <button class="btn btn-purple btn-full" onclick="doAdminLogin()">🔐 เข้าสู่ระบบ</button>
+        <button class="btn btn-gray btn-full" onclick="showResetPw()">🔓 รีเซ็ตรหัสผ่าน (Emergency)</button>
+        <button class="btn btn-gray btn-full" onclick="showMode('select')">← กลับ</button>
+      </div>
+      <!-- Emergency Reset Panel -->
+      <div id="resetPwPanel" class="card hidden" style="margin-top:12px;display:flex;flex-direction:column;gap:12px;">
+        <div style="color:#EF4444;font-weight:700;">⚠️ รีเซ็ตรหัสผ่านฉุกเฉิน</div>
+        <div style="font-size:12px;color:#666;">กรอก Emergency Code เพื่อรีเซ็ตรหัสผ่านกลับเป็น <b>admin1234</b></div>
+        <div><div class="inp-label">Emergency Code</div><input class="inp" id="emergencyCode" placeholder="SKE-RESET-2025"></div>
+        <div id="resetMsg" class="msg-err hidden"></div>
+        <button class="btn btn-red btn-full" onclick="doEmergencyReset()">รีเซ็ตรหัสผ่าน</button>
+        <button class="btn btn-gray btn-full" onclick="document.getElementById('resetPwPanel').classList.add('hidden')">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DASHBOARD ══ -->
+<div id="dashboard" class="screen hidden" style="background:#F5F6FA;">
+  <!-- topbar -->
+  <div class="topbar">
+    <div class="topbar-logo"><span>SKE</span></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS</div></div>
+    <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
+  </div>
+  <!-- breadcrumb back bar -->
+  <div id="dashBackBar" class="hidden" style="background:#fff;border-bottom:1px solid #E8EAF0;padding:6px 16px;display:flex;align-items:center;gap:8px;">
+    <button onclick="goBack()" style="background:none;border:none;color:#1E90D6;font-size:13px;font-weight:700;padding:0;cursor:pointer;">← กลับหน้าหลัก</button>
+  </div>
+
+  <!-- my card -->
+  <div class="my-card"><div id="myCard" class="my-card-inner"></div></div>
+
+  <!-- ── แจ้งซ่อม / เปลี่ยนถ่ายของเหลว / เบิกเงินพนักงาน ── -->
+  <div class="quick-grid">
+    <button class="quick-card" onclick="openRepairModal()">
+      <span id="repairDot" class="quick-card-dot hidden">0</span>
+      <div class="quick-card-icon">🔧</div>
+      <div class="quick-card-title">รายการแจ้งซ่อม</div>
+      <div class="quick-card-sub" id="repairSub">ไม่มีรายการ</div>
+    </button>
+    <button class="quick-card" onclick="openFluidModal()">
+      <div class="quick-card-icon">🛢️</div>
+      <div class="quick-card-title">เปลี่ยนถ่ายของเหลว</div>
+      <div class="quick-card-sub" id="fluidSub">ยังไม่มีบันทึก</div>
+    </button>
+    <button class="quick-card" onclick="openCashModal()" style="grid-column:1/-1;flex-direction:row;justify-content:flex-start;text-align:left;gap:12px;padding:13px 14px;">
+      <span id="cashDot" class="quick-card-dot hidden">0</span>
+      <div class="quick-card-icon" style="font-size:22px;">💰</div>
+      <div style="flex:1;min-width:0;">
+        <div class="quick-card-title" style="margin-top:0;">เบิกเงินพนักงาน</div>
+        <div class="quick-card-sub" id="cashSub">ยังไม่มีรายการ</div>
+      </div>
+    </button>
+  </div>
+
+  <div style="flex:1;"></div>
+
+  <!-- bottom nav -->
+  <div class="bottom-nav">
+    <button class="nav-btn nav-btn-purple" id="navAdmin" onclick="goAdmin()" style="display:none;">
+      <span class="nav-icon">🛠️</span><span>จัดการ</span>
+    </button>
+    <button class="nav-btn nav-btn-orange active" id="navHome" onclick="closeEmpSettings()">
+      <span class="nav-icon">🏠</span><span>หน้าหลัก</span>
+    </button>
+    <button class="nav-btn" id="navSettings" onclick="openEmpSettings()">
+      <span class="nav-icon">⚙️</span><span>ตั้งค่า</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ EMPLOYEE SETTINGS SHEET ══ -->
+<div id="empSettingsModal" class="hidden" style="position:fixed;inset:0;z-index:9998;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5);">
+  <div style="background:#fff;border-radius:22px 22px 0 0;padding:18px 16px max(18px,env(safe-area-inset-bottom));max-width:480px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 -6px 30px rgba(0,0,0,.2);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="font-size:17px;font-weight:800;color:#1a1a2e;">⚙️ ตั้งค่า</div>
+      <button onclick="closeEmpSettings()" style="background:#F0F2F8;border:none;border-radius:50%;width:34px;height:34px;font-size:17px;color:#555;">✕</button>
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px;">
+      <div style="color:#1E90D6;font-weight:700;font-size:14px;">👤 ข้อมูลพนักงาน</div>
+      <div><div class="inp-label">ชื่อ-นามสกุล</div><input class="inp" id="setName" placeholder="ชื่อ-นามสกุล"></div>
+      <div><div class="inp-label">ทะเบียนรถ</div><input class="inp" id="setPlate" placeholder="ทะเบียนรถ"></div>
+      <div><div class="inp-label">เบอร์โทร</div><input class="inp" id="setPhone" type="tel" inputmode="tel" placeholder="เช่น 081-234-5678"></div>
+      <div id="setMsg" class="msg-ok hidden"></div>
+      <button class="btn btn-blue btn-full" onclick="doSaveProfile()">✓ บันทึกข้อมูล</button>
+    </div>
+    <button class="btn btn-red btn-full" onclick="doLogout()">🚪 ออกจากระบบ</button>
+  </div>
+</div>
+
+<!-- ══ REPAIR MODAL — รายการแจ้งซ่อม ══ -->
+<div id="repairModal" class="hidden" style="position:fixed;inset:0;z-index:9998;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5);">
+  <div class="maint-sheet">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:17px;font-weight:800;color:#1a1a2e;">🔧 รายการแจ้งซ่อม</div>
+      <button onclick="closeRepairModal()" style="background:#F0F2F8;border:none;border-radius:50%;width:34px;height:34px;font-size:17px;color:#555;">✕</button>
+    </div>
+    <button class="btn btn-orange btn-full" onclick="toggleRepairForm()" id="repairFormToggleBtn">+ แจ้งซ่อมใหม่</button>
+    <div id="repairForm" class="hidden card" style="margin-top:12px;display:flex;flex-direction:column;gap:11px;">
+      <div><div class="inp-label">อาการ / ปัญหาที่พบ *</div><textarea class="inp" id="repIssue" rows="3" placeholder="เช่น ยางรั่ว, เบรกมีเสียงดัง, ไฟหน้าไม่ติด"></textarea></div>
+      <div>
+        <div class="inp-label">ระดับความเร่งด่วน</div>
+        <div class="status-grid" style="grid-template-columns:1fr 1fr;">
+          <button type="button" class="status-opt sel" id="repUrg_normal" style="border-color:#1E90D6;color:#1E90D6;background:#EFF6FF;" onclick="selRepUrgency('normal')">🔵<br>ปกติ</button>
+          <button type="button" class="status-opt" id="repUrg_urgent" onclick="selRepUrgency('urgent')">🔴<br>เร่งด่วน</button>
+        </div>
+      </div>
+      <button class="btn btn-blue btn-full" onclick="doAddRepair()">✓ ส่งแจ้งซ่อม</button>
+    </div>
+    <div style="margin-top:16px;" id="repairList"></div>
+  </div>
+</div>
+
+<!-- ══ FLUID MODAL — รายการเปลี่ยนถ่ายของเหลว ══ -->
+<div id="fluidModal" class="hidden" style="position:fixed;inset:0;z-index:9998;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5);">
+  <div class="maint-sheet">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:17px;font-weight:800;color:#1a1a2e;">🛢️ รายการเปลี่ยนถ่ายของเหลว</div>
+      <button onclick="closeFluidModal()" style="background:#F0F2F8;border:none;border-radius:50%;width:34px;height:34px;font-size:17px;color:#555;">✕</button>
+    </div>
+    <button class="btn btn-purple btn-full" onclick="toggleFluidForm()" id="fluidFormToggleBtn">+ บันทึกการเปลี่ยนถ่ายใหม่</button>
+    <div id="fluidForm" class="hidden card" style="margin-top:12px;display:flex;flex-direction:column;gap:11px;">
+      <div><div class="inp-label">ประเภทของเหลว *</div>
+        <select class="inp" id="fluType">
+          <option value="engine_oil">🛢️ น้ำมันเครื่อง</option>
+          <option value="gear_oil">⚙️ น้ำมันเกียร์</option>
+          <option value="brake_fluid">🛑 น้ำมันเบรก/คลัตช์</option>
+          <option value="coolant">❄️ น้ำยาหล่อเย็น/หม้อน้ำ</option>
+          <option value="power_steering">🔄 น้ำมันพวงมาลัยเพาเวอร์</option>
+          <option value="battery_water">🔋 น้ำกลั่นแบตเตอรี่</option>
+          <option value="other">🔧 อื่นๆ</option>
+        </select>
+      </div>
+      <div><div class="inp-label">วันที่เปลี่ยน</div><input class="inp" id="fluDate" type="date"></div>
+      <div><div class="inp-label">เลขไมล์ (กม.) <span style="font-size:10px;color:#888;font-weight:400;">(ไม่บังคับ)</span></div><input class="inp" id="fluOdo" type="number" inputmode="numeric" placeholder="เช่น 125400"></div>
+      <div><div class="inp-label">หมายเหตุ <span style="font-size:10px;color:#888;font-weight:400;">(ไม่บังคับ)</span></div><textarea class="inp" id="fluNote" rows="2" placeholder="เช่น เปลี่ยนที่ร้าน..., ใช้น้ำมัน..."></textarea></div>
+      <button class="btn btn-purple btn-full" onclick="doAddFluid()">✓ บันทึก</button>
+    </div>
+    <div style="margin-top:16px;" id="fluidList"></div>
+  </div>
+</div>
+
+<!-- ══ CASH MODAL — เบิกเงินพนักงาน (เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน) ══ -->
+<div id="cashModal" class="hidden" style="position:fixed;inset:0;z-index:9998;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5);">
+  <div class="maint-sheet">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:17px;font-weight:800;color:#1a1a2e;">💰 เบิกเงินพนักงาน</div>
+      <button onclick="closeCashModal()" style="background:#F0F2F8;border:none;border-radius:50%;width:34px;height:34px;font-size:17px;color:#555;">✕</button>
+    </div>
+    <div id="cashDayNotice"></div>
+    <button class="btn btn-orange btn-full" onclick="toggleCashForm()" id="cashFormToggleBtn">+ เบิกเงินใหม่</button>
+    <div id="cashForm" class="hidden card" style="margin-top:12px;display:flex;flex-direction:column;gap:11px;">
+      <div><div class="inp-label">จำนวนเงินที่ต้องการเบิก (บาท) *</div><input class="inp" id="cashAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="เช่น 1500"></div>
+      <div><div class="inp-label">รายละเอียด / เหตุผลที่เบิก *</div><textarea class="inp" id="cashReason" rows="3" placeholder="เช่น ค่าน้ำมัน, ค่าทางด่วน, ค่าซ่อมเร่งด่วน..."></textarea></div>
+      <button class="btn btn-blue btn-full" onclick="doAddCash()">✓ ส่งคำขอเบิกเงิน</button>
+    </div>
+    <div style="margin-top:16px;" id="cashList"></div>
+  </div>
+</div>
+
+<!-- ══ ALERT MODAL ══ -->
+<div id="alertModal" class="hidden" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:20px;">
+  <div style="background:#fff;border-radius:20px;padding:24px 20px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.25);">
+    <div style="font-size:52px;margin-bottom:8px;">⚠️</div>
+    <div style="font-size:18px;font-weight:900;color:#DC2626;margin-bottom:6px;">แจ้งเตือน!</div>
+    <div id="alertModalMsg" style="font-size:14px;color:#444;line-height:1.7;margin-bottom:18px;"></div>
+    <button onclick="dismissAlert()" style="background:linear-gradient(135deg,#F47920,#1E90D6);color:#fff;border-radius:12px;padding:12px 32px;font-size:15px;font-weight:800;width:100%;">✓ รับทราบ — จะอัพเดทเดี๋ยวนี้</button>
+    <button onclick="snoozeAlert()" style="background:#F5F6FA;color:#888;border-radius:12px;padding:10px 32px;font-size:13px;font-weight:600;width:100%;margin-top:8px;">เตือนอีก 30 นาที</button>
+  </div>
+</div>
+
+<!-- ══ ADMIN ══ -->
+<div id="admin" class="screen hidden">
+  <!-- topbar -->
+  <div class="topbar">
+    <button class="topbar-back" onclick="goBack()">←</button>
+    <div class="topbar-logo"><span>SKE</span></div>
+    <div style="flex:1;"><div class="topbar-title">แผงผู้ดูแล</div></div>
+    <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
+    <span class="badge-admin">ADMIN</span>
+  </div>
+
+  <!-- admin tabs -->
+  <div class="admin-tab" id="adminTabBar">
+    <button class="admin-tab-btn active" id="tabSummaryTop" onclick="switchAdminTab('summary')">📊 ภาพรวม<span id="staleTabBadge" class="badge-num hidden">0</span></button>
+    <button class="admin-tab-btn" id="tabMaintTop" onclick="switchAdminTab('maint')">🔧 ซ่อมบำรุง<span id="maintTabBadge" class="badge-num hidden">0</span></button>
+    <button class="admin-tab-btn" id="tabCashTop" onclick="switchAdminTab('cash')">💰 เบิกเงิน<span id="cashTabBadge" class="badge-num hidden">0</span></button>
+    <button class="admin-tab-btn" id="tabSettings" onclick="switchAdminTab('settings')">⚙️ ตั้งค่า</button>
+  </div>
+
+  <div class="list-area">
+    <!-- summary panel (default landing) -->
+    <div id="adminSummaryPanel">
+      <div id="adminSummaryContent"></div>
+    </div>
+
+    <!-- maintenance panel: รายการแจ้งซ่อม + เปลี่ยนถ่ายของเหลว ของพนักงานทุกคน -->
+    <div id="adminMaintPanel" class="hidden">
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="admin-tab-btn active" id="amTabRepair" onclick="switchAdminMaintTab('repair')" style="flex:1;">🔧 แจ้งซ่อม</button>
+        <button class="admin-tab-btn" id="amTabFluid" onclick="switchAdminMaintTab('fluid')" style="flex:1;">🛢️ เปลี่ยนถ่าย</button>
+      </div>
+      <div id="adminRepairView">
+        <div id="adminRepairStats"></div>
+        <div id="adminRepairGroups"></div>
+      </div>
+      <div id="adminFluidView" class="hidden">
+        <div id="adminFluidStats"></div>
+        <div id="adminFluidGroups"></div>
+      </div>
+    </div>
+
+    <!-- cash requisition panel: รายการเบิกเงินพนักงานทุกคน (เปิดให้กรอกเฉพาะวันที่ 15) -->
+    <div id="adminCashPanel" class="hidden">
+      <div id="adminCashStats"></div>
+      <div id="adminCashGroups"></div>
+    </div>
+
+    <!-- settings panel -->
+    <div id="adminSettingsPanel" class="hidden">
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:12px;">
+        <div style="color:#7B2FBE;font-weight:800;font-size:16px;">👥 พนักงาน</div>
+        <div style="color:#888;font-size:12px;">เพิ่ม แก้ไข หรือลบข้อมูลพนักงานและทะเบียนรถ</div>
+        <button class="btn btn-purple btn-full" onclick="showEmpManage()">👥 จัดการพนักงาน</button>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:16px;">
+        <div style="color:#7B2FBE;font-weight:800;font-size:16px;">⚙️ ตั้งค่าระบบ</div>
+        <div>
+          <div class="inp-label" style="margin-bottom:8px;">เปลี่ยนรหัสผ่านผู้ดูแล</div>
+          <input class="inp" id="newPwInput" type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 4 ตัว)">
+          <div id="pwMsg" class="msg-ok hidden" style="margin-top:6px;"></div>
+          <button class="btn btn-purple btn-full" style="margin-top:10px;" onclick="doChangePw()">บันทึกรหัสผ่าน</button>
+        </div>
+        <div style="border-top:1px solid #E8EAF0;padding-top:14px;">
+          <div class="inp-label" style="margin-bottom:8px;">ข้อมูลระบบ</div>
+          <div id="sysInfo" style="font-size:13px;color:#555;line-height:2;"></div>
+        </div>
+      </div>
+      <button class="btn btn-red btn-full" style="margin-top:14px;" onclick="doLogout()">🚪 ออกจากระบบ</button>
+    </div>
+
+    <!-- emp management sub-view (reached from settings) -->
+    <div id="adminEmpPanel" class="hidden">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button class="topbar-back" onclick="hideEmpManage()">←</button>
+        <div class="section-label" style="margin:0;">👥 จัดการพนักงาน</div>
+      </div>
+      <button class="btn btn-orange btn-full" style="margin-bottom:12px;" onclick="toggleAddEmp()">+ เพิ่มพนักงาน</button>
+      <div id="addEmpForm" class="card hidden" style="margin-bottom:12px;display:flex;flex-direction:column;gap:12px;">
+        <div style="color:#F47920;font-weight:700;font-size:15px;">เพิ่มพนักงานใหม่</div>
+        <div><div class="inp-label">ชื่อ-นามสกุล *</div><input class="inp" id="addName" placeholder="ชื่อ-นามสกุล"></div>
+        <div><div class="inp-label">ทะเบียนรถ *</div><input class="inp" id="addPlate" placeholder="ทะเบียนรถ"></div>
+        <div><div class="inp-label">เบอร์โทร</div><input class="inp" id="addPhone" type="tel" placeholder="เบอร์โทร"></div>
+        <div class="row-btns">
+          <button class="btn btn-gray" style="flex:1;" onclick="toggleAddEmp()">ยกเลิก</button>
+          <button class="btn btn-orange" style="flex:1;" onclick="doAddEmp()">✓ บันทึก</button>
+        </div>
+      </div>
+      <div id="adminEmpList"></div>
+    </div>
+  </div>
+
+  <!-- bottom nav admin -->
+  <div class="bottom-nav">
+    <button class="nav-btn active" id="navAdminSum" onclick="switchAdminTab('summary');highlightAdminNav(this)">
+      <span class="nav-icon">📊</span><span>ภาพรวม</span>
+    </button>
+    <button class="nav-btn" id="navAdminMaint" onclick="switchAdminTab('maint');highlightAdminNav(this)">
+      <span class="nav-icon">🔧</span><span>ซ่อมบำรุง</span>
+    </button>
+    <button class="nav-btn" id="navAdminCash" onclick="switchAdminTab('cash');highlightAdminNav(this)">
+      <span class="nav-icon">💰</span><span>เบิกเงิน</span>
+    </button>
+    <button class="nav-btn" id="navAdminSet" onclick="switchAdminTab('settings');highlightAdminNav(this)">
+      <span class="nav-icon">⚙️</span><span>ตั้งค่า</span>
+    </button>
+    <button class="nav-btn nav-btn-orange" onclick="goBack()">
+      <span class="nav-icon">🏠</span><span>กลับ</span>
+    </button>
+  </div>
+</div>
+
+<script>
+// ── 77 จังหวัด ────────────────────────────────────────────────────────────────
+const PROVINCES=["กรุงเทพมหานคร","กระบี่","กาญจนบุรี","กาฬสินธุ์","กำแพงเพชร","ขอนแก่น","จันทบุรี","ฉะเชิงเทรา","ชลบุรี","ชัยนาท","ชัยภูมิ","ชุมพร","เชียงราย","เชียงใหม่","ตรัง","ตราด","ตาก","นครนายก","นครปฐม","นครพนม","นครราชสีมา","นครศรีธรรมราช","นครสวรรค์","นนทบุรี","นราธิวาส","น่าน","บึงกาฬ","บุรีรัมย์","ปทุมธานี","ประจวบคีรีขันธ์","ปราจีนบุรี","ปัตตานี","พระนครศรีอยุธยา","พะเยา","พังงา","พัทลุง","พิจิตร","พิษณุโลก","เพชรบุรี","เพชรบูรณ์","แพร่","ภูเก็ต","มหาสารคาม","มุกดาหาร","แม่ฮ่องสอน","ยโสธร","ยะลา","ร้อยเอ็ด","ระนอง","ระยอง","ราชบุรี","ลพบุรี","ลำปาง","ลำพูน","เลย","ศรีสะเกษ","สกลนคร","สงขลา","สตูล","สมุทรปราการ","สมุทรสงคราม","สมุทรสาคร","สระแก้ว","สระบุรี","สิงห์บุรี","สุโขทัย","สุพรรณบุรี","สุราษฎร์ธานี","สุรินทร์","หนองคาย","หนองบัวลำภู","อ่างทอง","อำนาจเจริญ","อุดรธานี","อุตรดิตถ์","อุทัยธานี","อุบลราชธานี"];
+
+const STATUSES=[
+  {id:"loading_bay",label:"เข้าช่องขึ้นงานแล้ว",emoji:"🟢",color:"#15803D",bg:"#F0FDF4",border:"#86EFAC"},
+  {id:"unload_bay", label:"ถึงแล้วรอลงงาน",  emoji:"🔵",color:"#1D4ED8",bg:"#EFF6FF",border:"#93C5FD"},
+  {id:"loading",    label:"กำลังขึ้นงาน",         emoji:"🟡",color:"#92400E",bg:"#FFFBEB",border:"#FCD34D"},
+  {id:"unloading",  label:"กำลังลงงาน",           emoji:"🟠",color:"#C2410C",bg:"#FFF7ED",border:"#FCA5A5"},
+  {id:"traveling",  label:"ออกเดินทาง",           emoji:"🚛",color:"#0E7490",bg:"#ECFEFF",border:"#67E8F9"},
+  {id:"returning",  label:"กำลังไหลกลับ",         emoji:"🔁",color:"#0F766E",bg:"#F0FDFA",border:"#5EEAD4"},
+  {id:"standby",    label:"สแตนบายรอขึ้นงาน",      emoji:"⏳",color:"#6D28D9",bg:"#F5F3FF",border:"#C4B5FD"},
+  {id:"got_job",    label:"ได้งานแล้ว",            emoji:"📦",color:"#4F46E5",bg:"#EEF2FF",border:"#A5B4FC"},
+  {id:"done",       label:"สแตนบายว่างงาน",        emoji:"✅",color:"#065F46",bg:"#ECFDF5",border:"#6EE7B7"},
+  {id:"leave",      label:"ลา",                    emoji:"🌴",color:"#475569",bg:"#F1F5F9",border:"#CBD5E1"},
+];
+function getS(id){return STATUSES.find(s=>s.id===id)||STATUSES.find(s=>s.id==='standby')||STATUSES[0];}
+function getFullLabel(e){
+  if(e.status==='standby'&&e.province)return`สแตนบาย — ${e.province}`;
+  if(e.status==='traveling'&&e.province)return`ออกเดินทาง → ${e.province}`;
+  if(e.status==='returning'&&e.province)return`กำลังไหลกลับ → ${e.province}`;
+  if(e.status==='done'&&e.province)return`สแตนบายว่างงาน — ${e.province}`;
+  return getS(e.status).label;
+}
+
+// ── Helpers: escape user text + clickable phone ──────────────────────────────
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+// คืน HTML เบอร์โทรที่กดโทรออกได้ทันที (พร้อมตัวคั่น • ด้านหน้า)
+function phoneLink(phone){
+  if(!phone)return'';
+  const tel=String(phone).replace(/[^\d+]/g,'');
+  if(!tel)return'';
+  return ` • <a href="tel:${tel}" onclick="event.stopPropagation()" style="color:#1E90D6;font-weight:600;text-decoration:none;white-space:nowrap;">📞 ${esc(phone)}</a>`;
+}
+
+const _DEFAULT_EMP=[{"id": "emp001", "name": "นพการณ์ ขันทะ", "plate": "", "phone": "", "pin": "1111", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp002", "name": "อภิวัฒน์ กำทอง", "plate": "", "phone": "", "pin": "2222", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp003", "name": "ราม สุขจิตเกษม", "plate": "731744", "phone": "", "pin": "3333", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp004", "name": "ธีรนัย หมัดเด", "plate": "", "phone": "", "pin": "4444", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp005", "name": "อรรคพล มีแก้ว", "plate": "73-4296", "phone": "", "pin": "5555", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp006", "name": "วิชญาดา งามจันทร์", "plate": "", "phone": "", "pin": "6666", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp007", "name": "นิรุช ศรีภาชน์", "plate": "", "phone": "", "pin": "7777", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp008", "name": "ณัฎฐกฤต รักสุข", "plate": "73-1856", "phone": "", "pin": "8888", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp009", "name": "กฤษฎิ์ ชมชื่น", "plate": "73-4397", "phone": "", "pin": "9999", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp010", "name": "เจริญ ตั้งเสถียร", "plate": "73-4397", "phone": "", "pin": "1010", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp011", "name": "สำราญ สิงห์โต", "plate": "73-1854", "phone": "", "pin": "1112", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp012", "name": "ศราวุฒิ เมืองสอน", "plate": "73-4253", "phone": "", "pin": "1212", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp013", "name": "กอบชัย เสนาวัลย์", "plate": "73-1861", "phone": "", "pin": "1313", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp014", "name": "อนุรักษ์ เสยกระโทก", "plate": "73-1896", "phone": "", "pin": "1414", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp015", "name": "สิทธิโชค สระเสือ", "plate": "73-6521", "phone": "", "pin": "1515", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp016", "name": "วันชัย จันทร์คง", "plate": "73-1853", "phone": "", "pin": "1616", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp017", "name": "รัชชานนท์ กริบกระโทก", "plate": "73-1883", "phone": "", "pin": "1717", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}];
+let employees=(()=>{
+  const stored=JSON.parse(localStorage.getItem('ske_emp')||'[]');
+  // ใช้ข้อมูลที่บันทึกไว้เสมอถ้ามี — ใช้ default เฉพาะตอนเครื่องใหม่ที่ยังไม่เคยมีข้อมูลเลย (รอ Firebase ซิงค์ข้อมูลจริงมาแทนภายในไม่กี่วินาที)
+  if(!Array.isArray(stored)||stored.length===0) return _DEFAULT_EMP.map(e=>e);
+  return stored;
+})();
+let currentUser=JSON.parse(localStorage.getItem('ske_user')||'null');
+let adminPw=localStorage.getItem('ske_pw')||'admin1234';
+let adminMode=false,editOpen=false;
+let _selStatus='standby',_selProv='';
+let deferredPrompt=null;
+let repairs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_repairs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
+let fluidLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_fluid')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
+let cashRequests=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_cash')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
+let _repUrgency='normal';
+
+function saveE(){
+  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  if(window.fbSaveEmployees) window.fbSaveEmployees(employees);
+}
+function saveU(){localStorage.setItem('ske_user',JSON.stringify(currentUser));}
+function saveP(){
+  localStorage.setItem('ske_pw',adminPw);
+  if(window.fbSaveAdminPw) window.fbSaveAdminPw(adminPw);
+}
+function saveA(){localStorage.setItem('ske_admin',adminMode?'1':'0');}
+function saveRepairs(){
+  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  if(window.fbSaveRepairs) window.fbSaveRepairs(repairs);
+}
+function saveFluid(){
+  localStorage.setItem('ske_fluid',JSON.stringify(fluidLogs));
+  if(window.fbSaveFluidLogs) window.fbSaveFluidLogs(fluidLogs);
+}
+function saveCash(){
+  localStorage.setItem('ske_cash',JSON.stringify(cashRequests));
+  if(window.fbSaveCashRequests) window.fbSaveCashRequests(cashRequests);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── เก็บประวัติซ่อมบำรุงไว้ 12 เดือน แล้วลบอัตโนมัติ ─────────────────────────
+// (รายการแจ้งซ่อม ใช้วันที่แจ้ง / รายการเปลี่ยนถ่ายของเหลว ใช้วันที่เปลี่ยน) ──
+// ══════════════════════════════════════════════════════════════════════════
+function _maintCutoffTime(){
+  const d=new Date();
+  d.setMonth(d.getMonth()-12);
+  return d.getTime();
+}
+function pruneOldMaintenance(){
+  const cutoff=_maintCutoffTime();
+  let changed=false;
+  const newRepairs=repairs.filter(r=>{
+    const t=new Date(r.createdAt||0).getTime();
+    return !isFinite(t)||t>=cutoff;
+  });
+  if(newRepairs.length!==repairs.length){repairs=newRepairs;changed=true;saveRepairs();}
+  const newFluid=fluidLogs.filter(f=>{
+    const t=new Date(f.changedAt||f.createdAt||0).getTime();
+    return !isFinite(t)||t>=cutoff;
+  });
+  if(newFluid.length!==fluidLogs.length){fluidLogs=newFluid;changed=true;saveFluid();}
+  if(changed){
+    const rm=document.getElementById('repairModal');if(rm&&!rm.classList.contains('hidden'))renderRepairList();
+    const fm=document.getElementById('fluidModal');if(fm&&!fm.classList.contains('hidden'))renderFluidList();
+    const ap=document.getElementById('adminMaintPanel');if(ap&&!ap.classList.contains('hidden'))renderAdminMaint();
+    updateMaintBadges();
+  }
+  return changed;
+}
+// ตรวจสอบซ้ำทุก 1 ชั่วโมง เผื่อแอปเปิดค้างไว้นาน
+setInterval(pruneOldMaintenance,60*60*1000);
+
+// ── PWA ───────────────────────────────────────────────────────────────────────
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;showInstallBar();});
+window.addEventListener('appinstalled',()=>{document.getElementById('installBar').classList.add('hidden');deferredPrompt=null;});
+
+function showInstallBar(){
+  const bar=document.getElementById('installBar');
+  const hint=document.getElementById('installHint');
+  const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if(ios){
+    hint.textContent='แตะ 🔗 Share แล้วเลือก "Add to Home Screen"';
+    bar.classList.remove('hidden');
+    bar.querySelector('.install-bar-btn').textContent='รับทราบ';
+    bar.querySelector('.install-bar-btn').onclick=()=>bar.classList.add('hidden');
+  }else if(deferredPrompt){
+    hint.textContent='กดปุ่มเพื่อเพิ่มไอคอนลงหน้าจอหลัก';
+    bar.classList.remove('hidden');
+  }
+}
+function doInstall(){
+  if(deferredPrompt){deferredPrompt.prompt();deferredPrompt.userChoice.then(()=>{deferredPrompt=null;document.getElementById('installBar').classList.add('hidden');});}
+}
+
+(function(){
+  const m={name:"สถานะรถ SKE",short_name:"SKE",start_url:".",display:"standalone",background_color:"#FFFFFF",theme_color:"#FFFFFF",icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23F47920'/%3E%3Cstop offset='.5' stop-color='%231E90D6'/%3E%3Cstop offset='1' stop-color='%237B2FBE'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='50' fill='url(%23g)'/%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='36' font-weight='900' fill='white' font-family='Arial'%3ESKE%3C/text%3E%3C/svg%3E",sizes:"512x512",type:"image/svg+xml"}]};
+  const b=new Blob([JSON.stringify(m)],{type:'application/json'});
+  document.getElementById('manifestLink').href=URL.createObjectURL(b);
+})();
+
+// ── Keep Awake / Prevent bounce ───────────────────────────────────────────────
+(async function(){
+  try{if('wakeLock' in navigator){let wl=await navigator.wakeLock.request('screen');document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible')wl=await navigator.wakeLock.request('screen');});}}catch(e){}
+})();
+window.addEventListener('beforeunload',e=>{e.preventDefault();e.returnValue='';});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.onload=function(){
+  const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const sa=window.navigator.standalone||window.matchMedia('(display-mode:standalone)').matches;
+  if(!sa&&ios) setTimeout(showInstallBar,600);
+  // รอ Firebase โหลดข้อมูลก่อน (max 4 วินาที)
+  const startTime=Date.now();
+  function tryStart(){
+    if(window._fbReady||Date.now()-startTime>4000){
+      pruneOldMaintenance();
+      const savedAdmin=localStorage.getItem('ske_admin')==='1';
+      if(savedAdmin){adminMode=true;show('admin');renderAdmin();switchAdminTab('summary');}
+      else if(currentUser){show('dashboard');renderDashboard();startAlertTimer();}
+      else{show('login');renderEmpList();}
+    } else {
+      setTimeout(tryStart,100);
+    }
+  }
+  setTimeout(tryStart,1800);
+};
+
+// ── Nav helpers ───────────────────────────────────────────────────────────────
+function show(id){['splash','login','dashboard','admin'].forEach(s=>document.getElementById(s).classList.add('hidden'));document.getElementById(id).classList.remove('hidden');}
+function showMode(m){['mode-select','mode-register','mode-adminPw','mode-pin'].forEach(x=>document.getElementById(x).classList.add('hidden'));document.getElementById('mode-'+m).classList.remove('hidden');['loginMsg','regMsg','adminPwMsg','pinMsg'].forEach(x=>{const el=document.getElementById(x);if(el)el.classList.add('hidden');});}
+
+function highlightNav(btn){document.querySelectorAll('#dashboard .nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function highlightAdminNav(btn){document.querySelectorAll('#admin .bottom-nav .nav-btn').forEach(b=>{if(b!==document.querySelector('#admin .nav-btn-orange'))b.classList.remove('active')});btn.classList.add('active');}
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+function renderEmpList(){
+  const el=document.getElementById('empList');
+  if(!employees.length){el.innerHTML='<div class="card" style="text-align:center;color:#aaa;padding:24px;"><div style="font-size:40px;margin-bottom:8px;">👷</div>ยังไม่มีพนักงาน<br>กรุณาลงทะเบียนก่อน</div>';return;}
+  el.innerHTML=employees.map(e=>{
+    const s=getS(e.status);const lbl=getFullLabel(e);
+    return `<button class="emp-btn" onclick="askPin('${e.id}')">
+      <div class="avatar" style="width:46px;height:46px;font-size:19px;">${esc(e.name.charAt(0))}</div>
+      <div style="flex:1;min-width:0;"><div style="color:#1a1a2e;font-weight:700;font-size:15px;">${esc(e.name)}</div><div style="color:#888;font-size:12px;">🚛 ${esc(e.plate)}</div></div>
+      <div class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;">${s.emoji} ${esc(lbl)}</div>
+    </button>`;
+  }).join('');
+}
+
+let _pinTargetId=null;
+function askPin(id){
+  const emp=employees.find(e=>e.id===id);if(!emp)return;
+  _pinTargetId=id;
+  const s=getS(emp.status);
+  document.getElementById('pinEmpInfo').innerHTML=`
+    <div class="avatar" style="width:52px;height:52px;font-size:22px;margin:0 auto 8px;">${esc(emp.name.charAt(0))}</div>
+    <div style="font-weight:800;font-size:16px;color:#1a1a2e;">${esc(emp.name)}</div>
+    <div style="color:#888;font-size:12px;margin-top:2px;">🚛 ${esc(emp.plate)}</div>`;
+  document.getElementById('pinInput').value='';
+  showMode('pin');
+  setTimeout(()=>{const p=document.getElementById('pinInput');if(p)p.focus();},200);
+}
+function doConfirmPin(){
+  const emp=employees.find(e=>e.id===_pinTargetId);
+  const entered=document.getElementById('pinInput').value.trim();
+  const m=document.getElementById('pinMsg');
+  if(!emp){m.textContent='เกิดข้อผิดพลาด กรุณาลองใหม่';m.classList.remove('hidden');return;}
+  if(!emp.pin){
+    // พนักงานเก่าที่ยังไม่มี PIN — ให้ผ่านได้และบันทึก PIN ใหม่
+    if(entered.length===4&&/^\d{4}$/.test(entered)){
+      employees=employees.map(e=>e.id===emp.id?{...e,pin:entered}:e);saveE();
+      doLogin(emp.id);return;
+    }else{m.textContent='กรุณากรอก PIN 4 หลัก (ครั้งแรกระบบจะบันทึกเป็น PIN ของคุณ)';m.classList.remove('hidden');return;}
+  }
+  if(entered!==emp.pin){
+    m.textContent='❌ PIN ไม่ถูกต้อง กรุณาลองใหม่';m.classList.remove('hidden');
+    document.getElementById('pinInput').value='';return;
+  }
+  doLogin(emp.id);
+}
+function doLogin(id){
+  currentUser=employees.find(e=>e.id===id)||null;
+  saveU();adminMode=false;
+  show('dashboard');renderDashboard();
+  requestNotifPermission();
+  startAlertTimer();
+}
+
+function doRegister(){
+  const name=document.getElementById('regName').value.trim();
+  const plate=document.getElementById('regPlate').value.trim().toUpperCase();
+  const phone=document.getElementById('regPhone').value.trim();
+  const pin=document.getElementById('regPin').value.trim();
+  const pin2=document.getElementById('regPin2').value.trim();
+  const m=document.getElementById('regMsg');
+  if(!name||!plate){m.textContent='กรุณากรอกชื่อและทะเบียนรถ';m.classList.remove('hidden');return;}
+  if(!pin||pin.length!==4||!/^\d{4}$/.test(pin)){m.textContent='PIN ต้องเป็นตัวเลข 4 หลัก';m.classList.remove('hidden');return;}
+  if(pin!==pin2){m.textContent='PIN ทั้งสองช่องไม่ตรงกัน';m.classList.remove('hidden');return;}
+  employees.push({id:Date.now()+'',name,plate,phone,pin,status:'standby',province:'',note:'',updatedAt:new Date().toISOString()});
+  saveE();['regName','regPlate','regPhone','regPin','regPin2'].forEach(x=>document.getElementById(x).value='');
+  m.classList.add('hidden');showMode('select');renderEmpList();
+  const lg=document.getElementById('loginMsg');lg.textContent='✅ ลงทะเบียนสำเร็จ! เลือกชื่อด้านล่าง';lg.classList.remove('hidden');
+}
+
+function doAdminLogin(){
+  const pw=document.getElementById('adminPwInput').value;
+  const m=document.getElementById('adminPwMsg');
+  if(pw===adminPw){adminMode=true;saveA();document.getElementById('adminPwInput').value='';show('admin');renderAdmin();switchAdminTab('summary');}
+  else{m.textContent='❌ รหัสผ่านไม่ถูกต้อง  (รหัสเริ่มต้น: admin1234)';m.classList.remove('hidden');}
+}
+
+function togglePwVis(){
+  const inp=document.getElementById('adminPwInput');
+  const btn=document.getElementById('pwEyeBtn');
+  if(inp.type==='password'){inp.type='text';btn.textContent='🙈';}
+  else{inp.type='password';btn.textContent='👁️';}
+}
+
+function showResetPw(){document.getElementById('resetPwPanel').classList.remove('hidden');}
+
+function doEmergencyReset(){
+  const code=document.getElementById('emergencyCode').value.trim();
+  const m=document.getElementById('resetMsg');
+  if(code==='SKE-RESET-2025'){
+    adminPw='admin1234';saveP();
+    m.textContent='✅ รีเซ็ตสำเร็จ! รหัสผ่านกลับเป็น admin1234';m.style.color='#10B981';m.classList.remove('hidden');
+    document.getElementById('adminPwInput').value='admin1234';
+    setTimeout(()=>{document.getElementById('resetPwPanel').classList.add('hidden');m.classList.add('hidden');},2000);
+  }else{m.textContent='❌ Emergency Code ไม่ถูกต้อง';m.style.color='#EF4444';m.classList.remove('hidden');}
+}
+
+// ── Alert / Notification System ──────────────────────────────────────────────
+const ALERT_STATUSES = ['loading_bay','unload_bay','loading','unloading'];
+const ALERT_HOURS = 3;       // แจ้งเตือนทุก 3 ชม. ถ้าไม่อัพเดท (เฉพาะสถานะกำลังทำงานที่จุดขึ้น-ลงสินค้า)
+const STALE_ALL_HOURS = 24;  // แจ้งเตือนผู้ดูแล — ทุกสถานะที่ไม่อัพเดทเกิน 24 ชม.
+const SNOOZE_MIN = 30;       // snooze 30 นาที
+
+let _alertTimer = null;
+let _snoozeUntil = 0;
+let _audioCtx = null;
+
+// เล่นเสียงแจ้งเตือน (Web Audio API — ไม่ต้องไฟล์เสียง)
+function playAlertSound(){
+  try{
+    if(!_audioCtx) _audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    // เล่น 3 ครั้ง beep-beep-beep
+    [0, 0.35, 0.7].forEach(offset => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime + offset);
+      gain.gain.setValueAtTime(0.6, ctx.currentTime + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.25);
+      osc.start(ctx.currentTime + offset);
+      osc.stop(ctx.currentTime + offset + 0.3);
+    });
+  }catch(e){ console.warn('audio error',e); }
+}
+
+function checkAlert(){
+  if(!currentUser || adminMode) return;
+  const me = employees.find(e=>e.id===currentUser.id);
+  if(!me) return;
+  // ตรวจเฉพาะสถานะที่กำหนด
+  if(!ALERT_STATUSES.includes(me.status)) return;
+  // ถ้า snooze อยู่ — ข้าม
+  if(Date.now() < _snoozeUntil) return;
+  // คำนวณเวลาตั้งแต่อัพเดทล่าสุด
+  const last = me.updatedAt ? new Date(me.updatedAt).getTime() : 0;
+  const hoursAgo = (Date.now() - last) / 3600000;
+  if(hoursAgo >= ALERT_HOURS){
+    showAlertModal(me, hoursAgo);
+  }
+}
+
+function showAlertModal(me, hoursAgo){
+  const s = STATUSES.find(st=>st.id===me.status);
+  const h = Math.floor(hoursAgo);
+  const m = Math.floor((hoursAgo - h) * 60);
+  const timeStr = h > 0 ? `${h} ชม. ${m} นาที` : `${m} นาที`;
+  document.getElementById('alertModalMsg').innerHTML =
+    `สถานะปัจจุบันของคุณ:<br>
+     <b style="color:${s?.color||'#333'}">${s?.emoji||''} ${s?.label||me.status}</b><br><br>
+     ไม่มีการอัพเดทมาแล้ว <b style="color:#DC2626">${timeStr}</b><br>
+     กรุณาอัพเดทสถานะให้เป็นปัจจุบัน`;
+  document.getElementById('alertModal').classList.remove('hidden');
+  document.getElementById('alertModal').style.display='flex';
+  playAlertSound();
+  // ขอ permission แจ้งเตือน browser ด้วย (ถ้าได้รับ)
+  if('Notification' in window && Notification.permission==='granted'){
+    new Notification('⚠️ แจ้งเตือนสถานะรถ SKE', {
+      body: `${s?.emoji||''} ${s?.label} — ไม่อัพเดทมา ${timeStr} กรุณาอัพเดทสถานะ`,
+      icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%23F47920"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
+    });
+  }
+}
+
+function dismissAlert(){
+  document.getElementById('alertModal').classList.add('hidden');
+  // เปิด edit panel ให้อัพเดทได้เลย
+  editOpen = false;
+  renderDashboard();
+  setTimeout(()=>{ editOpen=true; renderDashboard(); }, 100);
+}
+
+function snoozeAlert(){
+  document.getElementById('alertModal').classList.add('hidden');
+  _snoozeUntil = Date.now() + SNOOZE_MIN * 60 * 1000;
+}
+
+function startAlertTimer(){
+  if(_alertTimer) clearInterval(_alertTimer);
+  // ตรวจทุก 1 นาที
+  _alertTimer = setInterval(checkAlert, 60 * 1000);
+  // ตรวจทันทีหลัง 5 วินาที
+  setTimeout(checkAlert, 5000);
+}
+
+function stopAlertTimer(){
+  if(_alertTimer){ clearInterval(_alertTimer); _alertTimer=null; }
+}
+
+// ขอ permission แจ้งเตือนตอน login
+function requestNotifPermission(){
+  if('Notification' in window && Notification.permission==='default'){
+    Notification.requestPermission();
+  }
+}
+
+function doLogout(){closeEmpSettings();closeRepairModal();closeFluidModal();stopAlertTimer();currentUser=null;adminMode=false;saveU();saveA();show('login');renderEmpList();showMode('select');}
+
+// ── Employee settings sheet (โปรไฟล์ + ออกจากระบบ) ───────────────────────────
+function openEmpSettings(){
+  const me=employees.find(e=>e.id===currentUser?.id)||currentUser;
+  if(!me){show('login');renderEmpList();return;}
+  const n=document.getElementById('setName'),p=document.getElementById('setPlate'),ph=document.getElementById('setPhone');
+  if(n)n.value=me.name||'';
+  if(p)p.value=me.plate||'';
+  if(ph)ph.value=me.phone||'';
+  const msg=document.getElementById('setMsg');if(msg)msg.classList.add('hidden');
+  const m=document.getElementById('empSettingsModal');
+  if(m){m.classList.remove('hidden');m.style.display='flex';}
+  document.getElementById('navSettings')?.classList.add('active');
+  document.getElementById('navHome')?.classList.remove('active');
+}
+function closeEmpSettings(){
+  const m=document.getElementById('empSettingsModal');
+  if(m){m.classList.add('hidden');m.style.display='none';}
+  document.getElementById('navSettings')?.classList.remove('active');
+  document.getElementById('navHome')?.classList.add('active');
+}
+function doSaveProfile(){
+  if(!currentUser){closeEmpSettings();return;}
+  const name=document.getElementById('setName').value.trim();
+  const plate=document.getElementById('setPlate').value.trim().toUpperCase();
+  const phone=document.getElementById('setPhone').value.trim();
+  const msg=document.getElementById('setMsg');
+  if(!name||!plate){if(msg){msg.textContent='กรุณากรอกชื่อและทะเบียนรถ';msg.className='msg-err';msg.classList.remove('hidden');}return;}
+  employees=employees.map(e=>e.id===currentUser.id?{...e,name,plate,phone}:e);
+  currentUser={...currentUser,name,plate,phone};
+  saveE();saveU();
+  if(msg){msg.textContent='✅ บันทึกข้อมูลแล้ว';msg.className='msg-ok';msg.classList.remove('hidden');}
+  renderDashboard();
+  setTimeout(closeEmpSettings,800);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── รายการแจ้งซ่อม (Repair reports) ─────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+function openRepairModal(){
+  if(!currentUser)return;
+  document.getElementById('repairForm').classList.add('hidden');
+  document.getElementById('repairFormToggleBtn').textContent='+ แจ้งซ่อมใหม่';
+  document.getElementById('repIssue').value='';
+  selRepUrgency('normal');
+  renderRepairList();
+  const m=document.getElementById('repairModal');
+  m.classList.remove('hidden');m.style.display='flex';
+}
+function closeRepairModal(){
+  const m=document.getElementById('repairModal');
+  m.classList.add('hidden');m.style.display='none';
+}
+function toggleRepairForm(){
+  const f=document.getElementById('repairForm');
+  const open=f.classList.toggle('hidden');
+  document.getElementById('repairFormToggleBtn').textContent=open?'+ แจ้งซ่อมใหม่':'✕ ยกเลิก';
+}
+function selRepUrgency(u){
+  _repUrgency=u;
+  document.getElementById('repUrg_normal').style.cssText=u==='normal'?'border-color:#1E90D6;color:#1E90D6;background:#EFF6FF;':'border-color:#E8EAF0;color:#888;background:#F5F6FA;';
+  document.getElementById('repUrg_urgent').style.cssText=u==='urgent'?'border-color:#EF4444;color:#EF4444;background:#FEF2F2;':'border-color:#E8EAF0;color:#888;background:#F5F6FA;';
+}
+function doAddRepair(){
+  if(!currentUser)return;
+  const issue=document.getElementById('repIssue').value.trim();
+  if(!issue){document.getElementById('repIssue').focus();return;}
+  const me=employees.find(e=>e.id===currentUser.id)||currentUser;
+  repairs.unshift({
+    id:'rep_'+Date.now(),
+    empId:me.id,empName:me.name,plate:me.plate||'',
+    issue,urgency:_repUrgency,status:'pending',
+    createdAt:new Date().toISOString()
+  });
+  saveRepairs();
+  document.getElementById('repIssue').value='';
+  selRepUrgency('normal');
+  toggleRepairForm();
+  refreshRepairViews();
+}
+function renderRepairList(){
+  const el=document.getElementById('repairList');
+  if(!el||!currentUser)return;
+  const mine=repairs.filter(r=>r.empId===currentUser.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  if(!mine.length){
+    el.innerHTML='<div class="maint-empty"><div class="empty-icon">🔧</div><div>ยังไม่มีรายการแจ้งซ่อม</div></div>';
+    updateMaintBadges();
+    return;
+  }
+  el.innerHTML=mine.map(r=>{
+    const done=r.status==='done';
+    const urg=r.urgency==='urgent';
+    return`<div class="maint-card ${urg&&!done?'urgent':''} ${done?'fixed':''}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+        <div style="flex:1;min-width:0;color:#1a1a2e;font-size:13.5px;font-weight:600;line-height:1.5;">${esc(r.issue)}</div>
+        <span class="urgency-pill" style="background:${urg?'#FEF2F2':'#EFF6FF'};color:${urg?'#DC2626':'#1E90D6'};border:1px solid ${urg?'#FCA5A5':'#93C5FD'};">${urg?'🔴 เร่งด่วน':'🔵 ปกติ'}</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
+        <span class="pill" style="background:${done?'#ECFDF5':'#FFFBEB'};color:${done?'#065F46':'#92400E'};border:1px solid ${done?'#6EE7B7':'#FCD34D'};">${done?'✅ ซ่อมเสร็จแล้ว':'⏳ รอดำเนินการ'}</span>
+        <span style="color:#aaa;font-size:11px;">${fmt(r.createdAt)}</span>
+      </div>
+      <div class="row-btns" style="margin-top:10px;">
+        <button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดรายการอีกครั้ง':'✓ แจ้งซ่อมเสร็จแล้ว'}</button>
+        <button class="btn btn-red btn-sm" onclick="doDelRepair('${r.id}')">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+  updateMaintBadges();
+}
+function toggleRepairStatus(id){
+  repairs=repairs.map(r=>r.id===id?{...r,status:r.status==='done'?'pending':'done'}:r);
+  saveRepairs();refreshRepairViews();
+}
+function doDelRepair(id){
+  if(!confirm('ลบรายการแจ้งซ่อมนี้?'))return;
+  repairs=repairs.filter(r=>r.id!==id);
+  saveRepairs();refreshRepairViews();
+}
+// รีเฟรชทุกหน้าที่อาจกำลังแสดงรายการแจ้งซ่อมอยู่ (หน้าพนักงาน + แผงผู้ดูแล)
+function refreshRepairViews(){
+  const empModal=document.getElementById('repairModal');
+  if(empModal && !empModal.classList.contains('hidden'))renderRepairList();
+  else updateMaintBadges();
+  const adminPanel=document.getElementById('adminMaintPanel');
+  if(adminPanel && !adminPanel.classList.contains('hidden'))renderAdminRepairList();
+  else updateAdminMaintBadge();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── รายการเปลี่ยนถ่ายของเหลว (Fluid change logs) ────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+const FLUID_TYPES={
+  engine_oil:{label:'น้ำมันเครื่อง',emoji:'🛢️'},
+  gear_oil:{label:'น้ำมันเกียร์',emoji:'⚙️'},
+  brake_fluid:{label:'น้ำมันเบรก/คลัตช์',emoji:'🛑'},
+  coolant:{label:'น้ำยาหล่อเย็น/หม้อน้ำ',emoji:'❄️'},
+  power_steering:{label:'น้ำมันพวงมาลัยเพาเวอร์',emoji:'🔄'},
+  battery_water:{label:'น้ำกลั่นแบตเตอรี่',emoji:'🔋'},
+  other:{label:'อื่นๆ',emoji:'🔧'}
+};
+function fmtDate(d){if(!d)return'-';try{return new Date(d+'T00:00:00').toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'});}catch(e){return d;}}
+function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+
+function openFluidModal(){
+  if(!currentUser)return;
+  document.getElementById('fluidForm').classList.add('hidden');
+  document.getElementById('fluidFormToggleBtn').textContent='+ บันทึกการเปลี่ยนถ่ายใหม่';
+  document.getElementById('fluType').value='engine_oil';
+  document.getElementById('fluDate').value=todayStr();
+  document.getElementById('fluOdo').value='';
+  document.getElementById('fluNote').value='';
+  renderFluidList();
+  const m=document.getElementById('fluidModal');
+  m.classList.remove('hidden');m.style.display='flex';
+}
+function closeFluidModal(){
+  const m=document.getElementById('fluidModal');
+  m.classList.add('hidden');m.style.display='none';
+}
+function toggleFluidForm(){
+  const f=document.getElementById('fluidForm');
+  if(f.classList.contains('hidden'))document.getElementById('fluDate').value=document.getElementById('fluDate').value||todayStr();
+  const open=f.classList.toggle('hidden');
+  document.getElementById('fluidFormToggleBtn').textContent=open?'+ บันทึกการเปลี่ยนถ่ายใหม่':'✕ ยกเลิก';
+}
+function doAddFluid(){
+  if(!currentUser)return;
+  const type=document.getElementById('fluType').value;
+  const date=document.getElementById('fluDate').value||todayStr();
+  const odo=document.getElementById('fluOdo').value.trim();
+  const note=document.getElementById('fluNote').value.trim();
+  const me=employees.find(e=>e.id===currentUser.id)||currentUser;
+  fluidLogs.unshift({
+    id:'flu_'+Date.now(),
+    empId:me.id,empName:me.name,plate:me.plate||'',
+    fluidType:type,changedAt:date,odometer:odo,note,
+    createdAt:new Date().toISOString()
+  });
+  saveFluid();
+  document.getElementById('fluOdo').value='';
+  document.getElementById('fluNote').value='';
+  toggleFluidForm();
+  refreshFluidViews();
+}
+function renderFluidList(){
+  const el=document.getElementById('fluidList');
+  if(!el||!currentUser)return;
+  const mine=fluidLogs.filter(f=>f.empId===currentUser.id).sort((a,b)=>new Date(b.changedAt)-new Date(a.changedAt));
+  if(!mine.length){
+    el.innerHTML='<div class="maint-empty"><div class="empty-icon">🛢️</div><div>ยังไม่มีบันทึกการเปลี่ยนถ่าย</div></div>';
+    updateMaintBadges();
+    return;
+  }
+  el.innerHTML=mine.map(f=>{
+    const ft=FLUID_TYPES[f.fluidType]||FLUID_TYPES.other;
+    return`<div class="maint-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="color:#1a1a2e;font-size:13.5px;font-weight:700;">${ft.emoji} ${esc(ft.label)}</div>
+        <span style="color:#7B2FBE;font-size:11.5px;font-weight:700;">📅 ${fmtDate(f.changedAt)}</span>
+      </div>
+      ${f.odometer?`<div style="color:#888;font-size:12px;margin-top:6px;">🧭 เลขไมล์: ${esc(f.odometer)} กม.</div>`:''}
+      ${f.note?`<div style="color:#666;font-size:12px;margin-top:4px;">📝 ${esc(f.note)}</div>`:''}
+      <div class="row-btns" style="margin-top:10px;">
+        <button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelFluid('${f.id}')">🗑️ ลบรายการ</button>
+      </div>
+    </div>`;
+  }).join('');
+  updateMaintBadges();
+}
+function doDelFluid(id){
+  if(!confirm('ลบบันทึกการเปลี่ยนถ่ายนี้?'))return;
+  fluidLogs=fluidLogs.filter(f=>f.id!==id);
+  saveFluid();refreshFluidViews();
+}
+// รีเฟรชทุกหน้าที่อาจกำลังแสดงรายการเปลี่ยนถ่ายของเหลวอยู่ (หน้าพนักงาน + แผงผู้ดูแล)
+function refreshFluidViews(){
+  const empModal=document.getElementById('fluidModal');
+  if(empModal && !empModal.classList.contains('hidden'))renderFluidList();
+  else updateMaintBadges();
+  const adminPanel=document.getElementById('adminMaintPanel');
+  if(adminPanel && !adminPanel.classList.contains('hidden'))renderAdminFluidList();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── เบิกเงินพนักงาน (Cash requisition) — เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน ──
+// ══════════════════════════════════════════════════════════════════════════
+function isCashDayOpen(){return new Date().getDate()===15;}
+function nextCashDateLabel(){
+  const now=new Date();
+  let y=now.getFullYear(),m=now.getMonth();
+  if(now.getDate()>=15){m+=1;if(m>11){m=0;y+=1;}}
+  return new Date(y,m,15).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
+}
+function fmtBaht(n){const num=Number(n)||0;return num.toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:2});}
+function openCashModal(){
+  if(!currentUser)return;
+  document.getElementById('cashForm').classList.add('hidden');
+  document.getElementById('cashFormToggleBtn').textContent='+ เบิกเงินใหม่';
+  document.getElementById('cashAmount').value='';
+  document.getElementById('cashReason').value='';
+  renderCashDayNotice();
+  renderCashList();
+  const m=document.getElementById('cashModal');
+  m.classList.remove('hidden');m.style.display='flex';
+}
+function closeCashModal(){
+  const m=document.getElementById('cashModal');
+  m.classList.add('hidden');m.style.display='none';
+}
+function renderCashDayNotice(){
+  const el=document.getElementById('cashDayNotice');
+  const btn=document.getElementById('cashFormToggleBtn');
+  if(!el)return;
+  if(isCashDayOpen()){
+    el.innerHTML=`<div style="background:#ECFDF5;border:1.5px solid #6EE7B7;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#065F46;">✅ วันนี้เปิดให้กรอกคำขอเบิกเงิน</div>`;
+    if(btn){btn.style.opacity='1';btn.style.pointerEvents='auto';}
+  }else{
+    el.innerHTML=`<div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400E;">🔒 เปิดให้กรอกคำขอเบิกเงินเฉพาะวันที่ 15 ของทุกเดือนเท่านั้น<br>รอบถัดไป: <b>${nextCashDateLabel()}</b></div>`;
+    if(btn){btn.style.opacity='.5';btn.style.pointerEvents='none';}
+    document.getElementById('cashForm').classList.add('hidden');
+  }
+}
+function toggleCashForm(){
+  if(!isCashDayOpen())return;
+  const f=document.getElementById('cashForm');
+  const open=f.classList.toggle('hidden');
+  document.getElementById('cashFormToggleBtn').textContent=open?'+ เบิกเงินใหม่':'✕ ยกเลิก';
+}
+function doAddCash(){
+  if(!currentUser||!isCashDayOpen())return;
+  const amount=parseFloat(document.getElementById('cashAmount').value);
+  const reason=document.getElementById('cashReason').value.trim();
+  if(!amount||amount<=0){document.getElementById('cashAmount').focus();return;}
+  if(!reason){document.getElementById('cashReason').focus();return;}
+  const me=employees.find(e=>e.id===currentUser.id)||currentUser;
+  cashRequests.unshift({
+    id:'cash_'+Date.now(),
+    empId:me.id,empName:me.name,plate:me.plate||'',
+    amount,reason,status:'pending',
+    createdAt:new Date().toISOString()
+  });
+  saveCash();
+  document.getElementById('cashAmount').value='';
+  document.getElementById('cashReason').value='';
+  toggleCashForm();
+  refreshCashViews();
+}
+function renderCashList(){
+  const el=document.getElementById('cashList');
+  if(!el||!currentUser)return;
+  const mine=cashRequests.filter(s=>s.empId===currentUser.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  if(!mine.length){
+    el.innerHTML='<div class="maint-empty"><div class="empty-icon">💰</div><div>ยังไม่มีรายการเบิกเงิน</div></div>';
+    updateMaintBadges();
+    return;
+  }
+  el.innerHTML=mine.map(s=>{
+    const done=s.status==='done';
+    return`<div class="maint-card ${done?'fixed':''}">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
+        <div style="color:#F47920;font-size:19px;font-weight:900;">฿${fmtBaht(s.amount)}</div>
+      </div>
+      <div style="color:#666;font-size:12.5px;margin-top:4px;line-height:1.6;white-space:pre-wrap;">${esc(s.reason)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
+        <span class="pill" style="background:${done?'#ECFDF5':'#FFFBEB'};color:${done?'#065F46':'#92400E'};border:1px solid ${done?'#6EE7B7':'#FCD34D'};">${done?'✅ จ่ายแล้ว':'⏳ รอดำเนินการ'}</span>
+        <span style="color:#aaa;font-size:11px;">${fmt(s.createdAt)}</span>
+      </div>
+      <div class="row-btns" style="margin-top:10px;">
+        <button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelCash('${s.id}')">🗑️ ลบรายการ</button>
+      </div>
+    </div>`;
+  }).join('');
+  updateMaintBadges();
+}
+function doDelCash(id){
+  if(!confirm('ลบรายการเบิกเงินนี้?'))return;
+  cashRequests=cashRequests.filter(s=>s.id!==id);
+  saveCash();refreshCashViews();
+}
+function toggleCashStatus(id){
+  cashRequests=cashRequests.map(s=>s.id===id?{...s,status:s.status==='done'?'pending':'done'}:s);
+  saveCash();refreshCashViews();
+}
+// รีเฟรชทุกหน้าที่อาจกำลังแสดงรายการเบิกเงินอยู่ (หน้าพนักงาน + แผงผู้ดูแล)
+function refreshCashViews(){
+  const empModal=document.getElementById('cashModal');
+  if(empModal && !empModal.classList.contains('hidden')){renderCashDayNotice();renderCashList();}
+  else updateMaintBadges();
+  const adminPanel=document.getElementById('adminCashPanel');
+  if(adminPanel && !adminPanel.classList.contains('hidden'))renderAdminCashList();
+  else updateAdminCashBadge();
+}
+
+// ── อัพเดทตัวเลขสรุปบนการ์ดลัด แจ้งซ่อม/เปลี่ยนถ่าย/เบิกเงิน ในหน้าหลัก ────────
+function updateMaintBadges(){
+  if(!currentUser)return;
+  const repSub=document.getElementById('repairSub');
+  const repDot=document.getElementById('repairDot');
+  if(repSub){
+    const mineRep=repairs.filter(r=>r.empId===currentUser.id);
+    const pending=mineRep.filter(r=>r.status!=='done').length;
+    repSub.textContent=mineRep.length===0?'ไม่มีรายการ':(pending>0?`รอดำเนินการ ${pending} รายการ`:'ซ่อมเสร็จครบแล้ว');
+    repSub.className='quick-card-sub'+(pending>0?' alert':'');
+    if(repDot){
+      if(pending>0){repDot.textContent=pending;repDot.classList.remove('hidden');}
+      else repDot.classList.add('hidden');
+    }
+  }
+  const fluSub=document.getElementById('fluidSub');
+  if(fluSub){
+    const mineFlu=fluidLogs.filter(f=>f.empId===currentUser.id).sort((a,b)=>new Date(b.changedAt)-new Date(a.changedAt));
+    fluSub.textContent=mineFlu.length===0?'ยังไม่มีบันทึก':`ล่าสุด ${fmtDate(mineFlu[0].changedAt)}`;
+  }
+  const cashSub=document.getElementById('cashSub');
+  const cashDot=document.getElementById('cashDot');
+  if(cashSub){
+    const mineCash=cashRequests.filter(s=>s.empId===currentUser.id);
+    const pendingCash=mineCash.filter(s=>s.status!=='done').length;
+    const dayOpen=isCashDayOpen();
+    cashSub.textContent=pendingCash>0?`รอดำเนินการ ${pendingCash} รายการ`:(dayOpen?'📅 เปิดให้กรอกวันนี้!':(mineCash.length===0?'ยังไม่มีรายการ':'จ่ายครบแล้ว'));
+    cashSub.className='quick-card-sub'+((pendingCash>0||dayOpen)?' alert':'');
+    if(cashDot){
+      if(pendingCash>0){cashDot.textContent=pendingCash;cashDot.classList.remove('hidden');}
+      else cashDot.classList.add('hidden');
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── แผงผู้ดูแล: รวมรายการแจ้งซ่อม + เปลี่ยนถ่ายของเหลว แยกตามพนักงาน ──────────
+// ══════════════════════════════════════════════════════════════════════════
+let _adminMaintTab='repair';
+
+// หาชื่อ/ทะเบียนล่าสุดของพนักงานจากรายชื่อปัจจุบัน เผื่อถูกแก้ไขชื่อภายหลัง
+// (ถ้าพนักงานถูกลบไปแล้ว ใช้ชื่อ/ทะเบียนที่บันทึกไว้ตอนแจ้งแทน)
+function _empLookup(empId,fallbackName,fallbackPlate){
+  const e=employees.find(x=>x.id===empId);
+  return{name:e?e.name:(fallbackName||'(พนักงานที่ถูกลบ)'),plate:e?e.plate:(fallbackPlate||'')};
+}
+
+function switchAdminMaintTab(t){
+  _adminMaintTab=t;
+  document.getElementById('amTabRepair')?.classList.toggle('active',t==='repair');
+  document.getElementById('amTabFluid')?.classList.toggle('active',t==='fluid');
+  document.getElementById('adminRepairView')?.classList.toggle('hidden',t!=='repair');
+  document.getElementById('adminFluidView')?.classList.toggle('hidden',t!=='fluid');
+  if(t==='repair')renderAdminRepairList();else renderAdminFluidList();
+}
+
+function renderAdminMaint(){
+  renderAdminRepairList();
+  renderAdminFluidList();
+  updateAdminMaintBadge();
+}
+
+function updateAdminMaintBadge(){
+  const badge=document.getElementById('maintTabBadge');
+  if(!badge)return;
+  const pending=repairs.filter(r=>r.status!=='done').length;
+  if(pending>0){badge.textContent=pending;badge.classList.remove('hidden');}
+  else badge.classList.add('hidden');
+}
+
+function renderAdminRepairList(){
+  const statsEl=document.getElementById('adminRepairStats');
+  const groupsEl=document.getElementById('adminRepairGroups');
+  if(!statsEl||!groupsEl)return;
+  const totalPending=repairs.filter(r=>r.status!=='done').length;
+  const totalUrgent=repairs.filter(r=>r.status!=='done'&&r.urgency==='urgent').length;
+  statsEl.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+    <div style="background:#fff;border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalPending>0?'#FCD34D':'#E8EAF0'};">
+      <div style="font-size:26px;font-weight:900;color:${totalPending>0?'#92400E':'#1E90D6'};">${totalPending}</div>
+      <div style="font-size:11px;color:#888;margin-top:2px;">⏳ รอดำเนินการ</div>
+    </div>
+    <div style="background:${totalUrgent>0?'#FFF5F5':'#F0FDF4'};border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalUrgent>0?'#FCA5A5':'#86EFAC'};">
+      <div style="font-size:26px;font-weight:900;color:${totalUrgent>0?'#EF4444':'#10B981'};">${totalUrgent}</div>
+      <div style="font-size:11px;color:#888;margin-top:2px;">${totalUrgent>0?'🔴 เร่งด่วน':'✅ ไม่มีเร่งด่วน'}</div>
+    </div>
+  </div>`;
+  updateAdminMaintBadge();
+  if(!repairs.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">🔧</div><div class="empty-text">ยังไม่มีรายการแจ้งซ่อม</div></div>';return;}
+
+  const byEmp={};
+  repairs.forEach(r=>{(byEmp[r.empId]=byEmp[r.empId]||[]).push(r);});
+  const groupArr=Object.entries(byEmp).map(([empId,items])=>{
+    const info=_empLookup(empId,items[0].empName,items[0].plate);
+    items.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+    return{empId,name:info.name,plate:info.plate,items,pending:items.filter(r=>r.status!=='done').length};
+  }).sort((a,b)=>b.pending-a.pending||a.name.localeCompare(b.name,'th'));
+
+  groupsEl.innerHTML=groupArr.map(g=>`<div class="card" style="margin-bottom:12px;padding:14px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div class="avatar" style="width:36px;height:36px;font-size:15px;">${esc(g.name.charAt(0))}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;color:#1a1a2e;font-size:13.5px;">${esc(g.name)}</div>
+          <div style="color:#888;font-size:11px;">🚛 ${esc(g.plate||'-')}</div>
+        </div>
+        ${g.pending>0?`<span class="pill" style="background:#FFFBEB;color:#92400E;border:1px solid #FCD34D;">${g.pending} ค้าง</span>`:`<span class="pill" style="background:#ECFDF5;color:#065F46;border:1px solid #6EE7B7;">✅ ครบ</span>`}
+      </div>
+      ${g.items.map(r=>{
+        const done=r.status==='done';const urg=r.urgency==='urgent';
+        return`<div class="maint-card ${urg&&!done?'urgent':''} ${done?'fixed':''}" style="margin-bottom:8px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+            <div style="flex:1;min-width:0;color:#1a1a2e;font-size:13px;font-weight:600;line-height:1.5;">${esc(r.issue)}</div>
+            <span class="urgency-pill" style="background:${urg?'#FEF2F2':'#EFF6FF'};color:${urg?'#DC2626':'#1E90D6'};border:1px solid ${urg?'#FCA5A5':'#93C5FD'};">${urg?'🔴 เร่งด่วน':'🔵 ปกติ'}</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+            <span class="pill" style="background:${done?'#ECFDF5':'#FFFBEB'};color:${done?'#065F46':'#92400E'};border:1px solid ${done?'#6EE7B7':'#FCD34D'};">${done?'✅ ซ่อมเสร็จแล้ว':'⏳ รอดำเนินการ'}</span>
+            <span style="color:#aaa;font-size:10.5px;">${fmt(r.createdAt)}</span>
+          </div>
+          <div class="row-btns" style="margin-top:8px;">
+            <button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดอีกครั้ง':'✓ ทำเครื่องหมายว่าซ่อมเสร็จ'}</button>
+            <button class="btn btn-red btn-sm" onclick="doDelRepair('${r.id}')">🗑️</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+
+function renderAdminFluidList(){
+  const statsEl=document.getElementById('adminFluidStats');
+  const groupsEl=document.getElementById('adminFluidGroups');
+  if(!statsEl||!groupsEl)return;
+  statsEl.innerHTML=`<div style="color:#7B2FBE;font-size:12px;font-weight:700;margin-bottom:12px;">🛢️ บันทึกทั้งหมด ${fluidLogs.length} รายการ</div>`;
+  if(!fluidLogs.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">🛢️</div><div class="empty-text">ยังไม่มีบันทึกการเปลี่ยนถ่าย</div></div>';return;}
+
+  const byEmp={};
+  fluidLogs.forEach(f=>{(byEmp[f.empId]=byEmp[f.empId]||[]).push(f);});
+  const groupArr=Object.entries(byEmp).map(([empId,items])=>{
+    const info=_empLookup(empId,items[0].empName,items[0].plate);
+    items.sort((a,b)=>new Date(b.changedAt)-new Date(a.changedAt));
+    return{empId,name:info.name,plate:info.plate,items,last:items[0]};
+  }).sort((a,b)=>a.name.localeCompare(b.name,'th'));
+
+  groupsEl.innerHTML=groupArr.map(g=>`<div class="card" style="margin-bottom:12px;padding:14px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div class="avatar" style="width:36px;height:36px;font-size:15px;">${esc(g.name.charAt(0))}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;color:#1a1a2e;font-size:13.5px;">${esc(g.name)}</div>
+          <div style="color:#888;font-size:11px;">🚛 ${esc(g.plate||'-')}</div>
+        </div>
+        <span style="color:#7B2FBE;font-size:11px;font-weight:700;white-space:nowrap;">ล่าสุด ${fmtDate(g.last.changedAt)}</span>
+      </div>
+      ${g.items.map(f=>{
+        const ft=FLUID_TYPES[f.fluidType]||FLUID_TYPES.other;
+        return`<div class="maint-card" style="margin-bottom:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <div style="color:#1a1a2e;font-size:13px;font-weight:700;">${ft.emoji} ${esc(ft.label)}</div>
+            <span style="color:#7B2FBE;font-size:11px;font-weight:700;">📅 ${fmtDate(f.changedAt)}</span>
+          </div>
+          ${f.odometer?`<div style="color:#888;font-size:11.5px;margin-top:5px;">🧭 เลขไมล์: ${esc(f.odometer)} กม.</div>`:''}
+          ${f.note?`<div style="color:#666;font-size:11.5px;margin-top:3px;">📝 ${esc(f.note)}</div>`:''}
+          <div class="row-btns" style="margin-top:8px;">
+            <button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelFluid('${f.id}')">🗑️ ลบรายการ</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── แผงผู้ดูแล: รายการเบิกเงินพนักงานทุกคน ────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+function updateAdminCashBadge(){
+  const badge=document.getElementById('cashTabBadge');
+  if(!badge)return;
+  const pending=cashRequests.filter(s=>s.status!=='done').length;
+  if(pending>0){badge.textContent=pending;badge.classList.remove('hidden');}
+  else badge.classList.add('hidden');
+}
+
+function renderAdminCashList(){
+  const statsEl=document.getElementById('adminCashStats');
+  const groupsEl=document.getElementById('adminCashGroups');
+  if(!statsEl||!groupsEl)return;
+  const pendingItems=cashRequests.filter(s=>s.status!=='done');
+  const totalPending=pendingItems.length;
+  const totalPendingAmount=pendingItems.reduce((sum,s)=>sum+(Number(s.amount)||0),0);
+  const dayOpen=isCashDayOpen();
+  statsEl.innerHTML=`<div style="background:${dayOpen?'#ECFDF5':'#F5F6FA'};border:1.5px solid ${dayOpen?'#6EE7B7':'#E8EAF0'};border-radius:14px;padding:12px 14px;margin-bottom:12px;font-size:12.5px;color:${dayOpen?'#065F46':'#666'};">
+      ${dayOpen?'✅ วันนี้เปิดให้พนักงานกรอกคำขอเบิกเงิน':'🔒 เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน — รอบถัดไป '+nextCashDateLabel()}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div style="background:#fff;border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalPending>0?'#FCD34D':'#E8EAF0'};">
+        <div style="font-size:26px;font-weight:900;color:${totalPending>0?'#92400E':'#1E90D6'};">${totalPending}</div>
+        <div style="font-size:11px;color:#888;margin-top:2px;">⏳ รอดำเนินการ</div>
+      </div>
+      <div style="background:#fff;border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalPending>0?'#FCD34D':'#E8EAF0'};">
+        <div style="font-size:20px;font-weight:900;color:${totalPending>0?'#92400E':'#1E90D6'};">฿${fmtBaht(totalPendingAmount)}</div>
+        <div style="font-size:11px;color:#888;margin-top:2px;">💰 ยอดรอจ่าย</div>
+      </div>
+    </div>`;
+  updateAdminCashBadge();
+  if(!cashRequests.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">💰</div><div class="empty-text">ยังไม่มีรายการเบิกเงิน</div></div>';return;}
+
+  const byEmp={};
+  cashRequests.forEach(s=>{(byEmp[s.empId]=byEmp[s.empId]||[]).push(s);});
+  const groupArr=Object.entries(byEmp).map(([empId,reqs])=>{
+    const info=_empLookup(empId,reqs[0].empName,reqs[0].plate);
+    reqs.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+    return{empId,name:info.name,plate:info.plate,reqs,pending:reqs.filter(s=>s.status!=='done').length};
+  }).sort((a,b)=>b.pending-a.pending||a.name.localeCompare(b.name,'th'));
+
+  groupsEl.innerHTML=groupArr.map(g=>`<div class="card" style="margin-bottom:12px;padding:14px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div class="avatar" style="width:36px;height:36px;font-size:15px;">${esc(g.name.charAt(0))}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;color:#1a1a2e;font-size:13.5px;">${esc(g.name)}</div>
+          <div style="color:#888;font-size:11px;">🚛 ${esc(g.plate||'-')}</div>
+        </div>
+        ${g.pending>0?`<span class="pill" style="background:#FFFBEB;color:#92400E;border:1px solid #FCD34D;">${g.pending} ค้าง</span>`:`<span class="pill" style="background:#ECFDF5;color:#065F46;border:1px solid #6EE7B7;">✅ ครบ</span>`}
+      </div>
+      ${g.reqs.map(s=>{
+        const done=s.status==='done';
+        return`<div class="maint-card ${done?'fixed':''}" style="margin-bottom:8px;">
+          <div style="color:#F47920;font-size:17px;font-weight:900;">฿${fmtBaht(s.amount)}</div>
+          <div style="color:#666;font-size:12.5px;margin-top:3px;line-height:1.6;white-space:pre-wrap;">${esc(s.reason)}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+            <span class="pill" style="background:${done?'#ECFDF5':'#FFFBEB'};color:${done?'#065F46':'#92400E'};border:1px solid ${done?'#6EE7B7':'#FCD34D'};">${done?'✅ จ่ายแล้ว':'⏳ รอดำเนินการ'}</span>
+            <span style="color:#aaa;font-size:10.5px;">${fmt(s.createdAt)}</span>
+          </div>
+          <div class="row-btns" style="margin-top:8px;">
+            <button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleCashStatus('${s.id}')">${done?'↺ เปิดอีกครั้ง':'✓ จ่ายแล้ว'}</button>
+            <button class="btn btn-red btn-sm" onclick="doDelCash('${s.id}')">🗑️</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+
+// ── ปุ่มรีเฟรชหน้าจอผู้ดูแล ──────────────────────────────────────────────────
+function refreshAdmin(){
+  const btn=document.getElementById('adminRefreshBtn');
+  if(btn){btn.style.transition='transform .6s ease';btn.style.transform='rotate(360deg)';setTimeout(()=>{btn.style.transition='';btn.style.transform='';},650);}
+  const done=()=>{
+    try{
+      const f=JSON.parse(localStorage.getItem('ske_emp')||'[]');
+      if(Array.isArray(f)&&f.length)employees=f;
+    }catch(e){}
+    renderAdmin();
+  };
+  if(window.fbForceRefresh)window.fbForceRefresh(done);
+  else done();
+}
+
+// ── Province HTML ─────────────────────────────────────────────────────────────
+function provHTML(sid,curProv){
+  if(sid==='standby'){
+    return`<div class="province-box"><div class="province-title">📍 จังหวัดที่สแตนบาย</div>
+      <select class="province-sel inp" id="provSel" onchange="_selProv=this.value">
+        <option value="">-- เลือกจังหวัด --</option>
+        ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
+      </select></div>`;
+  }
+  if(sid==='traveling'){
+    return`<div class="province-box"><div class="province-title">🏁 จังหวัดปลายทาง</div>
+      <select class="province-sel inp" id="provSel" onchange="_selProv=this.value">
+        <option value="">-- เลือกปลายทาง --</option>
+        ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
+      </select></div>`;
+  }
+  if(sid==='returning'){
+    return`<div class="province-box"><div class="province-title">🔁 จังหวัดที่กำลังไหลกลับผ่าน/ปลายทางขากลับ</div>
+      <select class="province-sel inp" id="provSel" onchange="_selProv=this.value">
+        <option value="">-- เลือกจังหวัด --</option>
+        ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
+      </select></div>`;
+  }
+  if(sid==='done'){
+    return`<div class="province-box"><div class="province-title">📍 จังหวัดที่ว่างงาน</div>
+      <select class="province-sel inp" id="provSel" onchange="_selProv=this.value">
+        <option value="">-- เลือกจังหวัด --</option>
+        ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
+      </select></div>`;
+  }
+  return'';
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+function renderDashboard(){
+  // sync currentUser จาก employees (กันกรณี localStorage เก่า)
+  if(currentUser){
+    const fresh=employees.find(e=>e.id===currentUser.id);
+    if(fresh)currentUser={...currentUser,...fresh};
+  }
+  const me=employees.find(e=>e.id===currentUser?.id)||currentUser;
+  if(!me){show('login');renderEmpList();return;}
+  const s=getS(me.status);const lbl=getFullLabel(me);
+  _selStatus=me.status;_selProv=me.province||'';
+
+  document.getElementById('adminBadge').classList.toggle('hidden',!adminMode);
+  document.getElementById('navAdmin').style.display=adminMode?'flex':'none';
+
+
+  const mc=document.getElementById('myCard');
+  mc.style.background=s.bg;
+  mc.style.border=`2px solid ${s.border}`;
+  mc.style.boxShadow=`0 4px 20px ${s.border}55`;
+  mc.innerHTML=`
+    <div class="my-card-row" style="display:flex;align-items:center;gap:12px;">
+      <div class="avatar" style="width:50px;height:50px;font-size:21px;">${me.name.charAt(0)}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="color:#1a1a2e;font-weight:800;font-size:16px;">${esc(me.name)}</div>
+        <div style="color:#888;font-size:12px;">🚛 ${esc(me.plate)}${phoneLink(me.phone)}</div>
+      </div>
+      <button id="editBtn" onclick="toggleEdit()" style="background:${s.color};color:#fff;border-radius:10px;padding:7px 13px;font-size:13px;font-weight:700;flex-shrink:0;">${editOpen?'✕ ยกเลิก':'✎ แก้ไข'}</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:10px 12px;background:rgba(255,255,255,.7);border-radius:10px;">
+      <span style="font-size:24px;">${s.emoji}</span>
+      <span style="color:${s.color};font-weight:700;font-size:15px;">${lbl}</span>
+    </div>
+    ${me.note?`<div style="color:#666;font-size:12px;margin-top:8px;">📝 ${esc(me.note)}</div>`:''}
+    ${me.status==='standby'&&me.standbyAt?`<div style="color:#7B2FBE;font-size:12px;font-weight:700;margin-top:6px;padding:5px 10px;background:#F5F3FF;border-radius:8px;border:1px solid #C4B5FD;">⏱️ สแตนบายตั้งแต่: ${fmt(me.standbyAt)}</div>`:''}
+    ${me.updatedAt?`<div style="color:#aaa;font-size:11px;margin-top:4px;">🕐 อัพเดท: ${fmt(me.updatedAt)}</div>`:''}
+    <div id="editPanel" class="edit-panel ${editOpen?'':'hidden'}">
+      <div class="status-grid">${STATUSES.map(st=>`
+        <button class="status-opt ${_selStatus===st.id?'sel':''}" id="sopt_${st.id}"
+          style="border-color:${_selStatus===st.id?st.color:'#E8EAF0'};color:${_selStatus===st.id?st.color:'#888'};background:${_selStatus===st.id?st.bg:'#F5F6FA'};"
+          onclick="selStat('${st.id}')">${st.emoji}<br>${st.label}</button>`).join('')}</div>
+      <div id="provWrap">${provHTML(_selStatus,_selProv)}</div>
+      <textarea id="noteInp" rows="2" class="inp" style="margin-top:10px;width:100%;" placeholder="หมายเหตุ (ไม่บังคับ)">${me.note||''}</textarea>
+      <button class="btn btn-blue btn-full" style="margin-top:10px;" onclick="doSave()">✓ บันทึกสถานะ</button>
+    </div>`;
+
+  updateMaintBadges();
+}
+
+
+function buildSummaryHTML(){
+  if(!employees.length){
+    return '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">ยังไม่มีข้อมูลพนักงาน</div></div>';
+  }
+
+  // นับแต่ละสถานะ
+  const counts={};
+  STATUSES.forEach(st=>counts[st.id]=0);
+  employees.forEach(e=>{if(counts[e.status]!==undefined)counts[e.status]++;else counts['standby']++;});
+
+  // สรุปบนสุด — แจ้งเตือนเฉพาะสถานะที่กำลังทำงานอยู่ที่ช่อง (4 สถานะ) เกิน ALERT_HOURS ชม.
+  const total=employees.length;
+  const stale=employees.filter(e=>ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS)).length;
+
+  let html=`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+    <div style="background:#fff;border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #E8EAF0;">
+      <div style="font-size:28px;font-weight:900;color:#1E90D6;">${total}</div>
+      <div style="font-size:11px;color:#888;margin-top:2px;">🚛 รถทั้งหมด</div>
+    </div>
+    <div style="background:${stale>0?'#FFF5F5':'#F0FDF4'};border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${stale>0?'#FCA5A5':'#86EFAC'};">
+      <div style="font-size:28px;font-weight:900;color:${stale>0?'#EF4444':'#10B981'};">${stale}</div>
+      <div style="font-size:11px;color:#888;margin-top:2px;">${stale>0?'⚠️ ยังไม่อัพเดท':'✅ อัพเดทครบ'}</div>
+    </div>
+  </div>`;
+
+  // รายชื่อพนักงานที่ยังไม่อัพเดทเกิน 24 ชม. (ทุกสถานะ — แจ้งเตือนผู้ดูแลแบบภาพรวม)
+  const stale24List=employees.filter(e=>!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS);
+  if(stale24List.length){
+    stale24List.sort((a,b)=>{const av=a.updatedAt?new Date(a.updatedAt).getTime():0,bv=b.updatedAt?new Date(b.updatedAt).getTime():0;return av-bv;});
+    html+=`<div style="background:#FEF2F2;border:2px solid #F87171;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
+      <div style="color:#B91C1C;font-weight:800;font-size:13.5px;margin-bottom:8px;">🔔 ไม่อัพเดทสถานะเกิน ${STALE_ALL_HOURS} ชม. — ทุกสถานะ (${stale24List.length} คน)</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">`;
+    stale24List.forEach(e=>{
+      const s=getS(e.status);const never=!e.updatedAt;
+      html+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid #FECACA;">
+        <div class="avatar" style="width:30px;height:30px;font-size:13px;">${esc(e.name.charAt(0))}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
+          <div style="font-size:11px;color:#888;">${esc(e.plate||'-')}${phoneLink(e.phone)}</div>
+          <span class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:9.5px;margin-top:3px;display:inline-block;">${s.emoji} ${esc(s.label)}</span>
+        </div>
+        <span style="font-size:10px;color:#DC2626;font-weight:700;white-space:nowrap;text-align:right;">${never?'ยังไม่เคยอัพเดท':'ล่าสุด<br>'+fmt(e.updatedAt)}</span>
+      </div>`;
+    });
+    html+='</div></div>';
+  }
+
+  // รายชื่อพนักงานที่ยังไม่อัพเดท (เฉพาะ 4 สถานะกำลังทำงานที่จุดขึ้น-ลงสินค้า)
+  const staleList=employees.filter(e=>ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS));
+  if(staleList.length){
+    staleList.sort((a,b)=>{const av=a.updatedAt?new Date(a.updatedAt).getTime():0,bv=b.updatedAt?new Date(b.updatedAt).getTime():0;return av-bv;});
+    html+=`<div style="background:#FFF5F5;border:1.5px solid #FCA5A5;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
+      <div style="color:#DC2626;font-weight:700;font-size:13px;margin-bottom:8px;">⚠️ ยังไม่อัพเดทเกิน ${ALERT_HOURS} ชม. — เฉพาะกำลังทำงานที่จุดขึ้น-ลงสินค้า (${staleList.length} คน)</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">`;
+    staleList.forEach(e=>{
+      const never=!e.updatedAt;
+      html+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid #FECACA;">
+        <span style="font-size:15px;">🚛</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
+          <div style="font-size:11px;color:#888;">${esc(e.plate||'-')}${phoneLink(e.phone)}</div>
+        </div>
+        <span style="font-size:10px;color:#DC2626;font-weight:700;white-space:nowrap;text-align:right;">${never?'ยังไม่เคยอัพเดท':'ล่าสุด<br>'+fmt(e.updatedAt)}</span>
+      </div>`;
+    });
+    html+='</div></div>';
+  }
+
+  // สถานะแต่ละประเภท
+  html+=`<div style="color:#999;font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px;">สรุปสถานะรถ</div>`;
+  STATUSES.forEach(st=>{
+    const cnt=counts[st.id]||0;
+    if(cnt===0)return;
+    html+=`<div style="background:#fff;border-radius:12px;padding:11px 14px;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,.05);border:1.5px solid ${st.border};">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:22px;">${st.emoji}</span>
+        <div style="flex:1;">
+          <div style="font-weight:700;color:${st.color};font-size:13px;">${st.label}</div>
+        </div>
+        <div style="background:${st.bg};border:1.5px solid ${st.border};border-radius:20px;padding:3px 12px;font-weight:800;color:${st.color};font-size:15px;">${cnt} คัน</div>
+      </div>
+      ${st.id==='standby'?renderStandbyByProv():''}
+      ${st.id==='traveling'?renderTravelingByProv():''}
+      ${st.id==='returning'?renderReturningByProv():''}
+      ${st.id==='done'?renderDoneByProv():''}
+      ${(st.id!=='standby'&&st.id!=='traveling'&&st.id!=='returning'&&st.id!=='done')?renderStatusEmployeeList(st):''}
+    </div>`;
+  });
+
+  return html;
+}
+
+// รายชื่อพนักงานแบบเรียบ (ไม่จัดกลุ่มจังหวัด) ใช้กับสถานะอื่นๆ ที่ไม่ใช่ standby/traveling
+function renderStatusEmployeeList(st){
+  const list=employees.filter(e=>e.status===st.id);
+  if(!list.length)return'';
+  list.sort((a,b)=>(b.updatedAt||'')>(a.updatedAt||'')?1:-1);
+  let html=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E8EAF0;display:flex;flex-direction:column;gap:6px;">`;
+  list.forEach(e=>{
+    const t=e.updatedAt;
+    const timeStr=t?fmt(t):'ไม่ระบุ';
+    html+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 8px;background:${st.bg};border-radius:7px;border:1px solid ${st.border};">
+      <span style="font-size:14px;">${st.emoji}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:700;color:${st.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
+        <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
+        ${e.note?`<div style="font-size:11px;color:${st.color};margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+      </div>
+      <span style="font-size:10px;color:#888;white-space:nowrap;">🕐 ${timeStr}</span>
+    </div>`;
+  });
+  html+='</div>';
+  return html;
+}
+
+function renderStandbyByProv(){
+  const standby=employees.filter(e=>e.status==='standby');
+  if(!standby.length)return'';
+  const byProv={};
+  standby.forEach(e=>{const p=e.province||'ไม่ระบุจังหวัด';if(!byProv[p])byProv[p]=[];byProv[p].push(e);});
+  // เรียงตามเวลาแสตนบาย (เก่าสุดก่อน = ลำดับคิวต้น)
+  Object.values(byProv).forEach(list=>list.sort((a,b)=>(a.standbyAt||a.updatedAt||'')>(b.standbyAt||b.updatedAt||'')?1:-1));
+  const sorted=Object.entries(byProv).sort((a,b)=>b[1].length-a[1].length);
+  let html='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E8EAF0;display:flex;flex-direction:column;gap:6px;">';
+  sorted.forEach(([prov,list])=>{
+    html+=`<div style="margin-bottom:4px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span style="color:#6D28D9;font-size:12px;font-weight:700;">📍 ${prov}</span>
+        <span style="background:#F5F3FF;color:#7B2FBE;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;">${list.length} คัน</span>
+      </div>`;
+    list.forEach((e,i)=>{
+      const t=e.standbyAt||e.updatedAt;
+      const timeStr=t?fmt(t):'ไม่ระบุ';
+      html+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 8px;background:${i===0?'#F5F3FF':'#fafafa'};border-radius:7px;border:1px solid ${i===0?'#C4B5FD':'#E8EAF0'};">
+        <span style="font-size:11px;font-weight:800;color:${i===0?'#7B2FBE':'#aaa'};min-width:16px;padding-top:1px;">#${i+1}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;color:#333;font-weight:${i===0?'700':'400'};">${esc(e.name)} · ${esc(e.plate)}${phoneLink(e.phone)}</div>
+          ${e.note?`<div style="font-size:11px;color:#7B2FBE;margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+        </div>
+        <span style="font-size:10px;color:#888;white-space:nowrap;padding-top:1px;">⏱️ ${timeStr}</span>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+function toggleEdit(){
+  editOpen=!editOpen;
+  const p=document.getElementById('editPanel');if(p)p.classList.toggle('hidden',!editOpen);
+  const b=document.getElementById('editBtn');if(b)b.textContent=editOpen?'✕ ยกเลิก':'✎ แก้ไข';
+}
+
+function selStat(id){
+  // อ่านค่าจังหวัดจาก dropdown ก่อน re-render เพื่อไม่ให้หาย
+  const curSel=document.getElementById('provSel');
+  if(curSel)_selProv=curSel.value;
+  _selStatus=id;
+  STATUSES.forEach(st=>{
+    const b=document.getElementById('sopt_'+st.id);if(!b)return;
+    b.style.borderColor=id===st.id?st.color:'#E8EAF0';
+    b.style.color=id===st.id?st.color:'#888';
+    b.style.background=id===st.id?st.bg:'#F5F6FA';
+  });
+  const w=document.getElementById('provWrap');if(w)w.innerHTML=provHTML(id,(id==='standby'||id==='traveling'||id==='returning'||id==='done')?_selProv:'');
+}
+
+function doSave(){
+  const note=document.getElementById('noteInp')?.value||'';
+  const provSel=document.getElementById('provSel');
+  const needProv=_selStatus==='standby'||_selStatus==='traveling'||_selStatus==='returning'||_selStatus==='done';
+  const prov=needProv?(provSel?provSel.value:_selProv)||'':'';
+  const now=new Date().toISOString();
+  // บันทึก standbyAt เมื่อเปลี่ยนมาเป็น standby ครั้งแรก
+  const prev=employees.find(e=>e.id===currentUser.id);
+  const standbyAt=(_selStatus==='standby'&&prev?.status!=='standby')?now:(prev?.standbyAt||null);
+  employees=employees.map(e=>e.id===currentUser.id?{...e,status:_selStatus,province:prov,note,updatedAt:now,standbyAt:_selStatus==='standby'?standbyAt:null}:e);
+  currentUser={...currentUser,status:_selStatus,province:prov,note,updatedAt:now,standbyAt:_selStatus==='standby'?standbyAt:null};
+  saveE();saveU();editOpen=false;renderDashboard();
+  // reset timer หลังอัพเดทสถานะ
+  startAlertTimer();
+}
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+function goAdmin(){show('admin');renderAdmin();switchAdminTab('summary');}
+function goBack(){
+  // ปุ่ม "กลับ" ต้องไม่ทำให้ออกจากระบบเด็ดขาด
+  // ถ้ามีพนักงาน login อยู่ → กลับไปหน้าหลักของพนักงานคนนั้น
+  if(currentUser){show('dashboard');renderDashboard();return;}
+  // ถ้าเข้ามาแบบผู้ดูแลอย่างเดียว (ไม่มี currentUser) → อยู่ในแผงผู้ดูแลต่อ ไม่เด้งไปหน้า login
+  if(adminMode){show('admin');renderAdmin();switchAdminTab('summary');return;}
+  // กรณีอื่นๆ (ไม่ได้ login เลยจริงๆ) ค่อยกลับไปหน้าเลือกชื่อ
+  show('login');renderEmpList();showMode('select');
+}
+
+function renderAdmin(){
+  renderAdminEmpList();
+  renderSysInfo();
+  const el=document.getElementById('adminSummaryContent');
+  if(el)el.innerHTML=buildSummaryHTML();
+  updateAdminMaintBadge();
+  updateAdminCashBadge();
+  updateStaleBadge();
+  const mp=document.getElementById('adminMaintPanel');
+  if(mp && !mp.classList.contains('hidden'))renderAdminMaint();
+  const sp=document.getElementById('adminCashPanel');
+  if(sp && !sp.classList.contains('hidden'))renderAdminCashList();
+}
+
+// ── ตัวเลขแจ้งเตือนบนแท็บ "ภาพรวม" — จำนวนพนักงานที่ไม่อัพเดทสถานะเกิน 24 ชม. (ทุกสถานะ) ──
+function updateStaleBadge(){
+  const badge=document.getElementById('staleTabBadge');
+  if(!badge)return;
+  const n=employees.filter(e=>!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS).length;
+  if(n>0){badge.textContent=n;badge.classList.remove('hidden');}
+  else badge.classList.add('hidden');
+}
+
+function renderSysInfo(){
+  const el=document.getElementById('sysInfo');
+  if(!el)return;
+  const now=new Date();
+  el.innerHTML=`พนักงานทั้งหมด: <b>${employees.length}</b> คน<br>เวอร์ชัน: <b>2.0 (Firebase)</b><br>เวลาปัจจุบัน: <b>${now.toLocaleString('th-TH')}</b><br>ประวัติซ่อมบำรุง: <b>เก็บไว้ 12 เดือน แล้วลบอัตโนมัติ</b><br>เบิกเงินพนักงาน: <b>เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน</b>`;
+}
+
+function renderTravelingByProv(){
+  const traveling=employees.filter(e=>e.status==='traveling');
+  if(!traveling.length)return'';
+  const byProv={};
+  traveling.forEach(e=>{const p=e.province||'ไม่ระบุปลายทาง';if(!byProv[p])byProv[p]=[];byProv[p].push(e);});
+  // เรียงตามเวลาออกเดินทาง
+  Object.values(byProv).forEach(list=>list.sort((a,b)=>(a.updatedAt||'')>(b.updatedAt||'')?1:-1));
+  const sorted=Object.entries(byProv).sort((a,b)=>b[1].length-a[1].length);
+  let html='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E8EAF0;display:flex;flex-direction:column;gap:6px;">';
+  sorted.forEach(([prov,list])=>{
+    html+=`<div style="margin-bottom:4px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span style="color:#0E7490;font-size:12px;font-weight:700;">🏁 ${prov}</span>
+        <span style="background:#ECFEFF;color:#0E7490;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;">${list.length} คัน</span>
+      </div>`;
+    list.forEach(e=>{
+      const t=e.updatedAt;
+      const timeStr=t?fmt(t):'ไม่ระบุ';
+      html+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 8px;background:#F0FDFE;border-radius:7px;border:1px solid #A5F3FC;">
+        <span style="font-size:14px;">🚛</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:700;color:#0E7490;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
+          <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
+          ${e.note?`<div style="font-size:11px;color:#0E7490;margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+        </div>
+        <span style="font-size:10px;color:#888;white-space:nowrap;">🕐 ${timeStr}</span>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+function renderReturningByProv(){
+  const returning=employees.filter(e=>e.status==='returning');
+  if(!returning.length)return'';
+  const byProv={};
+  returning.forEach(e=>{const p=e.province||'ไม่ระบุจังหวัด';if(!byProv[p])byProv[p]=[];byProv[p].push(e);});
+  // เรียงตามเวลาที่เริ่มไหลกลับ
+  Object.values(byProv).forEach(list=>list.sort((a,b)=>(a.updatedAt||'')>(b.updatedAt||'')?1:-1));
+  const sorted=Object.entries(byProv).sort((a,b)=>b[1].length-a[1].length);
+  let html='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E8EAF0;display:flex;flex-direction:column;gap:6px;">';
+  sorted.forEach(([prov,list])=>{
+    html+=`<div style="margin-bottom:4px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span style="color:#0F766E;font-size:12px;font-weight:700;">🔁 ${esc(prov)}</span>
+        <span style="background:#F0FDFA;color:#0F766E;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;">${list.length} คัน</span>
+      </div>`;
+    list.forEach(e=>{
+      const t=e.updatedAt;
+      const timeStr=t?fmt(t):'ไม่ระบุ';
+      html+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 8px;background:#F0FDFA;border-radius:7px;border:1px solid #5EEAD4;">
+        <span style="font-size:14px;">🚛</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:700;color:#0F766E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
+          <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
+          ${e.note?`<div style="font-size:11px;color:#0F766E;margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+        </div>
+        <span style="font-size:10px;color:#888;white-space:nowrap;">🕐 ${timeStr}</span>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+function renderDoneByProv(){
+  const done=employees.filter(e=>e.status==='done');
+  if(!done.length)return'';
+  const byProv={};
+  done.forEach(e=>{const p=e.province||'ไม่ระบุจังหวัด';if(!byProv[p])byProv[p]=[];byProv[p].push(e);});
+  // เรียงตามเวลาอัพเดทล่าสุด
+  Object.values(byProv).forEach(list=>list.sort((a,b)=>(a.updatedAt||'')>(b.updatedAt||'')?1:-1));
+  const sorted=Object.entries(byProv).sort((a,b)=>b[1].length-a[1].length);
+  let html='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E8EAF0;display:flex;flex-direction:column;gap:6px;">';
+  sorted.forEach(([prov,list])=>{
+    html+=`<div style="margin-bottom:4px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span style="color:#065F46;font-size:12px;font-weight:700;">📍 ${esc(prov)}</span>
+        <span style="background:#ECFDF5;color:#065F46;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;">${list.length} คัน</span>
+      </div>`;
+    list.forEach(e=>{
+      const t=e.updatedAt;
+      const timeStr=t?fmt(t):'ไม่ระบุ';
+      html+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 8px;background:#F0FDF4;border-radius:7px;border:1px solid #6EE7B7;">
+        <span style="font-size:14px;">✅</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:700;color:#065F46;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
+          <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
+          ${e.note?`<div style="font-size:11px;color:#065F46;margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+        </div>
+        <span style="font-size:10px;color:#888;white-space:nowrap;">🕐 ${timeStr}</span>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+function switchAdminTab(t){
+  document.getElementById('adminEmpPanel').classList.add('hidden');
+  document.getElementById('adminTabBar')?.classList.remove('hidden');
+  document.getElementById('adminSummaryPanel').classList.toggle('hidden',t!=='summary');
+  document.getElementById('adminMaintPanel').classList.toggle('hidden',t!=='maint');
+  document.getElementById('adminCashPanel').classList.toggle('hidden',t!=='cash');
+  document.getElementById('adminSettingsPanel').classList.toggle('hidden',t!=='settings');
+  document.getElementById('tabSummaryTop')?.classList.toggle('active',t==='summary');
+  document.getElementById('tabMaintTop')?.classList.toggle('active',t==='maint');
+  document.getElementById('tabCashTop')?.classList.toggle('active',t==='cash');
+  document.getElementById('tabSettings')?.classList.toggle('active',t==='settings');
+  ['navAdminSum','navAdminMaint','navAdminCash','navAdminSet'].forEach(id=>{document.getElementById(id)?.classList.remove('active');});
+  if(t==='summary')document.getElementById('navAdminSum')?.classList.add('active');
+  if(t==='maint')document.getElementById('navAdminMaint')?.classList.add('active');
+  if(t==='cash')document.getElementById('navAdminCash')?.classList.add('active');
+  if(t==='settings')document.getElementById('navAdminSet')?.classList.add('active');
+  if(t==='settings')renderSysInfo();
+  if(t==='summary'){const el=document.getElementById('adminSummaryContent');if(el)el.innerHTML=buildSummaryHTML();}
+  if(t==='maint')renderAdminMaint();
+  if(t==='cash')renderAdminCashList();
+}
+
+// ── พนักงาน ย้ายไปอยู่ใต้ "ตั้งค่า" — เปิด/ปิดเป็นหน้าย่อย ──────────────────
+function showEmpManage(){
+  document.getElementById('adminTabBar')?.classList.add('hidden');
+  document.getElementById('adminSummaryPanel').classList.add('hidden');
+  document.getElementById('adminSettingsPanel').classList.add('hidden');
+  document.getElementById('adminEmpPanel').classList.remove('hidden');
+  renderAdminEmpList();
+}
+function hideEmpManage(){
+  document.getElementById('adminEmpPanel').classList.add('hidden');
+  document.getElementById('adminTabBar')?.classList.remove('hidden');
+  switchAdminTab('settings');
+}
+
+function toggleAddEmp(){document.getElementById('addEmpForm').classList.toggle('hidden');}
+
+function doAddEmp(){
+  const name=document.getElementById('addName').value.trim();
+  const plate=document.getElementById('addPlate').value.trim().toUpperCase();
+  const phone=document.getElementById('addPhone').value.trim();
+  if(!name||!plate)return;
+  employees.push({id:Date.now()+'',name,plate,phone,status:'standby',province:'',note:'',updatedAt:new Date().toISOString()});
+  saveE();['addName','addPlate','addPhone'].forEach(x=>document.getElementById(x).value='');
+  document.getElementById('addEmpForm').classList.add('hidden');renderAdminEmpList();
+}
+
+let _aSel={};
+function renderAdminEmpList(){
+  const el=document.getElementById('adminEmpList');
+  if(!employees.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">👷</div><div class="empty-text">ยังไม่มีพนักงาน</div></div>';return;}
+  employees.forEach(e=>_aSel[e.id]=e.status);
+  el.innerHTML=employees.map(e=>{
+    const s=getS(e.status);const lbl=getFullLabel(e);
+    return`<div class="emp-card" style="margin-bottom:12px;">
+      <div class="emp-card-row">
+        <div class="avatar" style="width:42px;height:42px;font-size:18px;">${esc(e.name.charAt(0))}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="color:#1a1a2e;font-weight:700;">${esc(e.name)}</div>
+          <div style="color:#888;font-size:11px;">🚛 ${esc(e.plate)}${phoneLink(e.phone)}</div>
+          ${e.status==='standby'&&e.province?`<div style="color:#7B2FBE;font-size:11px;margin-top:2px;">📍 ${esc(e.province)}</div>`:''}
+          ${e.note?`<div style="color:#92400E;font-size:11px;margin-top:4px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 8px;">📝 ${esc(e.note)}</div>`:''}
+        </div>
+        <div class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:10px;flex-shrink:0;">${s.emoji} ${getS(e.status).label}</div>
+      </div>
+      <div class="row-btns" style="margin-top:10px;">
+        <button class="btn btn-blue btn-sm" style="flex:1;" onclick="openAEdit('${e.id}')">✏️ แก้ไข</button>
+        <button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelEmp('${e.id}')">🗑️ ลบ</button>
+      </div>
+      <div id="aef_${e.id}" class="hidden" style="margin-top:12px;border-top:1px solid #E8EAF0;padding-top:12px;display:flex;flex-direction:column;gap:11px;">
+        <div style="color:#1E90D6;font-weight:700;">✏️ แก้ไข: ${esc(e.name)}</div>
+        <div><div class="inp-label">ชื่อ</div><input class="inp" id="aen_${e.id}" value="${esc(e.name)}"></div>
+        <div><div class="inp-label">ทะเบียน</div><input class="inp" id="aep_${e.id}" value="${esc(e.plate)}"></div>
+        <div><div class="inp-label">เบอร์โทร</div><input class="inp" id="aeph_${e.id}" value="${esc(e.phone||'')}" type="tel" inputmode="tel"></div>
+        <div><div class="inp-label">🔒 รีเซ็ต PIN <span style="font-size:10px;color:#888;font-weight:400;">(เว้นว่างถ้าไม่ต้องการเปลี่ยน)</span></div><input class="inp" id="aepin_${e.id}" type="password" inputmode="numeric" maxlength="4" placeholder="PIN ใหม่ 4 หลัก"></div>
+        <div class="status-grid">${STATUSES.map(st=>`<button class="status-opt" id="aes_${e.id}_${st.id}"
+          style="border-color:${e.status===st.id?st.color:'#E8EAF0'};color:${e.status===st.id?st.color:'#888'};background:${e.status===st.id?st.bg:'#F5F6FA'};"
+          onclick="aSelStat('${e.id}','${st.id}')">${st.emoji}<br>${st.label}</button>`).join('')}</div>
+        <div id="aprv_${e.id}">${provHTML(e.status,e.province||'')}</div>
+        <div><div class="inp-label">หมายเหตุ</div><textarea class="inp" id="aen2_${e.id}" rows="2">${esc(e.note||'')}</textarea></div>
+        <div class="row-btns">
+          <button class="btn btn-gray" style="flex:1;" onclick="closeAEdit('${e.id}')">← ยกเลิก</button>
+          <button class="btn btn-blue" style="flex:1;" onclick="doSaveAEdit('${e.id}')">✓ บันทึก</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openAEdit(id){document.getElementById('aef_'+id).classList.remove('hidden');document.getElementById('aef_'+id).style.display='flex';}
+function closeAEdit(id){document.getElementById('aef_'+id).classList.add('hidden');}
+function aSelStat(eid,sid){
+  // อ่านค่าจังหวัดจาก dropdown ปัจจุบันก่อน re-render
+  const curSel=document.querySelector(`#aprv_${eid} select`);
+  const needProv=sid==='standby'||sid==='traveling'||sid==='returning'||sid==='done';
+  const curProv=curSel?curSel.value:(needProv?(employees.find(e=>e.id===eid)?.province||''):'');
+  _aSel[eid]=sid;
+  STATUSES.forEach(st=>{const b=document.getElementById(`aes_${eid}_${st.id}`);if(!b)return;b.style.borderColor=sid===st.id?st.color:'#E8EAF0';b.style.color=sid===st.id?st.color:'#888';b.style.background=sid===st.id?st.bg:'#F5F6FF';});
+  const w=document.getElementById('aprv_'+eid);if(w)w.innerHTML=provHTML(sid,curProv);
+}
+function doSaveAEdit(id){
+  const name=document.getElementById('aen_'+id).value.trim();
+  const plate=document.getElementById('aep_'+id).value.trim().toUpperCase();
+  const phone=document.getElementById('aeph_'+id).value.trim();
+  const note=document.getElementById('aen2_'+id).value;
+  const newPin=document.getElementById('aepin_'+id)?.value.trim()||'';
+  const status=_aSel[id]||'standby';
+  const needProv=status==='standby'||status==='traveling'||status==='returning'||status==='done';
+  const prov=needProv?(document.getElementById(`aprv_${id}`)?.querySelector('select')?.value||''):'';
+  const now=new Date().toISOString();
+  employees=employees.map(e=>{
+    if(e.id!==id)return e;
+    const prev=e;
+    const standbyAt=(status==='standby'&&prev.status!=='standby')?now:(status==='standby'?prev.standbyAt||now:null);
+    const updated={...e,name,plate,phone,note,status,province:prov,updatedAt:now,standbyAt};
+    if(newPin.length===4&&/^\d{4}$/.test(newPin))updated.pin=newPin;
+    return updated;
+  });
+  if(currentUser?.id===id){currentUser={...currentUser,name,plate,phone,note,status,province:prov};saveU();}
+  saveE();renderAdminEmpList();
+}
+function doDelEmp(id){
+  if(!confirm('ลบพนักงานคนนี้?'))return;
+  employees=employees.filter(e=>e.id!==id);
+  if(currentUser?.id===id){currentUser=null;saveU();}
+  saveE();renderAdminEmpList();
+  renderSysInfo();
+}
+function doChangePw(){
+  const v=document.getElementById('newPwInput').value;
+  const m=document.getElementById('pwMsg');
+  if(v.length<4){m.textContent='ต้องมีอย่างน้อย 4 ตัวอักษร';m.style.color='#EF4444';m.classList.remove('hidden');return;}
+  adminPw=v;saveP();document.getElementById('newPwInput').value='';
+  m.textContent='✅ เปลี่ยนรหัสผ่านสำเร็จ!';m.style.color='#10B981';m.classList.remove('hidden');
+  setTimeout(()=>m.classList.add('hidden'),2500);
+}
+
+function fmt(iso){if(!iso)return'-';return new Date(iso).toLocaleString('th-TH',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'});}
+
+setInterval(()=>{
+  try{
+    const f=JSON.parse(localStorage.getItem('ske_emp')||'[]');
+    if(Array.isArray(f)&&f.length&&JSON.stringify(f)!==JSON.stringify(employees)){
+      employees=f;
+      const dash=document.getElementById('dashboard');
+      const admin=document.getElementById('admin');
+      if(dash&&!dash.classList.contains('hidden'))renderDashboard();
+      if(admin&&!admin.classList.contains('hidden'))renderAdmin();
+    }
+  }catch(e){console.warn('sync error',e);}
+},30000);
+</script>
+</body>
+</html>
