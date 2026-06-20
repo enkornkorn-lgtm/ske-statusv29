@@ -528,6 +528,7 @@ function getS(id){return STATUSES.find(s=>s.id===id)||STATUSES.find(s=>s.id==='s
 function getFullLabel(e){
   if(e.status==='standby'&&e.province)return`สแตนบาย — ${e.province}`;
   if(e.status==='traveling'&&e.province)return`ออกเดินทาง → ${e.province}`;
+  if(e.status==='done'&&e.province)return`สแตนบายว่างงาน — ${e.province}`;
   return getS(e.status).label;
 }
 
@@ -889,6 +890,13 @@ function provHTML(sid,curProv){
         ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
       </select></div>`;
   }
+  if(sid==='done'){
+    return`<div class="province-box"><div class="province-title">📍 จังหวัดที่ว่างงาน</div>
+      <select class="province-sel inp" id="provSel" onchange="_selProv=this.value">
+        <option value="">-- เลือกจังหวัด --</option>
+        ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
+      </select></div>`;
+  }
   return'';
 }
 
@@ -1005,7 +1013,8 @@ function buildSummaryHTML(){
       </div>
       ${st.id==='standby'?renderStandbyByProv():''}
       ${st.id==='traveling'?renderTravelingByProv():''}
-      ${(st.id!=='standby'&&st.id!=='traveling')?renderStatusEmployeeList(st):''}
+      ${st.id==='done'?renderDoneByProv():''}
+      ${(st.id!=='standby'&&st.id!=='traveling'&&st.id!=='done')?renderStatusEmployeeList(st):''}
     </div>`;
   });
 
@@ -1085,13 +1094,13 @@ function selStat(id){
     b.style.color=id===st.id?st.color:'#888';
     b.style.background=id===st.id?st.bg:'#F5F6FA';
   });
-  const w=document.getElementById('provWrap');if(w)w.innerHTML=provHTML(id,(id==='standby'||id==='traveling')?_selProv:'');
+  const w=document.getElementById('provWrap');if(w)w.innerHTML=provHTML(id,(id==='standby'||id==='traveling'||id==='done')?_selProv:'');
 }
 
 function doSave(){
   const note=document.getElementById('noteInp')?.value||'';
   const provSel=document.getElementById('provSel');
-  const needProv=_selStatus==='standby'||_selStatus==='traveling';
+  const needProv=_selStatus==='standby'||_selStatus==='traveling'||_selStatus==='done';
   const prov=needProv?(provSel?provSel.value:_selProv)||'':'';
   const now=new Date().toISOString();
   // บันทึก standbyAt เมื่อเปลี่ยนมาเป็น standby ครั้งแรก
@@ -1251,6 +1260,40 @@ function renderTravelingByProv(){
   return html;
 }
 
+function renderDoneByProv(){
+  const done=employees.filter(e=>e.status==='done');
+  if(!done.length)return'';
+  const byProv={};
+  done.forEach(e=>{const p=e.province||'ไม่ระบุจังหวัด';if(!byProv[p])byProv[p]=[];byProv[p].push(e);});
+  // เรียงตามเวลาอัพเดทล่าสุด
+  Object.values(byProv).forEach(list=>list.sort((a,b)=>(a.updatedAt||'')>(b.updatedAt||'')?1:-1));
+  const sorted=Object.entries(byProv).sort((a,b)=>b[1].length-a[1].length);
+  let html='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E8EAF0;display:flex;flex-direction:column;gap:6px;">';
+  sorted.forEach(([prov,list])=>{
+    html+=`<div style="margin-bottom:4px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span style="color:#065F46;font-size:12px;font-weight:700;">📍 ${esc(prov)}</span>
+        <span style="background:#ECFDF5;color:#065F46;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;">${list.length} คัน</span>
+      </div>`;
+    list.forEach(e=>{
+      const t=e.updatedAt;
+      const timeStr=t?fmt(t):'ไม่ระบุ';
+      html+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 8px;background:#F0FDF4;border-radius:7px;border:1px solid #6EE7B7;">
+        <span style="font-size:14px;">✅</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:700;color:#065F46;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
+          <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
+          ${e.note?`<div style="font-size:11px;color:#065F46;margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+        </div>
+        <span style="font-size:10px;color:#888;white-space:nowrap;">🕐 ${timeStr}</span>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+  return html;
+}
+
 function switchAdminTab(t){
   document.getElementById('adminEmpPanel').classList.add('hidden');
   document.getElementById('adminTabBar')?.classList.remove('hidden');
@@ -1338,7 +1381,7 @@ function closeAEdit(id){document.getElementById('aef_'+id).classList.add('hidden
 function aSelStat(eid,sid){
   // อ่านค่าจังหวัดจาก dropdown ปัจจุบันก่อน re-render
   const curSel=document.querySelector(`#aprv_${eid} select`);
-  const needProv=sid==='standby'||sid==='traveling';
+  const needProv=sid==='standby'||sid==='traveling'||sid==='done';
   const curProv=curSel?curSel.value:(needProv?(employees.find(e=>e.id===eid)?.province||''):'');
   _aSel[eid]=sid;
   STATUSES.forEach(st=>{const b=document.getElementById(`aes_${eid}_${st.id}`);if(!b)return;b.style.borderColor=sid===st.id?st.color:'#E8EAF0';b.style.color=sid===st.id?st.color:'#888';b.style.background=sid===st.id?st.bg:'#F5F6FF';});
@@ -1351,7 +1394,7 @@ function doSaveAEdit(id){
   const note=document.getElementById('aen2_'+id).value;
   const newPin=document.getElementById('aepin_'+id)?.value.trim()||'';
   const status=_aSel[id]||'standby';
-  const needProv=status==='standby'||status==='traveling';
+  const needProv=status==='standby'||status==='traveling'||status==='done';
   const prov=needProv?(document.getElementById(`aprv_${id}`)?.querySelector('select')?.value||''):'';
   const now=new Date().toISOString();
   employees=employees.map(e=>{
