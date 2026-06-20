@@ -50,6 +50,11 @@
     set(ref(db, 'fluidLogs'), list).catch(e => console.error('fbSaveFluidLogs error', e));
   };
 
+  // บันทึกรายการเบิกเงินพนักงานขึ้น Firebase
+  window.fbSaveCashRequests = function(list) {
+    set(ref(db, 'cashRequests'), list).catch(e => console.error('fbSaveCashRequests error', e));
+  };
+
   // ดึงข้อมูลล่าสุดจาก Firebase ทันที (สำหรับปุ่มรีเฟรชของผู้ดูแล)
   window.fbForceRefresh = function(cb) {
     get(ref(db, 'employees')).then(snapshot => {
@@ -120,6 +125,23 @@
     }
   });
 
+  // ฟัง realtime — รายการเบิกเงินพนักงาน
+  onValue(ref(db, 'cashRequests'), (snapshot) => {
+    const data = snapshot.val();
+    if (data && Array.isArray(data)) {
+      cashRequests = data;
+      localStorage.setItem('ske_cash', JSON.stringify(cashRequests));
+      if (typeof updateMaintBadges === 'function') updateMaintBadges();
+      if (typeof updateAdminCashBadge === 'function') updateAdminCashBadge();
+      const m = document.getElementById('cashModal');
+      if (m && !m.classList.contains('hidden') && typeof renderCashList === 'function') renderCashList();
+      const ap = document.getElementById('adminCashPanel');
+      if (ap && !ap.classList.contains('hidden') && typeof renderAdminCashList === 'function') renderAdminCashList();
+    } else if (cashRequests.length > 0) {
+      set(ref(db, 'cashRequests'), cashRequests);
+    }
+  });
+
   // โหลดข้อมูลครั้งแรก (กรณี realtime ยังไม่ทัน)
   get(ref(db, 'employees')).then(snapshot => {
     const data = snapshot.val();
@@ -161,6 +183,18 @@
       window.fbSaveFluidLogs(fluidLogs);
     }
   }).catch(e => console.error('fbGet fluidLogs error', e));
+
+  get(ref(db, 'cashRequests')).then(snapshot => {
+    const data = snapshot.val();
+    if (data && Array.isArray(data)) {
+      cashRequests = data;
+      localStorage.setItem('ske_cash', JSON.stringify(cashRequests));
+      if (typeof updateMaintBadges === 'function') updateMaintBadges();
+    } else if (cashRequests.length > 0) {
+      window.fbSaveCashRequests(cashRequests);
+    }
+  }).catch(e => console.error('fbGet cashRequests error', e));
+
 </script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -450,7 +484,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- my card -->
   <div class="my-card"><div id="myCard" class="my-card-inner"></div></div>
 
-  <!-- ── แจ้งซ่อม / เปลี่ยนถ่ายของเหลว ── -->
+  <!-- ── แจ้งซ่อม / เปลี่ยนถ่ายของเหลว / เบิกเงินพนักงาน ── -->
   <div class="quick-grid">
     <button class="quick-card" onclick="openRepairModal()">
       <span id="repairDot" class="quick-card-dot hidden">0</span>
@@ -462,6 +496,14 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="quick-card-icon">🛢️</div>
       <div class="quick-card-title">เปลี่ยนถ่ายของเหลว</div>
       <div class="quick-card-sub" id="fluidSub">ยังไม่มีบันทึก</div>
+    </button>
+    <button class="quick-card" onclick="openCashModal()" style="grid-column:1/-1;flex-direction:row;justify-content:flex-start;text-align:left;gap:12px;padding:13px 14px;">
+      <span id="cashDot" class="quick-card-dot hidden">0</span>
+      <div class="quick-card-icon" style="font-size:22px;">💰</div>
+      <div style="flex:1;min-width:0;">
+        <div class="quick-card-title" style="margin-top:0;">เบิกเงินพนักงาน</div>
+        <div class="quick-card-sub" id="cashSub">ยังไม่มีรายการ</div>
+      </div>
     </button>
   </div>
 
@@ -552,6 +594,24 @@ select.inp option{background:#fff;color:#1a1a2e;}
   </div>
 </div>
 
+<!-- ══ CASH MODAL — เบิกเงินพนักงาน (เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน) ══ -->
+<div id="cashModal" class="hidden" style="position:fixed;inset:0;z-index:9998;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5);">
+  <div class="maint-sheet">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:17px;font-weight:800;color:#1a1a2e;">💰 เบิกเงินพนักงาน</div>
+      <button onclick="closeCashModal()" style="background:#F0F2F8;border:none;border-radius:50%;width:34px;height:34px;font-size:17px;color:#555;">✕</button>
+    </div>
+    <div id="cashDayNotice"></div>
+    <button class="btn btn-orange btn-full" onclick="toggleCashForm()" id="cashFormToggleBtn">+ เบิกเงินใหม่</button>
+    <div id="cashForm" class="hidden card" style="margin-top:12px;display:flex;flex-direction:column;gap:11px;">
+      <div><div class="inp-label">จำนวนเงินที่ต้องการเบิก (บาท) *</div><input class="inp" id="cashAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="เช่น 1500"></div>
+      <div><div class="inp-label">รายละเอียด / เหตุผลที่เบิก *</div><textarea class="inp" id="cashReason" rows="3" placeholder="เช่น ค่าน้ำมัน, ค่าทางด่วน, ค่าซ่อมเร่งด่วน..."></textarea></div>
+      <button class="btn btn-blue btn-full" onclick="doAddCash()">✓ ส่งคำขอเบิกเงิน</button>
+    </div>
+    <div style="margin-top:16px;" id="cashList"></div>
+  </div>
+</div>
+
 <!-- ══ ALERT MODAL ══ -->
 <div id="alertModal" class="hidden" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:20px;">
   <div style="background:#fff;border-radius:20px;padding:24px 20px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.25);">
@@ -578,6 +638,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="admin-tab" id="adminTabBar">
     <button class="admin-tab-btn active" id="tabSummaryTop" onclick="switchAdminTab('summary')">📊 ภาพรวม<span id="staleTabBadge" class="badge-num hidden">0</span></button>
     <button class="admin-tab-btn" id="tabMaintTop" onclick="switchAdminTab('maint')">🔧 ซ่อมบำรุง<span id="maintTabBadge" class="badge-num hidden">0</span></button>
+    <button class="admin-tab-btn" id="tabCashTop" onclick="switchAdminTab('cash')">💰 เบิกเงิน<span id="cashTabBadge" class="badge-num hidden">0</span></button>
     <button class="admin-tab-btn" id="tabSettings" onclick="switchAdminTab('settings')">⚙️ ตั้งค่า</button>
   </div>
 
@@ -601,6 +662,12 @@ select.inp option{background:#fff;color:#1a1a2e;}
         <div id="adminFluidStats"></div>
         <div id="adminFluidGroups"></div>
       </div>
+    </div>
+
+    <!-- cash requisition panel: รายการเบิกเงินพนักงานทุกคน (เปิดให้กรอกเฉพาะวันที่ 15) -->
+    <div id="adminCashPanel" class="hidden">
+      <div id="adminCashStats"></div>
+      <div id="adminCashGroups"></div>
     </div>
 
     <!-- settings panel -->
@@ -654,6 +721,9 @@ select.inp option{background:#fff;color:#1a1a2e;}
     </button>
     <button class="nav-btn" id="navAdminMaint" onclick="switchAdminTab('maint');highlightAdminNav(this)">
       <span class="nav-icon">🔧</span><span>ซ่อมบำรุง</span>
+    </button>
+    <button class="nav-btn" id="navAdminCash" onclick="switchAdminTab('cash');highlightAdminNav(this)">
+      <span class="nav-icon">💰</span><span>เบิกเงิน</span>
     </button>
     <button class="nav-btn" id="navAdminSet" onclick="switchAdminTab('settings');highlightAdminNav(this)">
       <span class="nav-icon">⚙️</span><span>ตั้งค่า</span>
@@ -713,6 +783,7 @@ let _selStatus='standby',_selProv='';
 let deferredPrompt=null;
 let repairs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_repairs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let fluidLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_fluid')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
+let cashRequests=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_cash')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let _repUrgency='normal';
 
 function saveE(){
@@ -733,6 +804,43 @@ function saveFluid(){
   localStorage.setItem('ske_fluid',JSON.stringify(fluidLogs));
   if(window.fbSaveFluidLogs) window.fbSaveFluidLogs(fluidLogs);
 }
+function saveCash(){
+  localStorage.setItem('ske_cash',JSON.stringify(cashRequests));
+  if(window.fbSaveCashRequests) window.fbSaveCashRequests(cashRequests);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── เก็บประวัติซ่อมบำรุงไว้ 12 เดือน แล้วลบอัตโนมัติ ─────────────────────────
+// (รายการแจ้งซ่อม ใช้วันที่แจ้ง / รายการเปลี่ยนถ่ายของเหลว ใช้วันที่เปลี่ยน) ──
+// ══════════════════════════════════════════════════════════════════════════
+function _maintCutoffTime(){
+  const d=new Date();
+  d.setMonth(d.getMonth()-12);
+  return d.getTime();
+}
+function pruneOldMaintenance(){
+  const cutoff=_maintCutoffTime();
+  let changed=false;
+  const newRepairs=repairs.filter(r=>{
+    const t=new Date(r.createdAt||0).getTime();
+    return !isFinite(t)||t>=cutoff;
+  });
+  if(newRepairs.length!==repairs.length){repairs=newRepairs;changed=true;saveRepairs();}
+  const newFluid=fluidLogs.filter(f=>{
+    const t=new Date(f.changedAt||f.createdAt||0).getTime();
+    return !isFinite(t)||t>=cutoff;
+  });
+  if(newFluid.length!==fluidLogs.length){fluidLogs=newFluid;changed=true;saveFluid();}
+  if(changed){
+    const rm=document.getElementById('repairModal');if(rm&&!rm.classList.contains('hidden'))renderRepairList();
+    const fm=document.getElementById('fluidModal');if(fm&&!fm.classList.contains('hidden'))renderFluidList();
+    const ap=document.getElementById('adminMaintPanel');if(ap&&!ap.classList.contains('hidden'))renderAdminMaint();
+    updateMaintBadges();
+  }
+  return changed;
+}
+// ตรวจสอบซ้ำทุก 1 ชั่วโมง เผื่อแอปเปิดค้างไว้นาน
+setInterval(pruneOldMaintenance,60*60*1000);
 
 // ── PWA ───────────────────────────────────────────────────────────────────────
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;showInstallBar();});
@@ -777,6 +885,7 @@ window.onload=function(){
   const startTime=Date.now();
   function tryStart(){
     if(window._fbReady||Date.now()-startTime>4000){
+      pruneOldMaintenance();
       const savedAdmin=localStorage.getItem('ske_admin')==='1';
       if(savedAdmin){adminMode=true;show('admin');renderAdmin();switchAdminTab('summary');}
       else if(currentUser){show('dashboard');renderDashboard();startAlertTimer();}
@@ -1215,7 +1324,117 @@ function refreshFluidViews(){
   if(adminPanel && !adminPanel.classList.contains('hidden'))renderAdminFluidList();
 }
 
-// ── อัพเดทตัวเลขสรุปบนการ์ดลัด แจ้งซ่อม/เปลี่ยนถ่าย ในหน้าหลัก ──────────────
+// ══════════════════════════════════════════════════════════════════════════
+// ── เบิกเงินพนักงาน (Cash requisition) — เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน ──
+// ══════════════════════════════════════════════════════════════════════════
+function isCashDayOpen(){return new Date().getDate()===15;}
+function nextCashDateLabel(){
+  const now=new Date();
+  let y=now.getFullYear(),m=now.getMonth();
+  if(now.getDate()>=15){m+=1;if(m>11){m=0;y+=1;}}
+  return new Date(y,m,15).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
+}
+function fmtBaht(n){const num=Number(n)||0;return num.toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:2});}
+function openCashModal(){
+  if(!currentUser)return;
+  document.getElementById('cashForm').classList.add('hidden');
+  document.getElementById('cashFormToggleBtn').textContent='+ เบิกเงินใหม่';
+  document.getElementById('cashAmount').value='';
+  document.getElementById('cashReason').value='';
+  renderCashDayNotice();
+  renderCashList();
+  const m=document.getElementById('cashModal');
+  m.classList.remove('hidden');m.style.display='flex';
+}
+function closeCashModal(){
+  const m=document.getElementById('cashModal');
+  m.classList.add('hidden');m.style.display='none';
+}
+function renderCashDayNotice(){
+  const el=document.getElementById('cashDayNotice');
+  const btn=document.getElementById('cashFormToggleBtn');
+  if(!el)return;
+  if(isCashDayOpen()){
+    el.innerHTML=`<div style="background:#ECFDF5;border:1.5px solid #6EE7B7;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#065F46;">✅ วันนี้เปิดให้กรอกคำขอเบิกเงิน</div>`;
+    if(btn){btn.style.opacity='1';btn.style.pointerEvents='auto';}
+  }else{
+    el.innerHTML=`<div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400E;">🔒 เปิดให้กรอกคำขอเบิกเงินเฉพาะวันที่ 15 ของทุกเดือนเท่านั้น<br>รอบถัดไป: <b>${nextCashDateLabel()}</b></div>`;
+    if(btn){btn.style.opacity='.5';btn.style.pointerEvents='none';}
+    document.getElementById('cashForm').classList.add('hidden');
+  }
+}
+function toggleCashForm(){
+  if(!isCashDayOpen())return;
+  const f=document.getElementById('cashForm');
+  const open=f.classList.toggle('hidden');
+  document.getElementById('cashFormToggleBtn').textContent=open?'+ เบิกเงินใหม่':'✕ ยกเลิก';
+}
+function doAddCash(){
+  if(!currentUser||!isCashDayOpen())return;
+  const amount=parseFloat(document.getElementById('cashAmount').value);
+  const reason=document.getElementById('cashReason').value.trim();
+  if(!amount||amount<=0){document.getElementById('cashAmount').focus();return;}
+  if(!reason){document.getElementById('cashReason').focus();return;}
+  const me=employees.find(e=>e.id===currentUser.id)||currentUser;
+  cashRequests.unshift({
+    id:'cash_'+Date.now(),
+    empId:me.id,empName:me.name,plate:me.plate||'',
+    amount,reason,status:'pending',
+    createdAt:new Date().toISOString()
+  });
+  saveCash();
+  document.getElementById('cashAmount').value='';
+  document.getElementById('cashReason').value='';
+  toggleCashForm();
+  refreshCashViews();
+}
+function renderCashList(){
+  const el=document.getElementById('cashList');
+  if(!el||!currentUser)return;
+  const mine=cashRequests.filter(s=>s.empId===currentUser.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  if(!mine.length){
+    el.innerHTML='<div class="maint-empty"><div class="empty-icon">💰</div><div>ยังไม่มีรายการเบิกเงิน</div></div>';
+    updateMaintBadges();
+    return;
+  }
+  el.innerHTML=mine.map(s=>{
+    const done=s.status==='done';
+    return`<div class="maint-card ${done?'fixed':''}">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
+        <div style="color:#F47920;font-size:19px;font-weight:900;">฿${fmtBaht(s.amount)}</div>
+      </div>
+      <div style="color:#666;font-size:12.5px;margin-top:4px;line-height:1.6;white-space:pre-wrap;">${esc(s.reason)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
+        <span class="pill" style="background:${done?'#ECFDF5':'#FFFBEB'};color:${done?'#065F46':'#92400E'};border:1px solid ${done?'#6EE7B7':'#FCD34D'};">${done?'✅ จ่ายแล้ว':'⏳ รอดำเนินการ'}</span>
+        <span style="color:#aaa;font-size:11px;">${fmt(s.createdAt)}</span>
+      </div>
+      <div class="row-btns" style="margin-top:10px;">
+        <button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelCash('${s.id}')">🗑️ ลบรายการ</button>
+      </div>
+    </div>`;
+  }).join('');
+  updateMaintBadges();
+}
+function doDelCash(id){
+  if(!confirm('ลบรายการเบิกเงินนี้?'))return;
+  cashRequests=cashRequests.filter(s=>s.id!==id);
+  saveCash();refreshCashViews();
+}
+function toggleCashStatus(id){
+  cashRequests=cashRequests.map(s=>s.id===id?{...s,status:s.status==='done'?'pending':'done'}:s);
+  saveCash();refreshCashViews();
+}
+// รีเฟรชทุกหน้าที่อาจกำลังแสดงรายการเบิกเงินอยู่ (หน้าพนักงาน + แผงผู้ดูแล)
+function refreshCashViews(){
+  const empModal=document.getElementById('cashModal');
+  if(empModal && !empModal.classList.contains('hidden')){renderCashDayNotice();renderCashList();}
+  else updateMaintBadges();
+  const adminPanel=document.getElementById('adminCashPanel');
+  if(adminPanel && !adminPanel.classList.contains('hidden'))renderAdminCashList();
+  else updateAdminCashBadge();
+}
+
+// ── อัพเดทตัวเลขสรุปบนการ์ดลัด แจ้งซ่อม/เปลี่ยนถ่าย/เบิกเงิน ในหน้าหลัก ────────
 function updateMaintBadges(){
   if(!currentUser)return;
   const repSub=document.getElementById('repairSub');
@@ -1234,6 +1453,19 @@ function updateMaintBadges(){
   if(fluSub){
     const mineFlu=fluidLogs.filter(f=>f.empId===currentUser.id).sort((a,b)=>new Date(b.changedAt)-new Date(a.changedAt));
     fluSub.textContent=mineFlu.length===0?'ยังไม่มีบันทึก':`ล่าสุด ${fmtDate(mineFlu[0].changedAt)}`;
+  }
+  const cashSub=document.getElementById('cashSub');
+  const cashDot=document.getElementById('cashDot');
+  if(cashSub){
+    const mineCash=cashRequests.filter(s=>s.empId===currentUser.id);
+    const pendingCash=mineCash.filter(s=>s.status!=='done').length;
+    const dayOpen=isCashDayOpen();
+    cashSub.textContent=pendingCash>0?`รอดำเนินการ ${pendingCash} รายการ`:(dayOpen?'📅 เปิดให้กรอกวันนี้!':(mineCash.length===0?'ยังไม่มีรายการ':'จ่ายครบแล้ว'));
+    cashSub.className='quick-card-sub'+((pendingCash>0||dayOpen)?' alert':'');
+    if(cashDot){
+      if(pendingCash>0){cashDot.textContent=pendingCash;cashDot.classList.remove('hidden');}
+      else cashDot.classList.add('hidden');
+    }
   }
 }
 
@@ -1363,6 +1595,76 @@ function renderAdminFluidList(){
           ${f.note?`<div style="color:#666;font-size:11.5px;margin-top:3px;">📝 ${esc(f.note)}</div>`:''}
           <div class="row-btns" style="margin-top:8px;">
             <button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelFluid('${f.id}')">🗑️ ลบรายการ</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── แผงผู้ดูแล: รายการเบิกเงินพนักงานทุกคน ────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+function updateAdminCashBadge(){
+  const badge=document.getElementById('cashTabBadge');
+  if(!badge)return;
+  const pending=cashRequests.filter(s=>s.status!=='done').length;
+  if(pending>0){badge.textContent=pending;badge.classList.remove('hidden');}
+  else badge.classList.add('hidden');
+}
+
+function renderAdminCashList(){
+  const statsEl=document.getElementById('adminCashStats');
+  const groupsEl=document.getElementById('adminCashGroups');
+  if(!statsEl||!groupsEl)return;
+  const pendingItems=cashRequests.filter(s=>s.status!=='done');
+  const totalPending=pendingItems.length;
+  const totalPendingAmount=pendingItems.reduce((sum,s)=>sum+(Number(s.amount)||0),0);
+  const dayOpen=isCashDayOpen();
+  statsEl.innerHTML=`<div style="background:${dayOpen?'#ECFDF5':'#F5F6FA'};border:1.5px solid ${dayOpen?'#6EE7B7':'#E8EAF0'};border-radius:14px;padding:12px 14px;margin-bottom:12px;font-size:12.5px;color:${dayOpen?'#065F46':'#666'};">
+      ${dayOpen?'✅ วันนี้เปิดให้พนักงานกรอกคำขอเบิกเงิน':'🔒 เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน — รอบถัดไป '+nextCashDateLabel()}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div style="background:#fff;border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalPending>0?'#FCD34D':'#E8EAF0'};">
+        <div style="font-size:26px;font-weight:900;color:${totalPending>0?'#92400E':'#1E90D6'};">${totalPending}</div>
+        <div style="font-size:11px;color:#888;margin-top:2px;">⏳ รอดำเนินการ</div>
+      </div>
+      <div style="background:#fff;border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalPending>0?'#FCD34D':'#E8EAF0'};">
+        <div style="font-size:20px;font-weight:900;color:${totalPending>0?'#92400E':'#1E90D6'};">฿${fmtBaht(totalPendingAmount)}</div>
+        <div style="font-size:11px;color:#888;margin-top:2px;">💰 ยอดรอจ่าย</div>
+      </div>
+    </div>`;
+  updateAdminCashBadge();
+  if(!cashRequests.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">💰</div><div class="empty-text">ยังไม่มีรายการเบิกเงิน</div></div>';return;}
+
+  const byEmp={};
+  cashRequests.forEach(s=>{(byEmp[s.empId]=byEmp[s.empId]||[]).push(s);});
+  const groupArr=Object.entries(byEmp).map(([empId,reqs])=>{
+    const info=_empLookup(empId,reqs[0].empName,reqs[0].plate);
+    reqs.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+    return{empId,name:info.name,plate:info.plate,reqs,pending:reqs.filter(s=>s.status!=='done').length};
+  }).sort((a,b)=>b.pending-a.pending||a.name.localeCompare(b.name,'th'));
+
+  groupsEl.innerHTML=groupArr.map(g=>`<div class="card" style="margin-bottom:12px;padding:14px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div class="avatar" style="width:36px;height:36px;font-size:15px;">${esc(g.name.charAt(0))}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;color:#1a1a2e;font-size:13.5px;">${esc(g.name)}</div>
+          <div style="color:#888;font-size:11px;">🚛 ${esc(g.plate||'-')}</div>
+        </div>
+        ${g.pending>0?`<span class="pill" style="background:#FFFBEB;color:#92400E;border:1px solid #FCD34D;">${g.pending} ค้าง</span>`:`<span class="pill" style="background:#ECFDF5;color:#065F46;border:1px solid #6EE7B7;">✅ ครบ</span>`}
+      </div>
+      ${g.reqs.map(s=>{
+        const done=s.status==='done';
+        return`<div class="maint-card ${done?'fixed':''}" style="margin-bottom:8px;">
+          <div style="color:#F47920;font-size:17px;font-weight:900;">฿${fmtBaht(s.amount)}</div>
+          <div style="color:#666;font-size:12.5px;margin-top:3px;line-height:1.6;white-space:pre-wrap;">${esc(s.reason)}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+            <span class="pill" style="background:${done?'#ECFDF5':'#FFFBEB'};color:${done?'#065F46':'#92400E'};border:1px solid ${done?'#6EE7B7':'#FCD34D'};">${done?'✅ จ่ายแล้ว':'⏳ รอดำเนินการ'}</span>
+            <span style="color:#aaa;font-size:10.5px;">${fmt(s.createdAt)}</span>
+          </div>
+          <div class="row-btns" style="margin-top:8px;">
+            <button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleCashStatus('${s.id}')">${done?'↺ เปิดอีกครั้ง':'✓ จ่ายแล้ว'}</button>
+            <button class="btn btn-red btn-sm" onclick="doDelCash('${s.id}')">🗑️</button>
           </div>
         </div>`;
       }).join('')}
@@ -1670,9 +1972,12 @@ function renderAdmin(){
   const el=document.getElementById('adminSummaryContent');
   if(el)el.innerHTML=buildSummaryHTML();
   updateAdminMaintBadge();
+  updateAdminCashBadge();
   updateStaleBadge();
   const mp=document.getElementById('adminMaintPanel');
   if(mp && !mp.classList.contains('hidden'))renderAdminMaint();
+  const sp=document.getElementById('adminCashPanel');
+  if(sp && !sp.classList.contains('hidden'))renderAdminCashList();
 }
 
 // ── ตัวเลขแจ้งเตือนบนแท็บ "ภาพรวม" — จำนวนพนักงานที่ไม่อัพเดทสถานะเกิน 24 ชม. (ทุกสถานะ) ──
@@ -1688,7 +1993,7 @@ function renderSysInfo(){
   const el=document.getElementById('sysInfo');
   if(!el)return;
   const now=new Date();
-  el.innerHTML=`พนักงานทั้งหมด: <b>${employees.length}</b> คน<br>เวอร์ชัน: <b>2.0 (Firebase)</b><br>เวลาปัจจุบัน: <b>${now.toLocaleString('th-TH')}</b>`;
+  el.innerHTML=`พนักงานทั้งหมด: <b>${employees.length}</b> คน<br>เวอร์ชัน: <b>2.0 (Firebase)</b><br>เวลาปัจจุบัน: <b>${now.toLocaleString('th-TH')}</b><br>ประวัติซ่อมบำรุง: <b>เก็บไว้ 12 เดือน แล้วลบอัตโนมัติ</b><br>เบิกเงินพนักงาน: <b>เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน</b>`;
 }
 
 function renderTravelingByProv(){
@@ -1798,17 +2103,21 @@ function switchAdminTab(t){
   document.getElementById('adminTabBar')?.classList.remove('hidden');
   document.getElementById('adminSummaryPanel').classList.toggle('hidden',t!=='summary');
   document.getElementById('adminMaintPanel').classList.toggle('hidden',t!=='maint');
+  document.getElementById('adminCashPanel').classList.toggle('hidden',t!=='cash');
   document.getElementById('adminSettingsPanel').classList.toggle('hidden',t!=='settings');
   document.getElementById('tabSummaryTop')?.classList.toggle('active',t==='summary');
   document.getElementById('tabMaintTop')?.classList.toggle('active',t==='maint');
+  document.getElementById('tabCashTop')?.classList.toggle('active',t==='cash');
   document.getElementById('tabSettings')?.classList.toggle('active',t==='settings');
-  ['navAdminSum','navAdminMaint','navAdminSet'].forEach(id=>{document.getElementById(id)?.classList.remove('active');});
+  ['navAdminSum','navAdminMaint','navAdminCash','navAdminSet'].forEach(id=>{document.getElementById(id)?.classList.remove('active');});
   if(t==='summary')document.getElementById('navAdminSum')?.classList.add('active');
   if(t==='maint')document.getElementById('navAdminMaint')?.classList.add('active');
+  if(t==='cash')document.getElementById('navAdminCash')?.classList.add('active');
   if(t==='settings')document.getElementById('navAdminSet')?.classList.add('active');
   if(t==='settings')renderSysInfo();
   if(t==='summary'){const el=document.getElementById('adminSummaryContent');if(el)el.innerHTML=buildSummaryHTML();}
   if(t==='maint')renderAdminMaint();
+  if(t==='cash')renderAdminCashList();
 }
 
 // ── พนักงาน ย้ายไปอยู่ใต้ "ตั้งค่า" — เปิด/ปิดเป็นหน้าย่อย ──────────────────
