@@ -667,6 +667,11 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <span style="font-size:18px;">✅</span><span id="vehicleAvailToastMsg"></span>
 </div>
 
+<!-- ══ TOAST — มีการเปลี่ยนสถานะรถ (กรณีทั่วไป แจ้งผู้ดูแลทันทีพร้อมเสียง) ══ -->
+<div id="statusChangeToast" class="hidden" onclick="dismissStatusChangeToast()" style="position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:10000;background:#1E90D6;color:#fff;padding:12px 18px;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.3);font-size:13px;max-width:90%;align-items:center;gap:8px;cursor:pointer;">
+  <span style="font-size:18px;">🔔</span><span id="statusChangeToastMsg"></span>
+</div>
+
 <!-- ══ ADMIN ══ -->
 <div id="admin" class="screen hidden">
   <!-- topbar -->
@@ -1198,29 +1203,52 @@ function stopAlertTimer(){
 let _adminAlertTimer=null;
 let _adminSnoozeUntil=0;
 // ══════════════════════════════════════════════════════════════════════════
-// ── แจ้งเตือนผู้ดูแล (เสียง+ข้อความ) ทันทีที่มีรถเปลี่ยนเป็น "สแตนบายว่างงาน" ──
+// ── แจ้งเตือนผู้ดูแล (เสียง+ข้อความ) ทันทีที่มีพนักงานคนใดเปลี่ยนสถานะ ──
+// (เคสพิเศษ "เปลี่ยนเป็นสแตนบายว่างงาน" จะมีกล่องข้อความสีเขียวแยกต่างหาก
+//  ส่วนการเปลี่ยนสถานะอื่นๆ ทั้งหมดจะแจ้งด้วยกล่องข้อความสีฟ้าแบบทั่วไป — ทั้งสองแบบเล่นเสียงเหมือนกัน)
 // ══════════════════════════════════════════════════════════════════════════
 let _availToastTimer=null;
+let _statusChangeToastTimer=null;
 function notifyNewlyAvailable(oldList,newList){
   if(!adminMode)return;
   const adminScreen=document.getElementById('admin');
   if(!adminScreen||adminScreen.classList.contains('hidden'))return;
   const oldMap={};
   (oldList||[]).forEach(e=>{oldMap[e.id]=e.status;});
-  const becameAvailable=(newList||[]).filter(e=>{
-    if(e.status!=='done')return false;
+  // เฉพาะพนักงานที่มีข้อมูลอยู่ก่อนแล้ว (ไม่ใช่เพิ่งถูกเพิ่มใหม่) และสถานะเปลี่ยนไปจากเดิมจริงๆ
+  const changed=(newList||[]).filter(e=>{
     const prevStatus=oldMap[e.id];
-    return prevStatus!==undefined&&prevStatus!=='done';
+    return prevStatus!==undefined&&prevStatus!==e.status;
   });
-  if(!becameAvailable.length)return;
+  if(!changed.length)return;
+
+  const becameAvailable=changed.filter(e=>e.status==='done');
+  const others=changed.filter(e=>e.status!=='done');
+
   playAlertSound();
-  showAvailableToast(becameAvailable);
-  if('Notification' in window && Notification.permission==='granted'){
-    const names=becameAvailable.map(e=>e.name).join(', ');
-    new Notification('✅ มีรถว่างงานใหม่!', {
-      body:`${names} — เปลี่ยนเป็นสแตนบายว่างงานแล้ว`,
-      icon:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%2310B981"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
-    });
+
+  if(becameAvailable.length){
+    showAvailableToast(becameAvailable);
+    if('Notification' in window && Notification.permission==='granted'){
+      const names=becameAvailable.map(e=>e.name).join(', ');
+      new Notification('✅ มีรถว่างงานใหม่!', {
+        body:`${names} — เปลี่ยนเป็นสแตนบายว่างงานแล้ว`,
+        icon:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%2310B981"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
+      });
+    }
+  }
+  if(others.length){
+    showStatusChangeToast(others);
+    if('Notification' in window && Notification.permission==='granted'){
+      const detail=others.map(e=>{
+        const s=STATUSES.find(st=>st.id===e.status);
+        return `${e.name} → ${s?.label||e.status}`;
+      }).join(' • ');
+      new Notification('🔔 มีการเปลี่ยนสถานะรถ', {
+        body:detail,
+        icon:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%231E90D6"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
+      });
+    }
   }
 }
 function showAvailableToast(list){
@@ -1237,6 +1265,24 @@ function dismissAvailableToast(){
   const el=document.getElementById('vehicleAvailToast');
   el.classList.add('hidden');el.style.display='none';
   if(_availToastTimer){clearTimeout(_availToastTimer);_availToastTimer=null;}
+}
+function showStatusChangeToast(list){
+  const el=document.getElementById('statusChangeToast');
+  const msg=document.getElementById('statusChangeToastMsg');
+  if(!el||!msg)return;
+  const parts=list.map(e=>{
+    const s=getS(e.status);
+    return `<b>${esc(e.name)}</b> → ${s.emoji} ${esc(s.label)}`;
+  });
+  msg.innerHTML=list.length===1?parts[0]:`มีการเปลี่ยนสถานะ ${list.length} คัน: ${parts.join(', ')}`;
+  el.classList.remove('hidden');el.style.display='flex';
+  if(_statusChangeToastTimer)clearTimeout(_statusChangeToastTimer);
+  _statusChangeToastTimer=setTimeout(()=>{el.classList.add('hidden');el.style.display='none';},7000);
+}
+function dismissStatusChangeToast(){
+  const el=document.getElementById('statusChangeToast');
+  el.classList.add('hidden');el.style.display='none';
+  if(_statusChangeToastTimer){clearTimeout(_statusChangeToastTimer);_statusChangeToastTimer=null;}
 }
 
 function checkAdminStaleAlert(){
