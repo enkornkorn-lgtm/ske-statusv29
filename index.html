@@ -1204,7 +1204,7 @@ function doAddRepair(){
   repairs.unshift({
     id:'rep_'+Date.now(),
     empId:me.id,empName:me.name,plate:me.plate||'',
-    issue,urgency:_repUrgency,status:'pending',
+    issue,urgency:_repUrgency,status:'pending',approval:'pending',
     createdAt:new Date().toISOString()
   });
   saveRepairs();
@@ -1212,6 +1212,19 @@ function doAddRepair(){
   selRepUrgency('normal');
   toggleRepairForm();
   refreshRepairViews();
+}
+// ── สถานะรวม "อนุมัติ/ไม่อนุมัติ" + "ซ่อมเสร็จ/รอดำเนินการ" ของรายการแจ้งซ่อม ──
+function repairStatusPill(r){
+  if(r.approval==='rejected')return{text:'❌ ไม่อนุมัติ',bg:'#FEF2F2',color:'#DC2626',border:'#FCA5A5'};
+  if(r.approval==='approved'){
+    if(r.status==='done')return{text:'✅ ซ่อมเสร็จแล้ว',bg:'#ECFDF5',color:'#065F46',border:'#6EE7B7'};
+    return{text:'🔧 อนุมัติแล้ว — กำลังซ่อม',bg:'#EFF6FF',color:'#1E90D6',border:'#93C5FD'};
+  }
+  return{text:'🕐 รอตรวจสอบ',bg:'#FFFBEB',color:'#92400E',border:'#FCD34D'};
+}
+function setRepairApproval(id,decision){
+  repairs=repairs.map(r=>r.id===id?{...r,approval:decision}:r);
+  saveRepairs();refreshRepairViews();
 }
 function renderRepairList(){
   const el=document.getElementById('repairList');
@@ -1225,18 +1238,20 @@ function renderRepairList(){
   el.innerHTML=mine.map(r=>{
     const done=r.status==='done';
     const urg=r.urgency==='urgent';
-    return`<div class="maint-card ${urg&&!done?'urgent':''} ${done?'fixed':''}">
+    const pill=repairStatusPill(r);
+    const approved=r.approval==='approved';const rejected=r.approval==='rejected';
+    return`<div class="maint-card ${urg&&!done?'urgent':''} ${done?'fixed':''} ${rejected?'fixed':''}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
         <div style="flex:1;min-width:0;color:#1a1a2e;font-size:13.5px;font-weight:600;line-height:1.5;">${esc(r.issue)}</div>
         <span class="urgency-pill" style="background:${urg?'#FEF2F2':'#EFF6FF'};color:${urg?'#DC2626':'#1E90D6'};border:1px solid ${urg?'#FCA5A5':'#93C5FD'};">${urg?'🔴 เร่งด่วน':'🔵 ปกติ'}</span>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
-        <span class="pill" style="background:${done?'#ECFDF5':'#FFFBEB'};color:${done?'#065F46':'#92400E'};border:1px solid ${done?'#6EE7B7':'#FCD34D'};">${done?'✅ ซ่อมเสร็จแล้ว':'⏳ รอดำเนินการ'}</span>
+        <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};">${pill.text}</span>
         <span style="color:#aaa;font-size:11px;">${fmt(r.createdAt)}</span>
       </div>
       <div class="row-btns" style="margin-top:10px;">
-        <button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดรายการอีกครั้ง':'✓ แจ้งซ่อมเสร็จแล้ว'}</button>
-        <button class="btn btn-red btn-sm" onclick="doDelRepair('${r.id}')">🗑️</button>
+        ${approved?`<button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดรายการอีกครั้ง':'✓ แจ้งซ่อมเสร็จแล้ว'}</button>`:''}
+        <button class="btn btn-red btn-sm" ${approved?'':'style="flex:1;"'} onclick="doDelRepair('${r.id}')">🗑️ ลบรายการ</button>
       </div>
     </div>`;
   }).join('');
@@ -1542,14 +1557,19 @@ function renderAdminRepairList(){
   if(!statsEl||!groupsEl)return;
   const totalPending=repairs.filter(r=>r.status!=='done').length;
   const totalUrgent=repairs.filter(r=>r.status!=='done'&&r.urgency==='urgent').length;
-  statsEl.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-    <div style="background:#fff;border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalPending>0?'#FCD34D':'#E8EAF0'};">
-      <div style="font-size:26px;font-weight:900;color:${totalPending>0?'#92400E':'#1E90D6'};">${totalPending}</div>
-      <div style="font-size:11px;color:#888;margin-top:2px;">⏳ รอดำเนินการ</div>
+  const totalAwaiting=repairs.filter(r=>!r.approval||r.approval==='pending').length;
+  statsEl.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+    <div style="background:${totalAwaiting>0?'#FFFBEB':'#fff'};border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalAwaiting>0?'#FCD34D':'#E8EAF0'};">
+      <div style="font-size:22px;font-weight:900;color:${totalAwaiting>0?'#92400E':'#1E90D6'};">${totalAwaiting}</div>
+      <div style="font-size:10px;color:#888;margin-top:2px;">🕐 รอตรวจสอบ</div>
     </div>
-    <div style="background:${totalUrgent>0?'#FFF5F5':'#F0FDF4'};border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalUrgent>0?'#FCA5A5':'#86EFAC'};">
-      <div style="font-size:26px;font-weight:900;color:${totalUrgent>0?'#EF4444':'#10B981'};">${totalUrgent}</div>
-      <div style="font-size:11px;color:#888;margin-top:2px;">${totalUrgent>0?'🔴 เร่งด่วน':'✅ ไม่มีเร่งด่วน'}</div>
+    <div style="background:#fff;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalPending>0?'#FCD34D':'#E8EAF0'};">
+      <div style="font-size:22px;font-weight:900;color:${totalPending>0?'#92400E':'#1E90D6'};">${totalPending}</div>
+      <div style="font-size:10px;color:#888;margin-top:2px;">⏳ รอดำเนินการ</div>
+    </div>
+    <div style="background:${totalUrgent>0?'#FFF5F5':'#F0FDF4'};border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalUrgent>0?'#FCA5A5':'#86EFAC'};">
+      <div style="font-size:22px;font-weight:900;color:${totalUrgent>0?'#EF4444':'#10B981'};">${totalUrgent}</div>
+      <div style="font-size:10px;color:#888;margin-top:2px;">${totalUrgent>0?'🔴 เร่งด่วน':'✅ ไม่เร่งด่วน'}</div>
     </div>
   </div>`;
   updateAdminMaintBadge();
@@ -1574,17 +1594,23 @@ function renderAdminRepairList(){
       </div>
       ${g.items.map(r=>{
         const done=r.status==='done';const urg=r.urgency==='urgent';
+        const pill=repairStatusPill(r);
+        const approved=r.approval==='approved';const rejected=r.approval==='rejected';
         return`<div class="maint-card ${urg&&!done?'urgent':''} ${done?'fixed':''}" style="margin-bottom:8px;">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
             <div style="flex:1;min-width:0;color:#1a1a2e;font-size:13px;font-weight:600;line-height:1.5;">${esc(r.issue)}</div>
             <span class="urgency-pill" style="background:${urg?'#FEF2F2':'#EFF6FF'};color:${urg?'#DC2626':'#1E90D6'};border:1px solid ${urg?'#FCA5A5':'#93C5FD'};">${urg?'🔴 เร่งด่วน':'🔵 ปกติ'}</span>
           </div>
+          <div style="display:flex;gap:6px;margin-top:8px;">
+            <button class="btn btn-sm ${approved?'btn-green':'btn-gray'}" style="flex:1;" onclick="setRepairApproval('${r.id}','approved')">✅ อนุมัติทำ</button>
+            <button class="btn btn-sm ${rejected?'btn-red':'btn-gray'}" style="flex:1;" onclick="setRepairApproval('${r.id}','rejected')">❌ ไม่อนุมัติทำ</button>
+          </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
-            <span class="pill" style="background:${done?'#ECFDF5':'#FFFBEB'};color:${done?'#065F46':'#92400E'};border:1px solid ${done?'#6EE7B7':'#FCD34D'};">${done?'✅ ซ่อมเสร็จแล้ว':'⏳ รอดำเนินการ'}</span>
+            <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};">${pill.text}</span>
             <span style="color:#aaa;font-size:10.5px;">${fmt(r.createdAt)}</span>
           </div>
           <div class="row-btns" style="margin-top:8px;">
-            <button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดอีกครั้ง':'✓ ทำเครื่องหมายว่าซ่อมเสร็จ'}</button>
+            ${approved?`<button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดอีกครั้ง':'✓ ทำเครื่องหมายว่าซ่อมเสร็จ'}</button>`:''}
             <button class="btn btn-red btn-sm" onclick="doDelRepair('${r.id}')">🗑️</button>
           </div>
         </div>`;
