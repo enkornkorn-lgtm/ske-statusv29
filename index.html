@@ -814,6 +814,90 @@ const STATUSES=[
   {id:"done",       label:"สแตนบายว่างงาน",        emoji:"✅",color:"#065F46",bg:"#ECFDF5",border:"#6EE7B7"},
 ];
 function getS(id){return STATUSES.find(s=>s.id===id)||STATUSES.find(s=>s.id==='standby')||STATUSES[0];}
+
+// ── พิกัด (lat,lon) ของศาลากลางแต่ละจังหวัด — ใช้ดึงสภาพอากาศจาก Open-Meteo (ฟรี ไม่ต้องใช้ API key) ──
+const PROVINCE_COORDS={
+  "กรุงเทพมหานคร":[13.7563,100.5018],"กระบี่":[8.0863,98.9063],"กาญจนบุรี":[14.0228,99.5328],
+  "กาฬสินธุ์":[16.4322,103.5060],"กำแพงเพชร":[16.4827,99.5226],"ขอนแก่น":[16.4322,102.8236],
+  "จันทบุรี":[12.6113,102.1038],"ฉะเชิงเทรา":[13.6904,101.0779],"ชลบุรี":[13.3611,100.9847],
+  "ชัยนาท":[15.1851,100.1251],"ชัยภูมิ":[15.8068,102.0317],"ชุมพร":[10.4930,99.1800],
+  "เชียงราย":[19.9105,99.8406],"เชียงใหม่":[18.7883,98.9853],"ตรัง":[7.5645,99.6238],
+  "ตราด":[12.2428,102.5178],"ตาก":[16.8839,99.1258],"นครนายก":[14.2069,101.2130],
+  "นครปฐม":[13.8199,100.0623],"นครพนม":[17.4097,104.7791],"นครราชสีมา":[14.9799,102.0978],
+  "นครศรีธรรมราช":[8.4304,99.9631],"นครสวรรค์":[15.7030,100.1370],"นนทบุรี":[13.8622,100.5144],
+  "นราธิวาส":[6.4264,101.8230],"น่าน":[18.7756,100.7730],"บึงกาฬ":[18.3609,103.6466],
+  "บุรีรัมย์":[14.9930,103.1029],"ปทุมธานี":[14.0208,100.5251],"ประจวบคีรีขันธ์":[11.8126,99.7957],
+  "ปราจีนบุรี":[14.0508,101.3724],"ปัตตานี":[6.8693,101.2500],"พระนครศรีอยุธยา":[14.3532,100.5689],
+  "พะเยา":[19.1664,99.8985],"พังงา":[8.4510,98.5298],"พัทลุง":[7.6166,100.0742],
+  "พิจิตร":[16.4421,100.3487],"พิษณุโลก":[16.8211,100.2659],"เพชรบุรี":[13.1119,99.9398],
+  "เพชรบูรณ์":[16.4189,101.1591],"แพร่":[18.1445,100.1405],"ภูเก็ต":[7.8804,98.3923],
+  "มหาสารคาม":[16.1850,103.3000],"มุกดาหาร":[16.5450,104.7242],"แม่ฮ่องสอน":[19.3020,97.9654],
+  "ยโสธร":[15.7929,104.1450],"ยะลา":[6.5413,101.2803],"ร้อยเอ็ด":[16.0538,103.6520],
+  "ระนอง":[9.9528,98.6084],"ระยอง":[12.6814,101.2816],"ราชบุรี":[13.5282,99.8134],
+  "ลพบุรี":[14.7995,100.6534],"ลำปาง":[18.2888,99.4900],"ลำพูน":[18.5744,99.0087],
+  "เลย":[17.4860,101.7223],"ศรีสะเกษ":[15.1186,104.3220],"สกลนคร":[17.1545,104.1348],
+  "สงขลา":[7.1898,100.5950],"สตูล":[6.6238,100.0674],"สมุทรปราการ":[13.5990,100.5998],
+  "สมุทรสงคราม":[13.4096,100.0023],"สมุทรสาคร":[13.5475,100.2745],"สระแก้ว":[13.8240,102.0645],
+  "สระบุรี":[14.5289,100.9100],"สิงห์บุรี":[14.8907,100.3968],"สุโขทัย":[17.0061,99.8265],
+  "สุพรรณบุรี":[14.4744,100.1177],"สุราษฎร์ธานี":[9.1382,99.3215],"สุรินทร์":[14.8819,103.4936],
+  "หนองคาย":[17.8783,102.7420],"หนองบัวลำภู":[17.2046,102.4262],"อ่างทอง":[14.5896,100.4549],
+  "อำนาจเจริญ":[15.8656,104.6259],"อุดรธานี":[17.4138,102.7870],"อุตรดิตถ์":[17.6201,100.0993],
+  "อุทัยธานี":[15.3835,100.0246],"อุบลราชธานี":[15.2287,104.8580]
+};
+
+// แปลง WMO weather code (มาตรฐานที่ Open-Meteo ใช้) เป็นไอคอน+คำอธิบายภาษาไทย
+function weatherIconInfo(code){
+  if(code===0)return{icon:'☀️',label:'ท้องฟ้าโปร่ง'};
+  if(code===1)return{icon:'🌤️',label:'แจ่มใสเป็นส่วนใหญ่'};
+  if(code===2)return{icon:'⛅',label:'มีเมฆบางส่วน'};
+  if(code===3)return{icon:'☁️',label:'เมฆมาก'};
+  if(code===45||code===48)return{icon:'🌫️',label:'หมอก'};
+  if([51,53,55,56,57].includes(code))return{icon:'🌦️',label:'ฝนปรอยๆ'};
+  if([61,63,65,66,67].includes(code))return{icon:'🌧️',label:'ฝนตก'};
+  if([71,73,75,77].includes(code))return{icon:'❄️',label:'หิมะตก'};
+  if([80,81,82].includes(code))return{icon:'🌧️',label:'ฝนตกเป็นช่วง'};
+  if([85,86].includes(code))return{icon:'🌨️',label:'หิมะตกเป็นช่วง'};
+  if([95,96,99].includes(code))return{icon:'⛈️',label:'พายุฝนฟ้าคะนอง'};
+  return{icon:'🌡️',label:''};
+}
+
+// ── ดึงสภาพอากาศ (Open-Meteo — ฟรี ไม่ต้องสมัคร key) พร้อมแคชไว้ 30 นาที กันยิง API ถี่เกินไป ──
+const _weatherCache={};
+const WEATHER_CACHE_MIN=30;
+function getWeather(province,cb){
+  const c=_weatherCache[province];
+  if(c&&(Date.now()-c.fetchedAt)<WEATHER_CACHE_MIN*60*1000){cb(c);return;}
+  const coord=PROVINCE_COORDS[province];
+  if(!coord){cb(null);return;}
+  const url=`https://api.open-meteo.com/v1/forecast?latitude=${coord[0]}&longitude=${coord[1]}&current=temperature_2m,weather_code&daily=precipitation_probability_max&timezone=Asia%2FBangkok&forecast_days=1`;
+  fetch(url).then(r=>r.json()).then(d=>{
+    const data={
+      temp:Math.round(d.current?.temperature_2m),
+      code:d.current?.weather_code,
+      rainProb:d.daily?.precipitation_probability_max?.[0],
+      fetchedAt:Date.now()
+    };
+    _weatherCache[province]=data;
+    cb(data);
+  }).catch(e=>{console.warn('weather fetch error',e);cb(null);});
+}
+// อัพเดทเนื้อหาวิดเจ็ตอากาศในการ์ดของพนักงาน (เรียกแบบ async แยกจากการ render การ์ดหลัก กันหน้าจอกระตุกตอนรอโหลด)
+function updateWeatherWidget(province){
+  getWeather(province,data=>{
+    const el=document.getElementById('weatherWidget');
+    if(!el)return; // การ์ดอาจถูก re-render ทับไปแล้วระหว่างรอข้อมูล
+    if(!data||data.temp===undefined||isNaN(data.temp)){el.style.display='none';return;}
+    const wi=weatherIconInfo(data.code);
+    const rp=(data.rainProb!==undefined&&data.rainProb!==null)?`โอกาสฝนตก ${data.rainProb}% · `:'';
+    el.innerHTML=`
+      <span style="font-size:20px;">${wi.icon}</span>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:800;color:#1a1a2e;">อากาศที่${esc(province)} — ${data.temp}°C</div>
+        <div style="font-size:11px;color:#888;">${rp}${esc(wi.label)}</div>
+      </div>`;
+  });
+}
+
 function getFullLabel(e){
   if(e.status==='standby'&&e.province)return`สแตนบาย — ${e.province}`;
   if(e.status==='traveling'&&e.province)return`ออกเดินทาง → ${e.province}`;
@@ -2064,6 +2148,10 @@ function renderDashboard(){
       <span style="font-size:24px;">${s.emoji}</span>
       <span style="color:${s.color};font-weight:700;font-size:15px;">${lbl}</span>
     </div>
+    ${me.province?`<div id="weatherWidget" style="display:flex;align-items:center;gap:9px;margin-top:8px;padding:9px 12px;background:#fff;border-radius:10px;border:1px solid #E0F2FE;">
+      <span style="font-size:20px;">🌡️</span>
+      <div style="flex:1;"><div style="font-size:12px;color:#aaa;">กำลังโหลดสภาพอากาศ...</div></div>
+    </div>`:''}
     ${me.note?`<div style="color:#666;font-size:12px;margin-top:8px;">📝 ${esc(me.note)}</div>`:''}
     ${me.status==='standby'&&me.standbyAt?`<div style="color:#7B2FBE;font-size:12px;font-weight:700;margin-top:6px;padding:5px 10px;background:#F5F3FF;border-radius:8px;border:1px solid #C4B5FD;">⏱️ สแตนบายตั้งแต่: ${fmt(me.standbyAt)}</div>`:''}
     ${me.updatedAt?`<div style="color:#aaa;font-size:11px;margin-top:4px;">🕐 อัพเดท: ${fmt(me.updatedAt)}</div>`:''}
@@ -2100,6 +2188,7 @@ function renderDashboard(){
       `}
     </div>`;
 
+  if(me.province)updateWeatherWidget(me.province);
   updateMaintBadges();
 }
 // แสดงช่วงวันที่ลาแบบอ่านง่าย (ถ้าวันเริ่ม-สิ้นสุดเป็นวันเดียวกันโชว์วันเดียว)
