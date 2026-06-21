@@ -93,8 +93,10 @@
     const data = snapshot.val();
     if (data && Array.isArray(data) && data.length > 0) {
       // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ (ไม่เขียนทับด้วยข้อมูลเครื่อง)
+      const oldEmployees = employees;
       employees = data;
       localStorage.setItem('ske_emp', JSON.stringify(employees));
+      if (typeof notifyNewlyAvailable === 'function') notifyNewlyAvailable(oldEmployees, employees);
       if (currentUser) {
         const fresh = employees.find(e => e.id === currentUser.id);
         if (fresh) { currentUser = {...currentUser, ...fresh}; saveU(); }
@@ -659,6 +661,11 @@ select.inp option{background:#fff;color:#1a1a2e;}
   </div>
 </div>
 
+<!-- ══ TOAST — รถเปลี่ยนเป็นสแตนบายว่างงาน (แจ้งผู้ดูแลทันที) ══ -->
+<div id="vehicleAvailToast" class="hidden" onclick="dismissAvailableToast()" style="position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:10000;background:#065F46;color:#fff;padding:12px 18px;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.3);font-size:13px;max-width:90%;align-items:center;gap:8px;cursor:pointer;">
+  <span style="font-size:18px;">✅</span><span id="vehicleAvailToastMsg"></span>
+</div>
+
 <!-- ══ ADMIN ══ -->
 <div id="admin" class="screen hidden">
   <!-- topbar -->
@@ -1144,6 +1151,48 @@ function stopAlertTimer(){
 // ══════════════════════════════════════════════════════════════════════════
 let _adminAlertTimer=null;
 let _adminSnoozeUntil=0;
+// ══════════════════════════════════════════════════════════════════════════
+// ── แจ้งเตือนผู้ดูแล (เสียง+ข้อความ) ทันทีที่มีรถเปลี่ยนเป็น "สแตนบายว่างงาน" ──
+// ══════════════════════════════════════════════════════════════════════════
+let _availToastTimer=null;
+function notifyNewlyAvailable(oldList,newList){
+  if(!adminMode)return;
+  const adminScreen=document.getElementById('admin');
+  if(!adminScreen||adminScreen.classList.contains('hidden'))return;
+  const oldMap={};
+  (oldList||[]).forEach(e=>{oldMap[e.id]=e.status;});
+  const becameAvailable=(newList||[]).filter(e=>{
+    if(e.status!=='done')return false;
+    const prevStatus=oldMap[e.id];
+    return prevStatus!==undefined&&prevStatus!=='done';
+  });
+  if(!becameAvailable.length)return;
+  playAlertSound();
+  showAvailableToast(becameAvailable);
+  if('Notification' in window && Notification.permission==='granted'){
+    const names=becameAvailable.map(e=>e.name).join(', ');
+    new Notification('✅ มีรถว่างงานใหม่!', {
+      body:`${names} — เปลี่ยนเป็นสแตนบายว่างงานแล้ว`,
+      icon:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%2310B981"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
+    });
+  }
+}
+function showAvailableToast(list){
+  const el=document.getElementById('vehicleAvailToast');
+  const msg=document.getElementById('vehicleAvailToastMsg');
+  if(!el||!msg)return;
+  const names=list.map(e=>esc(e.name)).join(', ');
+  msg.innerHTML=list.length===1?`<b>${names}</b> ว่างงานแล้ว!`:`มีรถว่างงานใหม่ <b>${list.length}</b> คัน: ${names}`;
+  el.classList.remove('hidden');el.style.display='flex';
+  if(_availToastTimer)clearTimeout(_availToastTimer);
+  _availToastTimer=setTimeout(()=>{el.classList.add('hidden');el.style.display='none';},7000);
+}
+function dismissAvailableToast(){
+  const el=document.getElementById('vehicleAvailToast');
+  el.classList.add('hidden');el.style.display='none';
+  if(_availToastTimer){clearTimeout(_availToastTimer);_availToastTimer=null;}
+}
+
 function checkAdminStaleAlert(){
   if(!adminMode)return;
   const adminScreen=document.getElementById('admin');
@@ -1296,6 +1345,25 @@ function doAddRepair(){
   refreshRepairViews();
 }
 // ── สถานะรวม "อนุมัติ/ไม่อนุมัติ" + "ซ่อมเสร็จ/รอดำเนินการ" ของรายการแจ้งซ่อม ──
+// ── สถานะ "อนุมัติ/ไม่อนุมัติ" การลา ──────────────────────────────────────────
+function leaveApprovalPill(e){
+  if(e.leaveApproval==='approved')return{text:'✅ อนุมัติการลาแล้ว',bg:'#ECFDF5',color:'#065F46',border:'#6EE7B7'};
+  if(e.leaveApproval==='rejected')return{text:'❌ ไม่อนุมัติการลา',bg:'#FEF2F2',color:'#DC2626',border:'#FCA5A5'};
+  return{text:'🕐 รอการอนุมัติ',bg:'#FFFBEB',color:'#92400E',border:'#FCD34D'};
+}
+function setLeaveApproval(empId,decision){
+  const patch={leaveApproval:decision};
+  employees=employees.map(e=>e.id===empId?{...e,...patch}:e);
+  if(currentUser?.id===empId){currentUser={...currentUser,...patch};saveU();}
+  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  if(window.fbUpdateEmployeeFields){
+    window.fbUpdateEmployeeFields(empId,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+  } else if(window.fbSaveEmployees){
+    window.fbSaveEmployees(employees);
+  }
+  renderAdmin();
+}
+
 function repairStatusPill(r){
   if(r.approval==='rejected')return{text:'❌ ไม่อนุมัติ',bg:'#FEF2F2',color:'#DC2626',border:'#FCA5A5'};
   if(r.approval==='checking_price')return{text:'🔍 รอใบเสนอราคา',bg:'#F5F3FF',color:'#6D28D9',border:'#C4B5FD'};
@@ -1881,6 +1949,7 @@ function renderDashboard(){
   const s=getS(me.status);const lbl=getFullLabel(me);
   _selStatus=me.status;_selProv=me.province||'';
   _selLeaveAt=me.leaveAt?toLocalInputValue(me.leaveAt):'';_selLeaveNote=me.leaveNote||'';
+  const leavePill=me.status==='leave'?leaveApprovalPill(me):null;
 
   document.getElementById('adminBadge').classList.toggle('hidden',!adminMode);
   document.getElementById('navAdmin').style.display=adminMode?'flex':'none';
@@ -1907,6 +1976,7 @@ function renderDashboard(){
     ${me.status==='standby'&&me.standbyAt?`<div style="color:#7B2FBE;font-size:12px;font-weight:700;margin-top:6px;padding:5px 10px;background:#F5F3FF;border-radius:8px;border:1px solid #C4B5FD;">⏱️ สแตนบายตั้งแต่: ${fmt(me.standbyAt)}</div>`:''}
     ${me.status==='leave'&&me.leaveAt?`<div style="color:#475569;font-size:12px;font-weight:700;margin-top:6px;padding:5px 10px;background:#F1F5F9;border-radius:8px;border:1px solid #CBD5E1;">🌴 ลาวันที่-เวลา: ${fmt(me.leaveAt)}</div>`:''}
     ${me.status==='leave'&&me.leaveNote?`<div style="color:#666;font-size:12px;margin-top:6px;">📝 ${esc(me.leaveNote)}</div>`:''}
+    ${leavePill?`<div style="margin-top:6px;"><span class="pill" style="background:${leavePill.bg};color:${leavePill.color};border:1px solid ${leavePill.border};">${leavePill.text}</span></div>`:''}
     ${me.updatedAt?`<div style="color:#aaa;font-size:11px;margin-top:4px;">🕐 อัพเดท: ${fmt(me.updatedAt)}</div>`:''}
     <div id="editPanel" class="edit-panel ${editOpen?'':'hidden'}">
       <div class="status-grid">${STATUSES.map(st=>`
@@ -2022,18 +2092,31 @@ function renderStatusEmployeeList(st){
   const list=employees.filter(e=>e.status===st.id);
   if(!list.length)return'';
   list.sort((a,b)=>(b.updatedAt||'')>(a.updatedAt||'')?1:-1);
+  const isLeave=st.id==='leave';
   let html=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E8EAF0;display:flex;flex-direction:column;gap:6px;">`;
   list.forEach(e=>{
     const t=e.updatedAt;
     const timeStr=t?fmt(t):'ไม่ระบุ';
-    html+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 8px;background:${st.bg};border-radius:7px;border:1px solid ${st.border};">
-      <span style="font-size:14px;">${st.emoji}</span>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:700;color:${st.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
-        <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
-        ${e.note?`<div style="font-size:11px;color:${st.color};margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+    const pill=isLeave?leaveApprovalPill(e):null;
+    html+=`<div style="display:flex;flex-direction:column;gap:6px;padding:8px;background:${st.bg};border-radius:9px;border:1px solid ${st.border};">
+      <div style="display:flex;align-items:flex-start;gap:6px;">
+        <span style="font-size:14px;">${st.emoji}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:700;color:${st.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
+          <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
+          ${isLeave&&e.leaveAt?`<div style="font-size:11px;color:${st.color};margin-top:1px;">📅 ${fmt(e.leaveAt)}</div>`:''}
+          ${isLeave&&e.leaveNote?`<div style="font-size:11px;color:${st.color};margin-top:1px;">📝 ${esc(e.leaveNote)}</div>`:''}
+          ${!isLeave&&e.note?`<div style="font-size:11px;color:${st.color};margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+        </div>
+        <span style="font-size:10px;color:#888;white-space:nowrap;">🕐 ${timeStr}</span>
       </div>
-      <span style="font-size:10px;color:#888;white-space:nowrap;">🕐 ${timeStr}</span>
+      ${isLeave?`<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+        <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};font-size:10px;">${pill.text}</span>
+        <div style="display:flex;gap:5px;">
+          <button class="btn btn-sm ${e.leaveApproval==='approved'?'btn-green':'btn-gray'}" style="padding:5px 9px;font-size:10.5px;" onclick="setLeaveApproval('${e.id}','approved')">✅ อนุมัติลา</button>
+          <button class="btn btn-sm ${e.leaveApproval==='rejected'?'btn-red':'btn-gray'}" style="padding:5px 9px;font-size:10.5px;" onclick="setLeaveApproval('${e.id}','rejected')">❌ ไม่อนุมัติลา</button>
+        </div>
+      </div>`:''}
     </div>`;
   });
   html+='</div>';
@@ -2114,6 +2197,8 @@ function doSave(){
     const leaveNoteVal=document.getElementById('leaveNoteInp')?.value||'';
     leavePatch.leaveAt=leaveAtVal?new Date(leaveAtVal).toISOString():null;
     leavePatch.leaveNote=leaveNoteVal;
+    // ขอลาใหม่ (เพิ่งเปลี่ยนมาเป็นลา) ต้องรออนุมัติใหม่เสมอ
+    if(prev?.status!=='leave')leavePatch.leaveApproval='pending';
   }
   const patch={status:_selStatus,province:prov,note:_selStatus==='leave'?(prev?.note||''):note,updatedAt:now,standbyAt:_selStatus==='standby'?standbyAt:null,...leavePatch};
   employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
@@ -2339,6 +2424,7 @@ function renderAdminEmpList(){
           ${e.status==='standby'&&e.province?`<div style="color:#7B2FBE;font-size:11px;margin-top:2px;">📍 ${esc(e.province)}</div>`:''}
           ${e.status==='leave'&&e.leaveAt?`<div style="color:#475569;font-size:11px;margin-top:2px;">🌴 ลา: ${fmt(e.leaveAt)}</div>`:''}
           ${e.status==='leave'&&e.leaveNote?`<div style="color:#92400E;font-size:11px;margin-top:4px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 8px;">📝 ${esc(e.leaveNote)}</div>`:''}
+          ${e.status==='leave'?(()=>{const p=leaveApprovalPill(e);return`<span class="pill" style="background:${p.bg};color:${p.color};border:1px solid ${p.border};font-size:10px;margin-top:4px;display:inline-block;">${p.text}</span>`;})():''}
           ${e.note?`<div style="color:#92400E;font-size:11px;margin-top:4px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 8px;">📝 ${esc(e.note)}</div>`:''}
         </div>
         <div class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:10px;flex-shrink:0;">${s.emoji} ${getS(e.status).label}</div>
@@ -2405,6 +2491,7 @@ function doSaveAEdit(id){
     if(status==='leave'){
       updated.leaveAt=leaveAtVal?new Date(leaveAtVal).toISOString():(prev.leaveAt||null);
       updated.leaveNote=leaveNoteVal||prev.leaveNote||'';
+      if(prev.status!=='leave')updated.leaveApproval='pending';
     }
     if(newPin.length===4&&/^\d{4}$/.test(newPin))updated.pin=newPin;
     return updated;
