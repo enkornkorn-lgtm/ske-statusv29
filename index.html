@@ -12,7 +12,7 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  import { getDatabase, ref, set, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDE1EAH7Uf2cVOkguXW7vfObisEH3NMvh4",
@@ -33,6 +33,24 @@
   // บันทึกข้อมูลพนักงานทั้งหมดขึ้น Firebase
   window.fbSaveEmployees = function(emps) {
     set(ref(db, 'employees'), emps).catch(e => console.error('fbSave error', e));
+  };
+
+  // อัพเดทเฉพาะ "ของพนักงานคนเดียว" (ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์มาก่อนแล้วแก้เฉพาะฟิลด์ที่เปลี่ยน)
+  // ป้องกันปัญหาเขียนทับทั้งรายชื่อแล้วทำสถานะของพนักงานคนอื่นที่เพิ่งอัพเดทไปหายโดยไม่ได้ตั้งใจ
+  window.fbUpdateEmployeeFields = function(empId, patch) {
+    return get(ref(db, 'employees')).then(snapshot => {
+      const data = snapshot.val();
+      if (!data || !Array.isArray(data)) return Promise.reject(new Error('no employees data'));
+      const idx = data.findIndex(e => e && e.id === empId);
+      if (idx === -1) return Promise.reject(new Error('employee not found'));
+      const updates = {};
+      Object.keys(patch).forEach(k => { updates[`employees/${idx}/${k}`] = patch[k]; });
+      return update(ref(db), updates).then(() => {
+        const merged = data.map((e, i) => i === idx ? { ...e, ...patch } : e);
+        employees = merged;
+        localStorage.setItem('ske_emp', JSON.stringify(employees));
+      });
+    });
   };
 
   // บันทึก admin password
@@ -1129,9 +1147,16 @@ function doSaveProfile(){
   const phone=document.getElementById('setPhone').value.trim();
   const msg=document.getElementById('setMsg');
   if(!name||!plate){if(msg){msg.textContent='กรุณากรอกชื่อและทะเบียนรถ';msg.className='msg-err';msg.classList.remove('hidden');}return;}
-  employees=employees.map(e=>e.id===currentUser.id?{...e,name,plate,phone}:e);
-  currentUser={...currentUser,name,plate,phone};
-  saveE();saveU();
+  const patch={name,plate,phone};
+  employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
+  currentUser={...currentUser,...patch};
+  saveU();
+  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  if(window.fbUpdateEmployeeFields){
+    window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+  } else if(window.fbSaveEmployees){
+    window.fbSaveEmployees(employees);
+  }
   if(msg){msg.textContent='✅ บันทึกข้อมูลแล้ว';msg.className='msg-ok';msg.classList.remove('hidden');}
   renderDashboard();
   setTimeout(closeEmpSettings,800);
@@ -1947,9 +1972,17 @@ function doSave(){
   // บันทึก standbyAt เมื่อเปลี่ยนมาเป็น standby ครั้งแรก
   const prev=employees.find(e=>e.id===currentUser.id);
   const standbyAt=(_selStatus==='standby'&&prev?.status!=='standby')?now:(prev?.standbyAt||null);
-  employees=employees.map(e=>e.id===currentUser.id?{...e,status:_selStatus,province:prov,note,updatedAt:now,standbyAt:_selStatus==='standby'?standbyAt:null}:e);
-  currentUser={...currentUser,status:_selStatus,province:prov,note,updatedAt:now,standbyAt:_selStatus==='standby'?standbyAt:null};
-  saveE();saveU();editOpen=false;renderDashboard();
+  const patch={status:_selStatus,province:prov,note,updatedAt:now,standbyAt:_selStatus==='standby'?standbyAt:null};
+  employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
+  currentUser={...currentUser,...patch};
+  saveU();editOpen=false;renderDashboard();
+  // อัพเดทเฉพาะข้อมูลของพนักงานคนนี้บน Firebase กันสถานะของคนอื่นที่เพิ่งอัพเดทไปหาย
+  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  if(window.fbUpdateEmployeeFields){
+    window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+  } else if(window.fbSaveEmployees){
+    window.fbSaveEmployees(employees);
+  }
   // reset timer หลังอัพเดทสถานะ
   startAlertTimer();
 }
