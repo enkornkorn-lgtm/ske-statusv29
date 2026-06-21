@@ -30,6 +30,22 @@
   // ── Firebase helpers ──────────────────────────────────────────────────────────
   window._fbReady = false;
 
+  // Firebase RTDB อาจแปลง array → object เองเมื่อมีค่า null/ช่องว่าง (เช่นตอน set standbyAt=null)
+  // ฟังก์ชันนี้แปลงข้อมูลที่ได้กลับมาให้เป็น array เสมอ ไม่ว่าจะมาในรูป array หรือ object
+  // กันบั๊ก "ฝั่งผู้ดูแลไม่อัพเดท" เพราะเดิมถ้าได้ object กลับมาจะเช็ค Array.isArray ไม่ผ่านแล้วข้ามทิ้ง
+  function normalizeEmployees(data) {
+    if (!data) return null;
+    if (Array.isArray(data)) return data.filter(e => e);
+    if (typeof data === 'object') {
+      return Object.keys(data)
+        .sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0))
+        .map(k => data[k])
+        .filter(e => e && typeof e === 'object');
+    }
+    return null;
+  }
+  window._normalizeEmployees = normalizeEmployees;
+
   // บันทึกข้อมูลพนักงานทั้งหมดขึ้น Firebase
   window.fbSaveEmployees = function(emps) {
     set(ref(db, 'employees'), emps).catch(e => console.error('fbSave error', e));
@@ -39,8 +55,8 @@
   // ป้องกันปัญหาเขียนทับทั้งรายชื่อแล้วทำสถานะของพนักงานคนอื่นที่เพิ่งอัพเดทไปหายโดยไม่ได้ตั้งใจ
   window.fbUpdateEmployeeFields = function(empId, patch) {
     return get(ref(db, 'employees')).then(snapshot => {
-      const data = snapshot.val();
-      if (!data || !Array.isArray(data)) return Promise.reject(new Error('no employees data'));
+      const data = normalizeEmployees(snapshot.val());
+      if (!data || !data.length) return Promise.reject(new Error('no employees data'));
       const idx = data.findIndex(e => e && e.id === empId);
       if (idx === -1) return Promise.reject(new Error('employee not found'));
       const updates = {};
@@ -76,8 +92,8 @@
   // ดึงข้อมูลล่าสุดจาก Firebase ทันที (สำหรับปุ่มรีเฟรชของผู้ดูแล)
   window.fbForceRefresh = function(cb) {
     get(ref(db, 'employees')).then(snapshot => {
-      const data = snapshot.val();
-      if (data && Array.isArray(data) && data.length > 0) {
+      const data = normalizeEmployees(snapshot.val());
+      if (data && data.length > 0) {
         employees = data;
         localStorage.setItem('ske_emp', JSON.stringify(employees));
       }
@@ -93,8 +109,8 @@
   // ไม่นับเป็น "การเปลี่ยนสถานะสด" — กันไม่ให้เด้งแจ้งเตือน+เสียงรัวๆ ย้อนหลังทุกครั้งที่เปิดแอพใหม่
   let _empSynced = false;
   onValue(ref(db, 'employees'), (snapshot) => {
-    const data = snapshot.val();
-    if (data && Array.isArray(data) && data.length > 0) {
+    const data = normalizeEmployees(snapshot.val());
+    if (data && data.length > 0) {
       // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ (ไม่เขียนทับด้วยข้อมูลเครื่อง)
       const oldEmployees = employees;
       employees = data;
@@ -2491,6 +2507,11 @@ function doSave(){
   const provSel=document.getElementById('provSel');
   const needProv=_selStatus==='standby'||_selStatus==='traveling'||_selStatus==='returning'||_selStatus==='done';
   const prov=needProv?(provSel?provSel.value:_selProv)||'':'';
+  if(needProv&&!prov){
+    alert('⚠️ กรุณาเลือกจังหวัดก่อนบันทึกสถานะ');
+    if(provSel){provSel.focus();provSel.style.borderColor='#DC2626';provSel.style.boxShadow='0 0 0 2px #FCA5A5';}
+    return;
+  }
   const now=new Date().toISOString();
   // บันทึก standbyAt เมื่อเปลี่ยนมาเป็น standby ครั้งแรก
   const prev=employees.find(e=>e.id===currentUser.id);
@@ -2807,6 +2828,12 @@ function doSaveAEdit(id){
   const needProv=status==='standby'||status==='traveling'||status==='returning'||status==='done';
   const wrap=document.getElementById('aprv_'+id);
   const prov=needProv?(wrap?.querySelector('select')?.value||''):'';
+  if(needProv&&!prov){
+    alert('⚠️ กรุณาเลือกจังหวัดก่อนบันทึก');
+    const sel=wrap?.querySelector('select');
+    if(sel){sel.focus();sel.style.borderColor='#DC2626';sel.style.boxShadow='0 0 0 2px #FCA5A5';}
+    return;
+  }
   const onLeave=document.getElementById('aeleave_'+id)?.checked||false;
   const leaveFromVal=document.getElementById('aeleavefrom_'+id)?.value||'';
   const leaveToVal=document.getElementById('aeleaveto_'+id)?.value||'';
