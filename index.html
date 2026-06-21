@@ -941,10 +941,11 @@ window.onload=function(){
   const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent);
   const sa=window.navigator.standalone||window.matchMedia('(display-mode:standalone)').matches;
   if(!sa&&ios) setTimeout(showInstallBar,600);
-  // รอ Firebase โหลดข้อมูลก่อน (max 4 วินาที)
+  // รอ Firebase โหลดข้อมูลก่อน (max 3 วินาที) — เริ่มเช็คทันที ไม่หน่วงเริ่มต้นอีกต่อไป
+  // (เดิมหน่วง 1.8 วิเปล่าๆ ก่อนเริ่มเช็คด้วยซ้ำ ทำให้เปิดแอพช้าเสมอแม้ Firebase จะพร้อมแล้วก็ตาม)
   const startTime=Date.now();
   function tryStart(){
-    if(window._fbReady||Date.now()-startTime>4000){
+    if(window._fbReady||Date.now()-startTime>3000){
       pruneOldMaintenance();
       migrateLegacyLeaveStatus();
       const savedAdmin=localStorage.getItem('ske_admin')==='1';
@@ -952,11 +953,30 @@ window.onload=function(){
       else if(currentUser){show('dashboard');renderDashboard();startAlertTimer();}
       else{show('login');renderEmpList();}
     } else {
-      setTimeout(tryStart,100);
+      setTimeout(tryStart,50);
     }
   }
-  setTimeout(tryStart,1800);
+  tryStart();
 };
+
+// ── เข้าแอพใหม่ทุกครั้ง (กลับมาจากแบ็คกราวด์/สลับแอพ) → ดึงสถานะล่าสุดจาก Firebase ทันที ──
+// กันปัญหาเห็นข้อมูลค้าง/เก่า ตอนสลับแอพออกไปแล้วกลับเข้ามาใหม่ (รวมถึงตอน WebSocket ของ Firebase
+// หลุดเพราะมือถือพักการเชื่อมต่อระหว่างอยู่แบ็คกราวด์นาน ๆ)
+let _lastVisibleRefresh=0;
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible')return;
+  const now=Date.now();
+  if(now-_lastVisibleRefresh<1500)return; // กันยิงซ้ำถี่เกินไป
+  _lastVisibleRefresh=now;
+  if(window.fbForceRefresh){
+    window.fbForceRefresh(()=>{
+      const dash=document.getElementById('dashboard');
+      const admin=document.getElementById('admin');
+      if(dash&&!dash.classList.contains('hidden'))renderDashboard();
+      if(admin&&!admin.classList.contains('hidden'))renderAdmin();
+    });
+  }
+});
 
 // ── Nav helpers ───────────────────────────────────────────────────────────────
 function show(id){['splash','login','dashboard','admin'].forEach(s=>document.getElementById(s).classList.add('hidden'));document.getElementById(id).classList.remove('hidden');}
