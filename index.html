@@ -30,10 +30,10 @@
   // ── Firebase helpers ──────────────────────────────────────────────────────────
   window._fbReady = false;
 
-  // Firebase RTDB อาจแปลง array → object เองเมื่อมีค่า null/ช่องว่าง (เช่นตอน set standbyAt=null)
+  // Firebase RTDB อาจแปลง array → object เองเมื่อมีค่า null/ช่องว่าง (เช่นตอน set standbyAt=null หรือลบรายการกลางๆ)
   // ฟังก์ชันนี้แปลงข้อมูลที่ได้กลับมาให้เป็น array เสมอ ไม่ว่าจะมาในรูป array หรือ object
   // กันบั๊ก "ฝั่งผู้ดูแลไม่อัพเดท" เพราะเดิมถ้าได้ object กลับมาจะเช็ค Array.isArray ไม่ผ่านแล้วข้ามทิ้ง
-  function normalizeEmployees(data) {
+  function normalizeList(data) {
     if (!data) return null;
     if (Array.isArray(data)) return data.filter(e => e);
     if (typeof data === 'object') {
@@ -44,7 +44,14 @@
     }
     return null;
   }
+  function normalizeEmployees(data) { return normalizeList(data); }
   window._normalizeEmployees = normalizeEmployees;
+
+  // ติดตามว่าแต่ละชุดข้อมูล sync ครั้งแรกเสร็จหรือยัง — ใช้กันบั๊ก "ข้อมูลที่ลบไปแล้วฟื้นคืนชีพ"
+  // (เดิม: พอลบรายการจนหมด ข้อมูลเป็น null → listener เข้าใจผิดว่า Firebase ว่าง แล้วอัพโหลดข้อมูลเก่าในเครื่องกลับขึ้นไป)
+  // หลักการใหม่: อัพโหลดข้อมูลเครื่องขึ้น Firebase ได้ "เฉพาะครั้งแรกสุด" เท่านั้น หลังจากนั้น null = ว่างจริง ให้เคารพค่าว่าง
+  const _firstSync = { employees:false, repairs:false, fluidLogs:false, cashRequests:false };
+
 
   // บันทึกข้อมูลพนักงานทั้งหมดขึ้น Firebase
   window.fbSaveEmployees = function(emps) {
@@ -125,11 +132,12 @@
       const admin = document.getElementById('admin');
       if (dash && !dash.classList.contains('hidden')) renderDashboard();
       if (admin && !admin.classList.contains('hidden')) renderAdmin();
-    } else if (employees.length > 0) {
+    } else if (!_firstSync.employees && employees.length > 0) {
       // Firebase ว่างจริงๆ (ครั้งแรกที่ใช้งาน) → อัพโหลดข้อมูลเครื่องขึ้นไปครั้งเดียว
       set(ref(db, 'employees'), employees);
-      _empSynced = true;
     }
+    _firstSync.employees = true;
+    _empSynced = true;
     window._fbReady = true;
   });
 
@@ -140,36 +148,41 @@
 
   // ฟัง realtime — รายการแจ้งซ่อม
   onValue(ref(db, 'repairs'), (snapshot) => {
-    const data = snapshot.val();
-    if (data && Array.isArray(data)) {
+    const data = normalizeList(snapshot.val());
+    if (data) {
       repairs = data;
       localStorage.setItem('ske_repairs', JSON.stringify(repairs));
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
       const m = document.getElementById('repairModal');
       if (m && !m.classList.contains('hidden') && typeof renderRepairList === 'function') renderRepairList();
-    } else if (repairs.length > 0) {
+      const am = document.getElementById('adminMaintPanel');
+      if (am && !am.classList.contains('hidden') && typeof renderAdminMaint === 'function') renderAdminMaint();
+      if (typeof updateAdminMaintBadge === 'function') updateAdminMaintBadge();
+    } else if (!_firstSync.repairs && repairs.length > 0) {
       set(ref(db, 'repairs'), repairs);
     }
+    _firstSync.repairs = true;
   });
 
   // ฟัง realtime — รายการเปลี่ยนถ่ายของเหลว
   onValue(ref(db, 'fluidLogs'), (snapshot) => {
-    const data = snapshot.val();
-    if (data && Array.isArray(data)) {
+    const data = normalizeList(snapshot.val());
+    if (data) {
       fluidLogs = data;
       localStorage.setItem('ske_fluid', JSON.stringify(fluidLogs));
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
       const m = document.getElementById('fluidModal');
       if (m && !m.classList.contains('hidden') && typeof renderFluidList === 'function') renderFluidList();
-    } else if (fluidLogs.length > 0) {
+    } else if (!_firstSync.fluidLogs && fluidLogs.length > 0) {
       set(ref(db, 'fluidLogs'), fluidLogs);
     }
+    _firstSync.fluidLogs = true;
   });
 
   // ฟัง realtime — รายการเบิกเงินพนักงาน
   onValue(ref(db, 'cashRequests'), (snapshot) => {
-    const data = snapshot.val();
-    if (data && Array.isArray(data)) {
+    const data = normalizeList(snapshot.val());
+    if (data) {
       cashRequests = data;
       localStorage.setItem('ske_cash', JSON.stringify(cashRequests));
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
@@ -178,22 +191,47 @@
       if (m && !m.classList.contains('hidden') && typeof renderCashList === 'function') renderCashList();
       const ap = document.getElementById('adminCashPanel');
       if (ap && !ap.classList.contains('hidden') && typeof renderAdminCashList === 'function') renderAdminCashList();
-    } else if (cashRequests.length > 0) {
+    } else if (!_firstSync.cashRequests && cashRequests.length > 0) {
       set(ref(db, 'cashRequests'), cashRequests);
     }
+    _firstSync.cashRequests = true;
   });
 
-  // โหลดข้อมูลครั้งแรก (กรณี realtime ยังไม่ทัน)
+  // ── เฝ้าระวังสถานะการเชื่อมต่อ — ดึงข้อมูลล่าสุดทันทีทุกครั้งที่กลับมาออนไลน์ ──
+  // ทำให้แอพ real-time ต่อเนื่อง แม้เน็ตหลุด/สลับ WiFi-มือถือ/เครื่องพักการเชื่อมต่อ
+  let _wasConnected = false;
+  onValue(ref(db, '.info/connected'), (snap) => {
+    const connected = snap.val() === true;
+    if (connected && !_wasConnected) {
+      // เพิ่งกลับมาเชื่อมต่อได้ → sync ข้อมูลทุกชุดทันที (onValue จะ replay ให้เองอยู่แล้ว แต่ get ย้ำให้ชัวร์+เร็ว)
+      get(ref(db, 'employees')).then(s => {
+        const d = normalizeList(s.val());
+        if (d && d.length > 0) {
+          employees = d;
+          localStorage.setItem('ske_emp', JSON.stringify(employees));
+          if (currentUser) { const f = employees.find(e => e.id === currentUser.id); if (f) { currentUser = {...currentUser, ...f}; saveU(); } }
+          const dash = document.getElementById('dashboard');
+          const admin = document.getElementById('admin');
+          if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
+          if (admin && !admin.classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
+        }
+      }).catch(() => {});
+    }
+    _wasConnected = connected;
+    if (typeof window._setOnlineDot === 'function') window._setOnlineDot(connected);
+  });
+
   get(ref(db, 'employees')).then(snapshot => {
-    const data = snapshot.val();
-    if (data && Array.isArray(data) && data.length > 0) {
+    const data = normalizeList(snapshot.val());
+    if (data && data.length > 0) {
       // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ
       employees = data;
       localStorage.setItem('ske_emp', JSON.stringify(employees));
-    } else {
+    } else if (!_firstSync.employees) {
       // Firebase ว่างจริงๆ → อัพโหลดข้อมูลที่มีอยู่ในเครื่อง (default หรือ localStorage)
       window.fbSaveEmployees(employees);
     }
+    _firstSync.employees = true;
     window._fbReady = true;
   }).catch(e => { window._fbReady = true; console.error('fbGet error', e); });
 
@@ -204,36 +242,39 @@
   });
 
   get(ref(db, 'repairs')).then(snapshot => {
-    const data = snapshot.val();
-    if (data && Array.isArray(data)) {
+    const data = normalizeList(snapshot.val());
+    if (data) {
       repairs = data;
       localStorage.setItem('ske_repairs', JSON.stringify(repairs));
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
-    } else if (repairs.length > 0) {
+    } else if (!_firstSync.repairs && repairs.length > 0) {
       window.fbSaveRepairs(repairs);
     }
+    _firstSync.repairs = true;
   }).catch(e => console.error('fbGet repairs error', e));
 
   get(ref(db, 'fluidLogs')).then(snapshot => {
-    const data = snapshot.val();
-    if (data && Array.isArray(data)) {
+    const data = normalizeList(snapshot.val());
+    if (data) {
       fluidLogs = data;
       localStorage.setItem('ske_fluid', JSON.stringify(fluidLogs));
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
-    } else if (fluidLogs.length > 0) {
+    } else if (!_firstSync.fluidLogs && fluidLogs.length > 0) {
       window.fbSaveFluidLogs(fluidLogs);
     }
+    _firstSync.fluidLogs = true;
   }).catch(e => console.error('fbGet fluidLogs error', e));
 
   get(ref(db, 'cashRequests')).then(snapshot => {
-    const data = snapshot.val();
-    if (data && Array.isArray(data)) {
+    const data = normalizeList(snapshot.val());
+    if (data) {
       cashRequests = data;
       localStorage.setItem('ske_cash', JSON.stringify(cashRequests));
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
-    } else if (cashRequests.length > 0) {
+    } else if (!_firstSync.cashRequests && cashRequests.length > 0) {
       window.fbSaveCashRequests(cashRequests);
     }
+    _firstSync.cashRequests = true;
   }).catch(e => console.error('fbGet cashRequests error', e));
 
 </script>
