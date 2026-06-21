@@ -814,6 +814,16 @@ const STATUSES=[
   {id:"done",       label:"สแตนบายว่างงาน",        emoji:"✅",color:"#065F46",bg:"#ECFDF5",border:"#6EE7B7"},
 ];
 function getS(id){return STATUSES.find(s=>s.id===id)||STATUSES.find(s=>s.id==='standby')||STATUSES[0];}
+// คำนวณลำดับคิวของพนักงานคนนี้ ตอนสถานะเป็น "สแตนบายว่างงาน" — ใช้ตรรกะเดียวกับฝั่งแอดมิน (เรียงตามเวลาว่างงาน จังหวัดเดียวกัน)
+function getQueuePosition(emp){
+  if(!emp||emp.status!=='done')return null;
+  const prov=emp.province||'ไม่ระบุจังหวัด';
+  const group=employees.filter(e=>e.status==='done'&&(e.province||'ไม่ระบุจังหวัด')===prov);
+  group.sort((a,b)=>(a.updatedAt||'')>(b.updatedAt||'')?1:-1);
+  const idx=group.findIndex(e=>e.id===emp.id);
+  if(idx===-1)return null;
+  return{pos:idx+1,total:group.length,prov};
+}
 
 // ── พิกัด (lat,lon) ของศาลากลางแต่ละจังหวัด — ใช้ดึงสภาพอากาศจาก Open-Meteo (ฟรี ไม่ต้องใช้ API key) ──
 const PROVINCE_COORDS={
@@ -2126,6 +2136,7 @@ function renderDashboard(){
     _selStatus=me.status;_selProv=me.province||'';
   }
   const leavePill=me.onLeave?leaveApprovalPill(me):null;
+  const queueInfo=getQueuePosition(me);
 
   document.getElementById('adminBadge').classList.toggle('hidden',!adminMode);
   document.getElementById('navAdmin').style.display=adminMode?'flex':'none';
@@ -2148,6 +2159,13 @@ function renderDashboard(){
       <span style="font-size:24px;">${s.emoji}</span>
       <span style="color:${s.color};font-weight:700;font-size:15px;">${lbl}</span>
     </div>
+    ${queueInfo?`<div style="display:flex;align-items:center;gap:9px;margin-top:8px;padding:9px 12px;background:#ECFDF5;border-radius:10px;border:1.5px solid #6EE7B7;">
+      <span style="flex-shrink:0;width:26px;height:26px;border-radius:50%;background:#065F46;color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;">${queueInfo.pos}</span>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:800;color:#065F46;">คุณอยู่คิวที่ ${queueInfo.pos} จาก ${queueInfo.total} คัน</div>
+        <div style="font-size:11px;color:#888;">${queueInfo.prov!=='ไม่ระบุจังหวัด'?`📍 ${esc(queueInfo.prov)} · `:''}${queueInfo.pos===1?'คิวต่อไปที่ควรได้งานก่อน':'รอคิวก่อนหน้าได้งานก่อน'}</div>
+      </div>
+    </div>`:''}
     ${me.province?`<div id="weatherWidget" style="display:flex;align-items:center;gap:9px;margin-top:8px;padding:9px 12px;background:#fff;border-radius:10px;border:1px solid #E0F2FE;">
       <span style="font-size:20px;">🌡️</span>
       <div style="flex:1;"><div style="font-size:12px;color:#aaa;">กำลังโหลดสภาพอากาศ...</div></div>
@@ -2611,7 +2629,8 @@ function renderDoneByProv(){
   if(!done.length)return'';
   const byProv={};
   done.forEach(e=>{const p=e.province||'ไม่ระบุจังหวัด';if(!byProv[p])byProv[p]=[];byProv[p].push(e);});
-  // เรียงตามเวลาอัพเดทล่าสุด
+  // รันคิวตามเวลาที่เริ่มว่างงาน (updatedAt) จากนานสุด→ใหม่สุด — ใครว่างงานนานสุดคือคิวที่ 1 (คิวต่อไปที่ควรได้งานก่อน)
+  // ลำดับนี้จะ "คงที่" จนกว่าคนนั้นจะเปลี่ยนสถานะไปจากว่างงานจริงๆ เพราะอิงจาก updatedAt ที่ไม่ขยับถ้าไม่มีการบันทึกสถานะใหม่
   Object.values(byProv).forEach(list=>list.sort((a,b)=>(a.updatedAt||'')>(b.updatedAt||'')?1:-1));
   const sorted=Object.entries(byProv).sort((a,b)=>b[1].length-a[1].length);
   let html='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E8EAF0;display:flex;flex-direction:column;gap:6px;">';
@@ -2621,11 +2640,12 @@ function renderDoneByProv(){
         <span style="color:#065F46;font-size:12px;font-weight:700;">📍 ${esc(prov)}</span>
         <span style="background:#ECFDF5;color:#065F46;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;">${list.length} คัน</span>
       </div>`;
-    list.forEach(e=>{
+    list.forEach((e,idx)=>{
       const t=e.updatedAt;
       const timeStr=t?fmt(t):'ไม่ระบุ';
-      html+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 8px;background:#F0FDF4;border-radius:7px;border:1px solid #6EE7B7;">
-        <span style="font-size:14px;">✅</span>
+      const q=idx+1;
+      html+=`<div style="display:flex;align-items:flex-start;gap:8px;padding:5px 8px;background:#F0FDF4;border-radius:7px;border:1px solid #6EE7B7;">
+        <span title="คิวที่ ${q}" style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:#065F46;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;">${q}</span>
         <div style="flex:1;min-width:0;">
           <div style="font-size:12px;font-weight:700;color:#065F46;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
           <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
