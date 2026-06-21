@@ -1358,6 +1358,11 @@ function stopAlertTimer(){
 // ══════════════════════════════════════════════════════════════════════════
 let _adminAlertTimer=null;
 let _adminSnoozeUntil=0;
+// จำว่า "พนักงานคนไหนเคยถูกเด้งแจ้งเตือนค้างสถานะไปแล้ว" — เด้งป๊อปอัพ+เสียงแค่ครั้งเดียวต่อคน
+// (กล่องแดง+ป้ายตัวเลขในภาพรวมยังคงแสดงค้างตามจริง ไม่เกี่ยวกับชุดนี้)
+// พอพนักงานอัพเดทสถานะจนหลุดจากค้างแล้ว จะลบออกจากชุดนี้ ถ้าค้างใหม่อีกครั้งในอนาคตถึงจะเด้งซ้ำ
+let _staleAlerted=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_stale_alerted')||'[]');return new Set(Array.isArray(s)?s:[]);}catch(e){return new Set();}})();
+function _saveStaleAlerted(){try{localStorage.setItem('ske_stale_alerted',JSON.stringify([..._staleAlerted]));}catch(e){}}
 // ══════════════════════════════════════════════════════════════════════════
 // ── แจ้งเตือนผู้ดูแล (เสียง+ข้อความ) ทันทีที่มีพนักงานคนใดเปลี่ยนสถานะ ──
 // (เคสพิเศษ "เปลี่ยนเป็นสแตนบายว่างงาน" จะมีกล่องข้อความสีเขียวแยกต่างหาก
@@ -1445,11 +1450,22 @@ function checkAdminStaleAlert(){
   if(!adminMode)return;
   const adminScreen=document.getElementById('admin');
   if(!adminScreen||adminScreen.classList.contains('hidden'))return;
+  const stale=employees.filter(e=>!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS);
+  const staleIds=new Set(stale.map(e=>e.id));
+  // คนที่หลุดจากค้างแล้ว (อัพเดทสถานะใหม่) → เอาออกจากชุดที่เคยเตือน เพื่อให้ครั้งหน้าถ้าค้างอีกเด้งได้
+  let changed=false;
+  [..._staleAlerted].forEach(id=>{if(!staleIds.has(id)){_staleAlerted.delete(id);changed=true;}});
+  // เด้งเฉพาะ "คนใหม่" ที่ค้างแต่ยังไม่เคยเตือน
+  const newStale=stale.filter(e=>!_staleAlerted.has(e.id));
+  if(changed&&!newStale.length)_saveStaleAlerted();
   if(Date.now()<_adminSnoozeUntil)return;
   const m=document.getElementById('adminStaleModal');
   if(m&&!m.classList.contains('hidden'))return; // เปิดอยู่แล้ว ไม่ต้องเด้งซ้ำ
-  const stale=employees.filter(e=>!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS);
-  if(stale.length>0) showAdminStaleAlert(stale);
+  if(newStale.length>0){
+    newStale.forEach(e=>_staleAlerted.add(e.id));
+    _saveStaleAlerted();
+    showAdminStaleAlert(stale); // แสดงรายชื่อค้างทั้งหมด แต่จะเด้งก็ต่อเมื่อมีคนใหม่เท่านั้น
+  }
 }
 function showAdminStaleAlert(stale){
   const sorted=[...stale].sort((a,b)=>(a.updatedAt?new Date(a.updatedAt):0)-(b.updatedAt?new Date(b.updatedAt):0));
