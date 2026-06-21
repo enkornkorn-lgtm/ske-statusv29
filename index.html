@@ -1216,7 +1216,7 @@ function doAddRepair(){
 // ── สถานะรวม "อนุมัติ/ไม่อนุมัติ" + "ซ่อมเสร็จ/รอดำเนินการ" ของรายการแจ้งซ่อม ──
 function repairStatusPill(r){
   if(r.approval==='rejected')return{text:'❌ ไม่อนุมัติ',bg:'#FEF2F2',color:'#DC2626',border:'#FCA5A5'};
-  if(r.approval==='checking_price')return{text:'🔍 รอเช็คราคา',bg:'#F5F3FF',color:'#6D28D9',border:'#C4B5FD'};
+  if(r.approval==='checking_price')return{text:'🔍 รอใบเสนอราคา',bg:'#F5F3FF',color:'#6D28D9',border:'#C4B5FD'};
   if(r.approval==='approved'){
     if(r.status==='done')return{text:'✅ ซ่อมเสร็จแล้ว',bg:'#ECFDF5',color:'#065F46',border:'#6EE7B7'};
     return{text:'🔧 อนุมัติแล้ว — กำลังซ่อม',bg:'#EFF6FF',color:'#1E90D6',border:'#93C5FD'};
@@ -1604,7 +1604,7 @@ function renderAdminRepairList(){
           </div>
           <div style="display:flex;gap:5px;margin-top:8px;">
             <button class="btn btn-sm ${approved?'btn-green':'btn-gray'}" style="flex:1;padding:7px 2px;font-size:11px;" onclick="setRepairApproval('${r.id}','approved')">✅ อนุมัติทำ</button>
-            <button class="btn btn-sm ${r.approval==='checking_price'?'btn-purple':'btn-gray'}" style="flex:1;padding:7px 2px;font-size:11px;" onclick="setRepairApproval('${r.id}','checking_price')">🔍 รอเช็คราคา</button>
+            <button class="btn btn-sm ${r.approval==='checking_price'?'btn-purple':'btn-gray'}" style="flex:1;padding:7px 2px;font-size:11px;" onclick="setRepairApproval('${r.id}','checking_price')">🔍 รอใบเสนอราคา</button>
             <button class="btn btn-sm ${rejected?'btn-red':'btn-gray'}" style="flex:1;padding:7px 2px;font-size:11px;" onclick="setRepairApproval('${r.id}','rejected')">❌ ไม่อนุมัติทำ</button>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
