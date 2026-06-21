@@ -89,6 +89,9 @@
   };
 
   // ฟัง realtime — เมื่อข้อมูลเปลี่ยนจากเครื่องอื่นจะอัพเดทอัตโนมัติ
+  // หมายเหตุ: การ sync ครั้งแรกหลังเปิดแอพ (เทียบกับ cache เก่าใน localStorage ที่อาจค้างมาเป็นชม./วัน)
+  // ไม่นับเป็น "การเปลี่ยนสถานะสด" — กันไม่ให้เด้งแจ้งเตือน+เสียงรัวๆ ย้อนหลังทุกครั้งที่เปิดแอพใหม่
+  let _empSynced = false;
   onValue(ref(db, 'employees'), (snapshot) => {
     const data = snapshot.val();
     if (data && Array.isArray(data) && data.length > 0) {
@@ -96,7 +99,8 @@
       const oldEmployees = employees;
       employees = data;
       localStorage.setItem('ske_emp', JSON.stringify(employees));
-      if (typeof notifyNewlyAvailable === 'function') notifyNewlyAvailable(oldEmployees, employees);
+      if (_empSynced && typeof notifyNewlyAvailable === 'function') notifyNewlyAvailable(oldEmployees, employees);
+      _empSynced = true;
       if (currentUser) {
         const fresh = employees.find(e => e.id === currentUser.id);
         if (fresh) { currentUser = {...currentUser, ...fresh}; saveU(); }
@@ -108,6 +112,7 @@
     } else if (employees.length > 0) {
       // Firebase ว่างจริงๆ (ครั้งแรกที่ใช้งาน) → อัพโหลดข้อมูลเครื่องขึ้นไปครั้งเดียว
       set(ref(db, 'employees'), employees);
+      _empSynced = true;
     }
     window._fbReady = true;
   });
