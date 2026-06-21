@@ -296,7 +296,8 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .empty-state .empty-text{font-size:14px;}
 
 /* ── Avatar ── */
-.avatar{border-radius:50%;background:linear-gradient(135deg,#F47920,#1E90D6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;flex-shrink:0;}
+.avatar{position:relative;border-radius:50%;background:linear-gradient(135deg,#F47920,#1E90D6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;flex-shrink:0;}
+.leave-badge{position:absolute;bottom:-3px;right:-3px;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid #FDE68A;display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.25);}
 
 /* ── Login page ── */
 #login{background:#F5F6FA;overflow-y:auto;}
@@ -682,6 +683,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <button class="admin-tab-btn active" id="tabSummaryTop" onclick="switchAdminTab('summary')">📊 ภาพรวม<span id="staleTabBadge" class="badge-num hidden">0</span></button>
     <button class="admin-tab-btn" id="tabMaintTop" onclick="switchAdminTab('maint')">🔧 ซ่อมบำรุง<span id="maintTabBadge" class="badge-num hidden">0</span></button>
     <button class="admin-tab-btn" id="tabCashTop" onclick="switchAdminTab('cash')">💰 เบิกเงิน<span id="cashTabBadge" class="badge-num hidden">0</span></button>
+    <button class="admin-tab-btn" id="tabLeaveTop" onclick="switchAdminTab('leave')">🌴 ลา<span id="leaveTabBadge" class="badge-num hidden">0</span></button>
     <button class="admin-tab-btn" id="tabSettings" onclick="switchAdminTab('settings')">⚙️ ตั้งค่า</button>
   </div>
 
@@ -711,6 +713,11 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <div id="adminCashPanel" class="hidden">
       <div id="adminCashStats"></div>
       <div id="adminCashGroups"></div>
+    </div>
+
+    <!-- leave panel: รายชื่อพนักงานที่ลา — แยกออกมาเป็นแท็บของตัวเอง ไม่ปนกับภาพรวมสถานะรถ -->
+    <div id="adminLeavePanel" class="hidden">
+      <div id="adminLeaveContent"></div>
     </div>
 
     <!-- settings panel -->
@@ -768,6 +775,9 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <button class="nav-btn" id="navAdminCash" onclick="switchAdminTab('cash');highlightAdminNav(this)">
       <span class="nav-icon">💰</span><span>เบิกเงิน</span>
     </button>
+    <button class="nav-btn" id="navAdminLeave" onclick="switchAdminTab('leave');highlightAdminNav(this)">
+      <span class="nav-icon">🌴</span><span>ลา</span>
+    </button>
     <button class="nav-btn" id="navAdminSet" onclick="switchAdminTab('settings');highlightAdminNav(this)">
       <span class="nav-icon">⚙️</span><span>ตั้งค่า</span>
     </button>
@@ -800,6 +810,14 @@ function getFullLabel(e){
   if(e.status==='returning'&&e.province)return`กำลังไหลกลับ → ${e.province}`;
   if(e.status==='done'&&e.province)return`สแตนบายว่างงาน — ${e.province}`;
   return getS(e.status).label;
+}
+// ── ไอคอนป้ายเล็กมุมรูปประจำตัว บอกว่า "กำลังลา" — สีจะเปลี่ยนตามสถานะอนุมัติ ──
+// 🟡 รออนุมัติ  🟢 อนุมัติแล้ว  🔴 ไม่อนุมัติ (แต่ยังลาอยู่ในระบบ)
+function leaveIcon(e){
+  if(!e.onLeave)return'';
+  const border=e.leaveApproval==='approved'?'#6EE7B7':e.leaveApproval==='rejected'?'#FCA5A5':'#FDE68A';
+  const title=e.leaveApproval==='approved'?'ลา (อนุมัติแล้ว)':e.leaveApproval==='rejected'?'ลา (ไม่อนุมัติ)':'ลา (รออนุมัติ)';
+  return`<span class="leave-badge" style="border-color:${border};" title="${title}">🌴</span>`;
 }
 
 // ── Helpers: escape user text + clickable phone ──────────────────────────────
@@ -992,7 +1010,7 @@ function renderEmpList(){
   el.innerHTML=employees.map(e=>{
     const s=getS(e.status);const lbl=getFullLabel(e);
     return `<button class="emp-btn" onclick="askPin('${e.id}')">
-      <div class="avatar" style="width:46px;height:46px;font-size:19px;">${esc(e.name.charAt(0))}</div>
+      <div class="avatar" style="width:46px;height:46px;font-size:19px;">${esc(e.name.charAt(0))}${leaveIcon(e)}</div>
       <div style="flex:1;min-width:0;"><div style="color:#1a1a2e;font-weight:700;font-size:15px;">${esc(e.name)}</div><div style="color:#888;font-size:12px;">🚛 ${esc(e.plate)}</div></div>
       <div class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;">${s.emoji} ${esc(lbl)}</div>
     </button>`;
@@ -1984,7 +2002,7 @@ function renderDashboard(){
   mc.style.boxShadow=`0 4px 20px ${s.border}55`;
   mc.innerHTML=`
     <div class="my-card-row" style="display:flex;align-items:center;gap:12px;">
-      <div class="avatar" style="width:50px;height:50px;font-size:21px;">${me.name.charAt(0)}</div>
+      <div class="avatar" style="width:50px;height:50px;font-size:21px;">${me.name.charAt(0)}${leaveIcon(me)}</div>
       <div style="flex:1;min-width:0;">
         <div style="color:#1a1a2e;font-weight:800;font-size:16px;">${esc(me.name)}</div>
         <div style="color:#888;font-size:12px;">🚛 ${esc(me.plate)}${phoneLink(me.phone)}</div>
@@ -2116,7 +2134,7 @@ function buildSummaryHTML(){
     stale24List.forEach(e=>{
       const s=getS(e.status);const never=!e.updatedAt;
       html+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid #FECACA;">
-        <div class="avatar" style="width:30px;height:30px;font-size:13px;">${esc(e.name.charAt(0))}</div>
+        <div class="avatar" style="width:30px;height:30px;font-size:13px;">${esc(e.name.charAt(0))}${leaveIcon(e)}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
           <div style="font-size:11px;color:#888;">${esc(e.plate||'-')}${phoneLink(e.phone)}</div>
@@ -2170,45 +2188,68 @@ function buildSummaryHTML(){
     </div>`;
   });
 
-  // ── กลุ่ม "ลา" — แยกต่างหากจากสถานะทั่วไป (ไม่ทับสถานะการทำงานจริงของพนักงาน) ──
-  const onLeaveList=employees.filter(e=>e.onLeave);
-  if(onLeaveList.length){
-    onLeaveList.sort((a,b)=>(b.updatedAt||'')>(a.updatedAt||'')?1:-1);
-    html+=`<div style="background:#fff;border-radius:12px;padding:11px 14px;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,.05);border:1.5px solid #CBD5E1;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span style="font-size:22px;">🌴</span>
-        <div style="flex:1;">
-          <div style="font-weight:700;color:#475569;font-size:13px;">ลา</div>
-        </div>
-        <div style="background:#F1F5F9;border:1.5px solid #CBD5E1;border-radius:20px;padding:3px 12px;font-weight:800;color:#475569;font-size:15px;">${onLeaveList.length} คัน</div>
-      </div>
-      <div style="margin-top:8px;padding-top:8px;border-top:1px solid #E8EAF0;display:flex;flex-direction:column;gap:6px;">
-        ${onLeaveList.map(e=>{
-          const pill=leaveApprovalPill(e);
-          return`<div style="display:flex;flex-direction:column;gap:6px;padding:8px;background:#F1F5F9;border-radius:9px;border:1px solid #CBD5E1;">
-            <div style="display:flex;align-items:flex-start;gap:6px;">
-              <span style="font-size:14px;">🌴</span>
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:700;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
-                <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
-                <div style="font-size:11px;color:#475569;margin-top:1px;">📅 ${fmtLeaveRange(e)}</div>
-                ${e.leaveNote?`<div style="font-size:11px;color:#475569;margin-top:1px;">📝 ${esc(e.leaveNote)}</div>`:''}
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
-              <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};font-size:10px;">${pill.text}</span>
-              <div style="display:flex;gap:5px;">
-                <button class="btn btn-sm ${e.leaveApproval==='approved'?'btn-green':'btn-gray'}" style="padding:5px 9px;font-size:10.5px;" onclick="setLeaveApproval('${e.id}','approved')">✅ อนุมัติลา</button>
-                <button class="btn btn-sm ${e.leaveApproval==='rejected'?'btn-red':'btn-gray'}" style="padding:5px 9px;font-size:10.5px;" onclick="setLeaveApproval('${e.id}','rejected')">❌ ไม่อนุมัติลา</button>
-              </div>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-  }
+  // ── "ลา" ย้ายไปอยู่แท็บของตัวเองแล้ว (ดู buildLeaveHTML) — ไม่แสดงปนในภาพรวมสถานะรถอีกต่อไป ──
 
   return html;
+}
+
+// ── แท็บ "ลา" แยกต่างหาก — รวมรายชื่อพนักงานที่แจ้งลาทั้งหมด พร้อมปุ่มอนุมัติ/ไม่อนุมัติ ──
+function buildLeaveHTML(){
+  const onLeaveList=employees.filter(e=>e.onLeave);
+  if(!onLeaveList.length){
+    return '<div class="empty-state"><div class="empty-icon">🌴</div><div class="empty-text">ไม่มีพนักงานลาในขณะนี้</div></div>';
+  }
+  onLeaveList.sort((a,b)=>(b.updatedAt||'')>(a.updatedAt||'')?1:-1);
+  const pending=onLeaveList.filter(e=>!e.leaveApproval||e.leaveApproval==='pending').length;
+  const approved=onLeaveList.filter(e=>e.leaveApproval==='approved').length;
+  let html=`
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+    <div style="background:#fff;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #E8EAF0;">
+      <div style="font-size:22px;font-weight:900;color:#475569;">${onLeaveList.length}</div>
+      <div style="font-size:10px;color:#888;margin-top:2px;">🌴 ลาทั้งหมด</div>
+    </div>
+    <div style="background:${pending>0?'#FFFBEB':'#fff'};border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${pending>0?'#FCD34D':'#E8EAF0'};">
+      <div style="font-size:22px;font-weight:900;color:${pending>0?'#92400E':'#1E90D6'};">${pending}</div>
+      <div style="font-size:10px;color:#888;margin-top:2px;">🕐 รออนุมัติ</div>
+    </div>
+    <div style="background:#F0FDF4;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #86EFAC;">
+      <div style="font-size:22px;font-weight:900;color:#10B981;">${approved}</div>
+      <div style="font-size:10px;color:#888;margin-top:2px;">✅ อนุมัติแล้ว</div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    ${onLeaveList.map(e=>{
+      const pill=leaveApprovalPill(e);
+      return`<div class="card" style="display:flex;flex-direction:column;gap:8px;padding:12px;">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <div class="avatar" style="width:38px;height:38px;font-size:16px;">${esc(e.name.charAt(0))}${leaveIcon(e)}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13.5px;font-weight:700;color:#1a1a2e;">${esc(e.name)}</div>
+            <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate||'-')}${phoneLink(e.phone)}</div>
+            <div style="font-size:12px;color:#475569;margin-top:3px;">📅 ${fmtLeaveRange(e)}</div>
+            ${e.leaveNote?`<div style="font-size:12px;color:#475569;margin-top:2px;">📝 ${esc(e.leaveNote)}</div>`:''}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+          <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};font-size:10px;">${pill.text}</span>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-sm ${e.leaveApproval==='approved'?'btn-green':'btn-gray'}" style="padding:5px 10px;font-size:11px;" onclick="setLeaveApproval('${e.id}','approved')">✅ อนุมัติลา</button>
+            <button class="btn btn-sm ${e.leaveApproval==='rejected'?'btn-red':'btn-gray'}" style="padding:5px 10px;font-size:11px;" onclick="setLeaveApproval('${e.id}','rejected')">❌ ไม่อนุมัติลา</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+  return html;
+}
+
+// ── ตัวเลขแจ้งเตือนบนแท็บ "ลา" — จำนวนพนักงานที่กำลังลาอยู่ตอนนี้ ──
+function updateLeaveBadge(){
+  const badge=document.getElementById('leaveTabBadge');
+  if(!badge)return;
+  const n=employees.filter(e=>e.onLeave).length;
+  if(n>0){badge.textContent=n;badge.classList.remove('hidden');}
+  else badge.classList.add('hidden');
 }
 
 // รายชื่อพนักงานแบบเรียบ (ไม่จัดกลุ่มจังหวัด) ใช้กับสถานะอื่นๆ ที่ไม่ใช่ standby/traveling
@@ -2329,9 +2370,12 @@ function renderAdmin(){
   renderSysInfo();
   const el=document.getElementById('adminSummaryContent');
   if(el)el.innerHTML=buildSummaryHTML();
+  const lc=document.getElementById('adminLeaveContent');
+  if(lc)lc.innerHTML=buildLeaveHTML();
   updateAdminMaintBadge();
   updateAdminCashBadge();
   updateStaleBadge();
+  updateLeaveBadge();
   const mp=document.getElementById('adminMaintPanel');
   if(mp && !mp.classList.contains('hidden'))renderAdminMaint();
   const sp=document.getElementById('adminCashPanel');
@@ -2462,18 +2506,22 @@ function switchAdminTab(t){
   document.getElementById('adminSummaryPanel').classList.toggle('hidden',t!=='summary');
   document.getElementById('adminMaintPanel').classList.toggle('hidden',t!=='maint');
   document.getElementById('adminCashPanel').classList.toggle('hidden',t!=='cash');
+  document.getElementById('adminLeavePanel').classList.toggle('hidden',t!=='leave');
   document.getElementById('adminSettingsPanel').classList.toggle('hidden',t!=='settings');
   document.getElementById('tabSummaryTop')?.classList.toggle('active',t==='summary');
   document.getElementById('tabMaintTop')?.classList.toggle('active',t==='maint');
   document.getElementById('tabCashTop')?.classList.toggle('active',t==='cash');
+  document.getElementById('tabLeaveTop')?.classList.toggle('active',t==='leave');
   document.getElementById('tabSettings')?.classList.toggle('active',t==='settings');
-  ['navAdminSum','navAdminMaint','navAdminCash','navAdminSet'].forEach(id=>{document.getElementById(id)?.classList.remove('active');});
+  ['navAdminSum','navAdminMaint','navAdminCash','navAdminLeave','navAdminSet'].forEach(id=>{document.getElementById(id)?.classList.remove('active');});
   if(t==='summary')document.getElementById('navAdminSum')?.classList.add('active');
   if(t==='maint')document.getElementById('navAdminMaint')?.classList.add('active');
   if(t==='cash')document.getElementById('navAdminCash')?.classList.add('active');
+  if(t==='leave')document.getElementById('navAdminLeave')?.classList.add('active');
   if(t==='settings')document.getElementById('navAdminSet')?.classList.add('active');
   if(t==='settings')renderSysInfo();
   if(t==='summary'){const el=document.getElementById('adminSummaryContent');if(el)el.innerHTML=buildSummaryHTML();}
+  if(t==='leave'){const el=document.getElementById('adminLeaveContent');if(el)el.innerHTML=buildLeaveHTML();}
   if(t==='maint')renderAdminMaint();
   if(t==='cash')renderAdminCashList();
 }
@@ -2520,7 +2568,7 @@ function renderAdminEmpList(){
     const lp=e.onLeave?leaveApprovalPill(e):null;
     return`<div class="emp-card" style="margin-bottom:12px;">
       <div class="emp-card-row">
-        <div class="avatar" style="width:42px;height:42px;font-size:18px;">${esc(e.name.charAt(0))}</div>
+        <div class="avatar" style="width:42px;height:42px;font-size:18px;">${esc(e.name.charAt(0))}${leaveIcon(e)}</div>
         <div style="flex:1;min-width:0;">
           <div style="color:#1a1a2e;font-weight:700;">${esc(e.name)}</div>
           <div style="color:#888;font-size:11px;">🚛 ${esc(e.plate)}${phoneLink(e.phone)}</div>
