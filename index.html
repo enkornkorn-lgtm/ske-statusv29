@@ -1068,17 +1068,17 @@ function playAlertSound(){
   try{
     if(!_audioCtx) _audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     const ctx = _audioCtx;
-    // เล่น 3 ครั้ง beep-beep-beep
-    [0, 0.35, 0.7].forEach(offset => {
+    // เสียงด่วน — บี๊บถี่ 5 ครั้ง
+    [0, 0.15, 0.3, 0.45, 0.6].forEach(offset => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime + offset);
-      gain.gain.setValueAtTime(0.6, ctx.currentTime + offset);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.25);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(1100, ctx.currentTime + offset);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.12);
       osc.start(ctx.currentTime + offset);
-      osc.stop(ctx.currentTime + offset + 0.3);
+      osc.stop(ctx.currentTime + offset + 0.17);
     });
   }catch(e){ console.warn('audio error',e); }
 }
@@ -1947,8 +1947,12 @@ function renderDashboard(){
   const me=employees.find(e=>e.id===currentUser?.id)||currentUser;
   if(!me){show('login');renderEmpList();return;}
   const s=getS(me.status);const lbl=getFullLabel(me);
-  _selStatus=me.status;_selProv=me.province||'';
-  _selLeaveAt=me.leaveAt?toLocalInputValue(me.leaveAt):'';_selLeaveNote=me.leaveNote||'';
+  if(!editOpen){
+    // ซิงค์ค่าที่กำลังเลือกจากข้อมูลล่าสุดเฉพาะตอนยังไม่ได้เปิดแผงแก้ไขอยู่
+    // (ป้องกันไม่ให้ realtime update จากพนักงานคนอื่นมาทับสถานะที่เพิ่งเลือกไว้แต่ยังไม่ได้กดบันทึก เช่น ตอนเลือก "ลา")
+    _selStatus=me.status;_selProv=me.province||'';
+    _selLeaveAt=me.leaveAt?toLocalInputValue(me.leaveAt):'';_selLeaveNote=me.leaveNote||'';
+  }
   const leavePill=me.status==='leave'?leaveApprovalPill(me):null;
 
   document.getElementById('adminBadge').classList.toggle('hidden',!adminMode);
@@ -2412,7 +2416,13 @@ let _aSel={};
 function renderAdminEmpList(){
   const el=document.getElementById('adminEmpList');
   if(!employees.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">👷</div><div class="empty-text">ยังไม่มีพนักงาน</div></div>';return;}
-  employees.forEach(e=>_aSel[e.id]=e.status);
+  // อย่ารีเซ็ตตัวเลือกสถานะที่ผู้ดูแลกำลังเลือกค้างไว้ (ยังไม่ได้กดบันทึก) ของพนักงานที่เปิดแผงแก้ไขอยู่
+  // กันไม่ให้ realtime update จากพนักงานคนอื่นมาทับสถานะที่เพิ่งเลือก เช่น ตอนตั้งสถานะ "ลา"
+  employees.forEach(e=>{
+    const panel=document.getElementById('aef_'+e.id);
+    const panelOpen=panel&&!panel.classList.contains('hidden');
+    if(!panelOpen)_aSel[e.id]=e.status;
+  });
   el.innerHTML=employees.map(e=>{
     const s=getS(e.status);const lbl=getFullLabel(e);
     return`<div class="emp-card" style="margin-bottom:12px;">
