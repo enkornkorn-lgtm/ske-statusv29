@@ -652,6 +652,12 @@ select.inp option{background:#fff;color:#1a1a2e;}
           <button type="button" class="status-opt" id="repUrg_urgent" onclick="selRepUrgency('urgent')"><span class="status-emoji">🔴</span><br>เร่งด่วน</button>
         </div>
       </div>
+      <div>
+        <div class="inp-label">📷 แนบรูป <span style="font-size:10px;color:#888;font-weight:400;">(ไม่บังคับ · สูงสุด 3 รูป)</span></div>
+        <input type="file" id="repNewImg" accept="image/*" multiple style="display:none;" onchange="addNewRepairPhotos(this)">
+        <button type="button" class="btn btn-gray btn-full" onclick="document.getElementById('repNewImg').click()">📎 เลือกรูป</button>
+        <div id="repNewImgPreview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
+      </div>
       <button class="btn btn-blue btn-full" onclick="doAddRepair()">✓ ส่งแจ้งซ่อม</button>
     </div>
     <div style="margin-top:16px;" id="repairList"></div>
@@ -1059,6 +1065,7 @@ let repairs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_repairs')||'[
 let fluidLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_fluid')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let cashRequests=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_cash')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let _repUrgency='normal';
+let _repNewPhotos=[]; // รูปที่พนักงานเลือกไว้ก่อนกดส่งแจ้งซ่อม (ย่อแล้ว)
 
 function saveE(){
   localStorage.setItem('ske_emp',JSON.stringify(employees));
@@ -1665,11 +1672,44 @@ function toggleRepairForm(){
   const f=document.getElementById('repairForm');
   const open=f.classList.toggle('hidden');
   document.getElementById('repairFormToggleBtn').textContent=open?'+ แจ้งซ่อมใหม่':'✕ ยกเลิก';
+  if(open){ // เพิ่งปิดฟอร์ม (ยกเลิก) → ล้างรูปที่เลือกค้างไว้
+    _repNewPhotos=[];renderNewRepairPhotos();
+    const ti=document.getElementById('repIssue');if(ti)ti.value='';
+  }
 }
 function selRepUrgency(u){
   _repUrgency=u;
   document.getElementById('repUrg_normal').style.cssText=u==='normal'?'border-color:#1E90D6;color:#1E90D6;background:#EFF6FF;':'border-color:#E8EAF0;color:#888;background:#F5F6FA;';
   document.getElementById('repUrg_urgent').style.cssText=u==='urgent'?'border-color:#EF4444;color:#EF4444;background:#FEF2F2;':'border-color:#E8EAF0;color:#888;background:#F5F6FA;';
+}
+// พนักงานเลือกรูปแนบตอนแจ้งซ่อม (ย่อก่อนเก็บไว้ใน staging)
+async function addNewRepairPhotos(input){
+  const files=Array.from(input.files||[]);
+  input.value='';
+  if(!files.length)return;
+  const room=3-_repNewPhotos.length;
+  if(room<=0){alert('⚠️ แนบได้สูงสุด 3 รูป');return;}
+  const take=files.slice(0,room);
+  if(files.length>room)alert(`⚠️ แนบได้อีก ${room} รูป (สูงสุด 3 รูป)`);
+  try{
+    for(const f of take){
+      const dataUrl=await _compressImage(f,900,0.6);
+      _repNewPhotos.push(dataUrl);
+    }
+    renderNewRepairPhotos();
+  }catch(e){console.error('compress error',e);alert('❌ เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');}
+}
+function delNewRepairPhoto(idx){
+  _repNewPhotos.splice(idx,1);
+  renderNewRepairPhotos();
+}
+function renderNewRepairPhotos(){
+  const box=document.getElementById('repNewImgPreview');
+  if(!box)return;
+  box.innerHTML=_repNewPhotos.map((p,i)=>`<div style="position:relative;">
+    <img src="${p}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;">
+    <button type="button" onclick="delNewRepairPhoto(${i})" style="position:absolute;top:-6px;right:-6px;background:#EF4444;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;line-height:1;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3);">✕</button>
+  </div>`).join('');
 }
 function doAddRepair(){
   if(!currentUser)return;
@@ -1680,10 +1720,13 @@ function doAddRepair(){
     id:'rep_'+Date.now(),
     empId:me.id,empName:me.name,plate:me.plate||'',
     issue,urgency:_repUrgency,status:'pending',approval:'pending',
+    empPhotos:_repNewPhotos.slice(),
     createdAt:new Date().toISOString()
   });
   saveRepairs();
   document.getElementById('repIssue').value='';
+  _repNewPhotos=[];
+  renderNewRepairPhotos();
   selRepUrgency('normal');
   toggleRepairForm();
   refreshRepairViews();
@@ -1775,19 +1818,21 @@ async function addRepairPhotos(id,input){
   }catch(e){console.error('compress error',e);alert('❌ เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');}
 }
 
-// ลบรูปออกจากรายการซ่อม
-function delRepairPhoto(id,idx){
+// ลบรูปออกจากรายการซ่อม (field = 'photos' หรือ 'empPhotos')
+function delRepairPhoto(id,idx,field){
+  field=field||'photos';
   if(!confirm('ลบรูปนี้?'))return;
-  const r=repairs.find(x=>x.id===id);if(!r||!r.photos)return;
-  const photos=r.photos.filter((_,i)=>i!==idx);
-  repairs=repairs.map(x=>x.id===id?{...x,photos}:x);
+  const r=repairs.find(x=>x.id===id);if(!r||!r[field])return;
+  const arr=r[field].filter((_,i)=>i!==idx);
+  repairs=repairs.map(x=>x.id===id?{...x,[field]:arr}:x);
   saveRepairs();refreshRepairViews();
   closePhotoViewer();
 }
 
-// ดูรูปเต็มจอ + ปุ่มลบ (ลบได้เฉพาะตอนผู้ดูแลล็อกอิน)
-function viewRepairPhoto(id,idx){
-  const r=repairs.find(x=>x.id===id);if(!r||!r.photos||!r.photos[idx])return;
+// ดูรูปเต็มจอ + ปุ่มลบ — field = 'photos' (ผู้ดูแล) หรือ 'empPhotos' (พนักงานแจ้งซ่อม)
+function viewRepairPhoto(id,idx,field){
+  field=field||'photos';
+  const r=repairs.find(x=>x.id===id);if(!r||!r[field]||!r[field][idx])return;
   let ov=document.getElementById('photoViewer');
   if(!ov){
     ov=document.createElement('div');ov.id='photoViewer';
@@ -1795,10 +1840,11 @@ function viewRepairPhoto(id,idx){
     ov.onclick=ev=>{if(ev.target===ov)closePhotoViewer();};
     document.body.appendChild(ov);
   }
-  const canDel=typeof adminMode!=='undefined'&&adminMode;
-  ov.innerHTML=`<img src="${r.photos[idx]}" style="max-width:100%;max-height:78vh;border-radius:12px;object-fit:contain;">
+  // ผู้ดูแลลบได้ทุกรูป / พนักงานลบได้เฉพาะรูปที่ตัวเองแนบ (empPhotos) ของรายการตัวเอง
+  const canDel=(typeof adminMode!=='undefined'&&adminMode)||(field==='empPhotos'&&currentUser&&r.empId===currentUser.id);
+  ov.innerHTML=`<img src="${r[field][idx]}" style="max-width:100%;max-height:78vh;border-radius:12px;object-fit:contain;">
     <div style="display:flex;gap:10px;">
-      ${canDel?`<button class="btn btn-red btn-sm" onclick="delRepairPhoto('${id}',${idx})">🗑️ ลบรูปนี้</button>`:''}
+      ${canDel?`<button class="btn btn-red btn-sm" onclick="delRepairPhoto('${id}',${idx},'${field}')">🗑️ ลบรูปนี้</button>`:''}
       <button class="btn btn-gray btn-sm" onclick="closePhotoViewer()">✕ ปิด</button>
     </div>`;
   ov.style.display='flex';
@@ -1827,6 +1873,12 @@ function renderRepairList(){
         <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};">${pill.text}</span>
         <span style="color:#aaa;font-size:11px;">${fmt(r.createdAt)}</span>
       </div>
+      ${(r.empPhotos&&r.empPhotos.length)?`<div style="margin-top:10px;">
+        <div style="font-size:11px;color:#F47920;font-weight:700;margin-bottom:5px;">📷 รูปที่คุณแนบ (${r.empPhotos.length})</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${r.empPhotos.map((p,i)=>`<img src="${p}" onclick="viewRepairPhoto('${r.id}',${i},'empPhotos')" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+        </div>
+      </div>`:''}
       ${r.reply?`<div style="margin-top:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:10px 12px;">
         <div style="font-size:11px;color:#1E90D6;font-weight:700;margin-bottom:3px;">💬 ข้อความจากผู้ดูแล${r.replyAt?` · ${fmt(r.replyAt)}`:''}</div>
         <div style="font-size:13px;color:#1a1a2e;line-height:1.6;white-space:pre-wrap;">${esc(r.reply)}</div>
@@ -2204,6 +2256,12 @@ function renderAdminRepairList(){
             <div style="flex:1;min-width:0;color:#1a1a2e;font-size:13px;font-weight:600;line-height:1.5;">${esc(r.issue)}</div>
             <span class="urgency-pill" style="background:${urg?'#FEF2F2':'#EFF6FF'};color:${urg?'#DC2626':'#1E90D6'};border:1px solid ${urg?'#FCA5A5':'#93C5FD'};">${urg?'🔴 เร่งด่วน':'🔵 ปกติ'}</span>
           </div>
+          ${(r.empPhotos&&r.empPhotos.length)?`<div style="margin-top:8px;">
+            <div style="font-size:10.5px;color:#F47920;font-weight:700;margin-bottom:4px;">📷 รูปจากพนักงาน (${r.empPhotos.length})</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${r.empPhotos.map((p,i)=>`<img src="${p}" onclick="viewRepairPhoto('${r.id}',${i},'empPhotos')" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+            </div>
+          </div>`:''}
           <div style="display:flex;gap:5px;margin-top:8px;">
             <button class="btn btn-sm ${approved?'btn-green':'btn-gray'}" style="flex:1;padding:7px 2px;font-size:11px;" onclick="setRepairApproval('${r.id}','approved')">✅ อนุมัติทำ</button>
             <button class="btn btn-sm ${r.approval==='checking_price'?'btn-purple':'btn-gray'}" style="flex:1;padding:7px 2px;font-size:11px;" onclick="setRepairApproval('${r.id}','checking_price')">🔍 รอใบเสนอราคา</button>
@@ -2284,6 +2342,9 @@ function renderAdminHistory(){
         const pill=repairStatusPill(r);
         return`<div class="maint-card fixed" style="margin-bottom:8px;opacity:.95;">
           <div style="color:#1a1a2e;font-size:13px;font-weight:600;line-height:1.5;">${esc(r.issue)}</div>
+          ${(r.empPhotos&&r.empPhotos.length)?`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+            ${r.empPhotos.map((p,i)=>`<img src="${p}" onclick="viewRepairPhoto('${r.id}',${i},'empPhotos')" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #FED7AA;cursor:pointer;">`).join('')}
+          </div>`:''}
           ${r.reply?`<div style="margin-top:8px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:10px;padding:8px 10px;">
             <div style="font-size:10.5px;color:#475569;font-weight:700;margin-bottom:2px;">💬 ข้อความถึงพนักงาน</div>
             <div style="font-size:12.5px;color:#1a1a2e;line-height:1.5;white-space:pre-wrap;">${esc(r.reply)}</div>
