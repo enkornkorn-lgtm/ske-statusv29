@@ -1109,6 +1109,37 @@ function doInstall(){
   document.getElementById('manifestLink').href=URL.createObjectURL(b);
 })();
 
+// ── Service Worker — แจ้งเตือนเด้งขึ้นถาดระบบ + สั่น แม้แอพอยู่เบื้องหลัง ──
+// หมายเหตุ: Service Worker ทำงานได้เฉพาะบน HTTPS จริง (หรือ localhost) เท่านั้น
+// ตอนเปิดไฟล์ในพรีวิว/แบบ file:// จะข้ามการลงทะเบียนไปเงียบๆ ไม่ขึ้น error (ไม่กระทบการใช้งานอื่น)
+let _swReg = null;
+if ('serviceWorker' in navigator &&
+    (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      _swReg = reg;
+    }).catch(e => console.info('SW ยังไม่พร้อม (จะใช้งานได้เมื่ออัปขึ้นโฮสต์จริงพร้อมไฟล์ sw.js):', e.message));
+  });
+}
+const _SKE_ICON='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%231E90D6"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E';
+// แสดงการแจ้งเตือน — ผ่าน Service Worker ถ้าพร้อม (เด้งขึ้น system tray ได้แม้อยู่เบื้องหลัง) ไม่งั้น fallback Notification ปกติ
+function showSystemNotification(title, options){
+  if(!('Notification' in window) || Notification.permission!=='granted') return;
+  const opts=Object.assign({
+    icon:_SKE_ICON, badge:_SKE_ICON, vibrate:[200,100,200],
+    requireInteraction:false, tag:'ske-alert', renotify:true
+  }, options||{});
+  try{
+    const reg=_swReg||(navigator.serviceWorker&&navigator.serviceWorker.controller?navigator.serviceWorker.ready:null);
+    if(_swReg&&_swReg.showNotification){ _swReg.showNotification(title,opts); return; }
+    if(navigator.serviceWorker&&navigator.serviceWorker.ready){
+      navigator.serviceWorker.ready.then(r=>{ _swReg=r; r.showNotification(title,opts); }).catch(()=>{ new Notification(title,opts); });
+      return;
+    }
+    new Notification(title,opts);
+  }catch(e){ try{ new Notification(title,opts); }catch(_){} }
+}
+
 // ── Keep Awake / Prevent bounce ───────────────────────────────────────────────
 (async function(){
   try{if('wakeLock' in navigator){let wl=await navigator.wakeLock.request('screen');document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible')wl=await navigator.wakeLock.request('screen');});}}catch(e){}
@@ -1319,13 +1350,11 @@ function showAlertModal(me, hoursAgo){
   document.getElementById('alertModal').classList.remove('hidden');
   document.getElementById('alertModal').style.display='flex';
   playAlertSound();
-  // ขอ permission แจ้งเตือน browser ด้วย (ถ้าได้รับ)
-  if('Notification' in window && Notification.permission==='granted'){
-    new Notification('⚠️ แจ้งเตือนสถานะรถ SKE', {
-      body: `${s?.emoji||''} ${s?.label} — ไม่อัพเดทมา ${timeStr} กรุณาอัพเดทสถานะ`,
-      icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%23F47920"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
-    });
-  }
+  // แจ้งเตือนระบบ (เด้งถาดระบบ+สั่น แม้อยู่เบื้องหลัง)
+  showSystemNotification('⚠️ แจ้งเตือนสถานะรถ SKE', {
+    body: `${s?.emoji||''} ${s?.label} — ไม่อัพเดทมา ${timeStr} กรุณาอัพเดทสถานะ`,
+    icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%23F47920"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
+  });
 }
 
 function dismissAlert(){
@@ -1392,7 +1421,7 @@ function notifyNewlyAvailable(oldList,newList){
     showAvailableToast(becameAvailable);
     if('Notification' in window && Notification.permission==='granted'){
       const names=becameAvailable.map(e=>e.name).join(', ');
-      new Notification('✅ มีรถว่างงานใหม่!', {
+      showSystemNotification('✅ มีรถว่างงานใหม่!', {
         body:`${names} — เปลี่ยนเป็นสแตนบายว่างงานแล้ว`,
         icon:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%2310B981"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
       });
@@ -1405,7 +1434,7 @@ function notifyNewlyAvailable(oldList,newList){
         const s=STATUSES.find(st=>st.id===e.status);
         return `${e.name} → ${s?.label||e.status}`;
       }).join(' • ');
-      new Notification('🔔 มีการเปลี่ยนสถานะรถ', {
+      showSystemNotification('🔔 มีการเปลี่ยนสถานะรถ', {
         body:detail,
         icon:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%231E90D6"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
       });
@@ -1488,7 +1517,7 @@ function showAdminStaleAlert(stale){
   m.classList.remove('hidden');m.style.display='flex';
   playAlertSound();
   if('Notification' in window && Notification.permission==='granted'){
-    new Notification('⚠️ แจ้งเตือนสถานะรถ SKE', {
+    showSystemNotification('⚠️ แจ้งเตือนสถานะรถ SKE', {
       body:`มีพนักงาน ${stale.length} คน ไม่อัพเดทสถานะเกิน ${STALE_ALL_HOURS} ชม.`,
       icon:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%23F47920"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
     });
