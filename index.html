@@ -430,6 +430,9 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .urgency-pill{border-radius:20px;padding:3px 9px;font-size:10px;font-weight:700;white-space:nowrap;}
 .maint-empty{text-align:center;padding:28px 16px;color:#bbb;}
 .maint-empty .empty-icon{font-size:38px;margin-bottom:8px;}
+
+/* ── Bottom nav notification badges ── */
+.nav-bottom-badge{position:absolute;top:4px;right:4px;background:#EF4444;color:#fff;font-size:9px;font-weight:800;border-radius:10px;min-width:16px;height:16px;padding:0 4px;display:flex;align-items:center;justify-content:center;pointer-events:none;}
 </style>
 </head>
 <body>
@@ -745,13 +748,12 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <span class="badge-admin">ADMIN</span>
   </div>
 
-  <!-- admin tabs -->
-  <div class="admin-tab" id="adminTabBar">
-    <button class="admin-tab-btn active" id="tabSummaryTop" onclick="switchAdminTab('summary')"><span class="ic" data-ic="overview"></span> ภาพรวม<span id="staleTabBadge" class="badge-num hidden">0</span></button>
-    <button class="admin-tab-btn" id="tabMaintTop" onclick="switchAdminTab('maint')"><span class="ic" data-ic="wrench"></span> ซ่อมบำรุง<span id="maintTabBadge" class="badge-num hidden">0</span></button>
-    <button class="admin-tab-btn" id="tabCashTop" onclick="switchAdminTab('cash')"><span class="ic" data-ic="money"></span> เบิกเงิน<span id="cashTabBadge" class="badge-num hidden">0</span></button>
-    <button class="admin-tab-btn" id="tabLeaveTop" onclick="switchAdminTab('leave')"><span class="ic" data-ic="leave"></span> ลา<span id="leaveTabBadge" class="badge-num hidden">0</span></button>
-    <button class="admin-tab-btn" id="tabSettings" onclick="switchAdminTab('settings')"><span class="ic" data-ic="settings"></span> ตั้งค่า</button>
+  <!-- admin tabs (top bar removed — badges moved to bottom nav) -->
+  <div id="adminTabBar" style="display:none;">
+    <span id="staleTabBadge" class="badge-num hidden">0</span>
+    <span id="maintTabBadge" class="badge-num hidden">0</span>
+    <span id="cashTabBadge" class="badge-num hidden">0</span>
+    <span id="leaveTabBadge" class="badge-num hidden">0</span>
   </div>
 
   <div class="list-area">
@@ -847,17 +849,21 @@ select.inp option{background:#fff;color:#1a1a2e;}
 
   <!-- bottom nav admin -->
   <div class="bottom-nav">
-    <button class="nav-btn active" id="navAdminSum" onclick="switchAdminTab('summary');highlightAdminNav(this)">
+    <button class="nav-btn active" id="navAdminSum" onclick="switchAdminTab('summary');highlightAdminNav(this)" style="position:relative;">
       <span class="nav-icon" data-ic="overview"></span><span>ภาพรวม</span>
+      <span id="navStaleNavBadge" class="nav-bottom-badge hidden">0</span>
     </button>
-    <button class="nav-btn" id="navAdminMaint" onclick="switchAdminTab('maint');highlightAdminNav(this)">
+    <button class="nav-btn" id="navAdminMaint" onclick="switchAdminTab('maint');highlightAdminNav(this)" style="position:relative;">
       <span class="nav-icon" data-ic="wrench"></span><span>ซ่อมบำรุง</span>
+      <span id="navMaintNavBadge" class="nav-bottom-badge hidden">0</span>
     </button>
-    <button class="nav-btn" id="navAdminCash" onclick="switchAdminTab('cash');highlightAdminNav(this)">
+    <button class="nav-btn" id="navAdminCash" onclick="switchAdminTab('cash');highlightAdminNav(this)" style="position:relative;">
       <span class="nav-icon" data-ic="money"></span><span>เบิกเงิน</span>
+      <span id="navCashNavBadge" class="nav-bottom-badge hidden">0</span>
     </button>
-    <button class="nav-btn" id="navAdminLeave" onclick="switchAdminTab('leave');highlightAdminNav(this)">
+    <button class="nav-btn" id="navAdminLeave" onclick="switchAdminTab('leave');highlightAdminNav(this)" style="position:relative;">
       <span class="nav-icon" data-ic="leave"></span><span>ลา</span>
+      <span id="navLeaveNavBadge" class="nav-bottom-badge hidden">0</span>
     </button>
     <button class="nav-btn" id="navAdminSet" onclick="switchAdminTab('settings');highlightAdminNav(this)">
       <span class="nav-icon" data-ic="settings"></span><span>ตั้งค่า</span>
@@ -2041,10 +2047,9 @@ function isRepairResolved(r){return r.status==='done'||r.approval==='rejected';}
 
 function updateAdminMaintBadge(){
   const badge=document.getElementById('maintTabBadge');
-  if(!badge)return;
+  const navBadge=document.getElementById('navMaintNavBadge');
   const pending=repairs.filter(r=>!isRepairResolved(r)).length;
-  if(pending>0){badge.textContent=pending;badge.classList.remove('hidden');}
-  else badge.classList.add('hidden');
+  [badge,navBadge].forEach(b=>{if(!b)return;if(pending>0){b.textContent=pending;b.classList.remove('hidden');}else b.classList.add('hidden');});
   updateHistoryBadge();
 }
 function updateHistoryBadge(){
@@ -2237,10 +2242,9 @@ function renderAdminFluidList(){
 // ══════════════════════════════════════════════════════════════════════════
 function updateAdminCashBadge(){
   const badge=document.getElementById('cashTabBadge');
-  if(!badge)return;
+  const navBadge=document.getElementById('navCashNavBadge');
   const pending=cashRequests.filter(s=>s.status!=='done').length;
-  if(pending>0){badge.textContent=pending;badge.classList.remove('hidden');}
-  else badge.classList.add('hidden');
+  [badge,navBadge].forEach(b=>{if(!b)return;if(pending>0){b.textContent=pending;b.classList.remove('hidden');}else b.classList.add('hidden');});
 }
 
 function renderAdminCashList(){
@@ -2634,10 +2638,9 @@ function buildLeaveHTML(){
 // ── ตัวเลขแจ้งเตือนบนแท็บ "ลา" — จำนวนพนักงานที่กำลังลาอยู่ตอนนี้ ──
 function updateLeaveBadge(){
   const badge=document.getElementById('leaveTabBadge');
-  if(!badge)return;
+  const navBadge=document.getElementById('navLeaveNavBadge');
   const n=employees.filter(e=>e.onLeave).length;
-  if(n>0){badge.textContent=n;badge.classList.remove('hidden');}
-  else badge.classList.add('hidden');
+  [badge,navBadge].forEach(b=>{if(!b)return;if(n>0){b.textContent=n;b.classList.remove('hidden');}else b.classList.add('hidden');});
 }
 
 // รายชื่อพนักงานแบบเรียบ (ไม่จัดกลุ่มจังหวัด) ใช้กับสถานะอื่นๆ ที่ไม่ใช่ standby/traveling
@@ -2778,10 +2781,9 @@ function renderAdmin(){
 // ── ตัวเลขแจ้งเตือนบนแท็บ "ภาพรวม" — จำนวนพนักงานที่ไม่อัพเดทสถานะเกิน 24 ชม. (ทุกสถานะ) ──
 function updateStaleBadge(){
   const badge=document.getElementById('staleTabBadge');
-  if(!badge)return;
+  const navBadge=document.getElementById('navStaleNavBadge');
   const n=employees.filter(e=>!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS).length;
-  if(n>0){badge.textContent=n;badge.classList.remove('hidden');}
-  else badge.classList.add('hidden');
+  [badge,navBadge].forEach(b=>{if(!b)return;if(n>0){b.textContent=n;b.classList.remove('hidden');}else b.classList.add('hidden');});
 }
 
 function renderSysInfo(){
