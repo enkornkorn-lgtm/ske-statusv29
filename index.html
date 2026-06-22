@@ -1721,6 +1721,16 @@ function setRepairApproval(id,decision){
   repairs=repairs.map(r=>r.id===id?{...r,approval:decision}:r);
   saveRepairs();refreshRepairViews();
 }
+// ผู้ดูแลพิมพ์ข้อความตอบกลับ/แจ้งวิธีดำเนินการต่อ ไปยังพนักงานเจ้าของรายการ
+function saveRepairReply(id){
+  const ta=document.getElementById('rep_reply_'+id);
+  if(!ta)return;
+  const msg=ta.value.trim();
+  const now=new Date().toISOString();
+  repairs=repairs.map(r=>r.id===id?{...r,reply:msg,replyAt:msg?now:null,replyRead:false}:r);
+  saveRepairs();refreshRepairViews();
+  alert(msg?'✅ ส่งข้อความถึงพนักงานแล้ว':'🗑️ ลบข้อความแล้ว');
+}
 function renderRepairList(){
   const el=document.getElementById('repairList');
   if(!el||!currentUser)return;
@@ -1744,6 +1754,10 @@ function renderRepairList(){
         <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};">${pill.text}</span>
         <span style="color:#aaa;font-size:11px;">${fmt(r.createdAt)}</span>
       </div>
+      ${r.reply?`<div style="margin-top:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:10px 12px;">
+        <div style="font-size:11px;color:#1E90D6;font-weight:700;margin-bottom:3px;">💬 ข้อความจากผู้ดูแล${r.replyAt?` · ${fmt(r.replyAt)}`:''}</div>
+        <div style="font-size:13px;color:#1a1a2e;line-height:1.6;white-space:pre-wrap;">${esc(r.reply)}</div>
+      </div>`:''}
       <div class="row-btns" style="margin-top:10px;">
         ${approved?`<button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดรายการอีกครั้ง':'✓ แจ้งซ่อมเสร็จแล้ว'}</button>`:''}
         <button class="btn btn-red btn-sm" ${approved?'':'style="flex:1;"'} onclick="doDelRepair('${r.id}')">🗑️ ลบรายการ</button>
@@ -2120,6 +2134,14 @@ function renderAdminRepairList(){
             <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};">${pill.text}</span>
             <span style="color:#aaa;font-size:10.5px;">${fmt(r.createdAt)}</span>
           </div>
+          ${r.reply?`<div style="margin-top:8px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:8px 10px;">
+            <div style="font-size:10.5px;color:#1E90D6;font-weight:700;margin-bottom:2px;">💬 ข้อความถึงพนักงาน${r.replyAt?` · ${fmt(r.replyAt)}`:''}</div>
+            <div style="font-size:12.5px;color:#1a1a2e;line-height:1.5;white-space:pre-wrap;">${esc(r.reply)}</div>
+          </div>`:''}
+          <div style="margin-top:8px;">
+            <textarea class="inp" id="rep_reply_${r.id}" rows="2" placeholder="พิมพ์ข้อความถึงพนักงาน เช่น นำรถเข้าศูนย์วันจันทร์ / สั่งอะไหล่แล้ว..." style="font-size:12.5px;">${esc(r.reply||'')}</textarea>
+            <button class="btn btn-blue btn-sm btn-full" style="margin-top:6px;" onclick="saveRepairReply('${r.id}')">💬 ${r.reply?'อัพเดทข้อความ':'ส่งข้อความถึงพนักงาน'}</button>
+          </div>
           <div class="row-btns" style="margin-top:8px;">
             ${approved?`<button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดอีกครั้ง':'✓ ทำเครื่องหมายว่าซ่อมเสร็จ'}</button>`:''}
             <button class="btn btn-red btn-sm" onclick="doDelRepair('${r.id}')">🗑️</button>
@@ -2176,6 +2198,10 @@ function renderAdminHistory(){
         const pill=repairStatusPill(r);
         return`<div class="maint-card fixed" style="margin-bottom:8px;opacity:.95;">
           <div style="color:#1a1a2e;font-size:13px;font-weight:600;line-height:1.5;">${esc(r.issue)}</div>
+          ${r.reply?`<div style="margin-top:8px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:10px;padding:8px 10px;">
+            <div style="font-size:10.5px;color:#475569;font-weight:700;margin-bottom:2px;">💬 ข้อความถึงพนักงาน</div>
+            <div style="font-size:12.5px;color:#1a1a2e;line-height:1.5;white-space:pre-wrap;">${esc(r.reply)}</div>
+          </div>`:''}
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
             <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};">${pill.text}</span>
             <span style="color:#aaa;font-size:10.5px;">${fmt(r.createdAt)}</span>
