@@ -161,6 +161,10 @@
     } else if (!_firstSync.repairs && repairs.length > 0) {
       set(ref(db, 'repairs'), repairs);
     }
+    if (!_firstSync.repairs) {
+      // sync ครั้งแรก → ลบรูปเก่าเกิน 12 เดือนออกจาก repairs แล้วอัพเดท Firebase
+      setTimeout(() => { if (typeof purgeOldPhotos === 'function') purgeOldPhotos(); }, 2000);
+    }
     _firstSync.repairs = true;
   });
 
@@ -1129,6 +1133,35 @@ function pruneOldMaintenance(){
 }
 // ตรวจสอบซ้ำทุก 1 ชั่วโมง เผื่อแอปเปิดค้างไว้นาน
 setInterval(pruneOldMaintenance,60*60*1000);
+
+// ── ลบเฉพาะรูปแนบออกจากรายการที่อายุเกิน 12 เดือน ─────────────────────────────
+// รายการยังอยู่ครบ (ไม่หาย) แค่รูปโดนล้างเพื่อประหยัด Firebase DB quota
+// รันครั้งเดียวตอน sync ครั้งแรก (เรียกจาก onValue repairs)
+function purgeOldPhotos(){
+  const cutoff=_maintCutoffTime();
+  let repChanged=false,fluChanged=false;
+
+  // repairs: ลบ r.empPhotos และ r.photos ของรายการที่อายุเกิน 12 เดือน
+  repairs=repairs.map(r=>{
+    const t=new Date(r.createdAt||0).getTime();
+    if(isFinite(t)&&t<cutoff){
+      const hadPhotos=(r.empPhotos&&r.empPhotos.length)||(r.photos&&r.photos.length);
+      if(hadPhotos){repChanged=true;return{...r,empPhotos:[],photos:[]};}
+    }
+    return r;
+  });
+  if(repChanged){saveRepairs();console.log('[SKE] purgeOldPhotos: ลบรูปเก่าออกจาก repairs แล้ว');}
+
+  // fluidLogs: ลบ f.photos ของรายการที่อายุเกิน 12 เดือน
+  fluidLogs=fluidLogs.map(f=>{
+    const t=new Date(f.changedAt||f.createdAt||0).getTime();
+    if(isFinite(t)&&t<cutoff){
+      if(f.photos&&f.photos.length){fluChanged=true;return{...f,photos:[]};}
+    }
+    return f;
+  });
+  if(fluChanged){saveFluid();console.log('[SKE] purgeOldPhotos: ลบรูปเก่าออกจาก fluidLogs แล้ว');}
+}
 
 // ── ย้ายข้อมูลเก่า: พนักงานที่เคยมี status==='leave' (ก่อนแยก "ลา" ออกจากสถานะทั่วไป) ──
 // ย้ายเป็น onLeave=true + คืนสถานะการทำงานจริงเป็น standby (ค่าเริ่มต้นปลอดภัย ผู้ดูแลแก้ไขเพิ่มเติมได้)
@@ -3036,7 +3069,7 @@ function renderSysInfo(){
   const el=document.getElementById('sysInfo');
   if(!el)return;
   const now=new Date();
-  el.innerHTML=`พนักงานทั้งหมด: <b>${employees.length}</b> คน<br>เวอร์ชัน: <b>2.0 (Firebase)</b><br>เวลาปัจจุบัน: <b>${now.toLocaleString('th-TH')}</b><br>ประวัติซ่อมบำรุง: <b>เก็บไว้ 12 เดือน แล้วลบอัตโนมัติ</b><br>เบิกเงินพนักงาน: <b>เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน</b>`;
+  el.innerHTML=`พนักงานทั้งหมด: <b>${employees.length}</b> คน<br>เวอร์ชัน: <b>2.0 (Firebase)</b><br>เวลาปัจจุบัน: <b>${now.toLocaleString('th-TH')}</b><br>ประวัติซ่อมบำรุง: <b>เก็บไว้ 12 เดือน แล้วลบอัตโนมัติ</b><br>รูปภาพแนบ: <b>ลบอัตโนมัติเมื่ออายุเกิน 12 เดือน (ข้อมูลรายการยังอยู่)</b><br>เบิกเงินพนักงาน: <b>เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน</b>`;
 }
 
 function renderTravelingByProv(){
