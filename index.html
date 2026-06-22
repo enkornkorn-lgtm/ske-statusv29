@@ -787,12 +787,26 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div id="adminLeaveContent"></div>
     </div>
 
+    <!-- history panel: รายการซ่อมที่จัดการเสร็จแล้ว (ซ่อมเสร็จ / ไม่อนุมัติ) -->
+    <div id="adminHistoryPanel" class="hidden">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button class="topbar-back" onclick="switchAdminTab('settings')">←</button>
+        <div class="section-label" style="margin:0;">📜 ประวัติการซ่อม</div>
+      </div>
+      <div id="adminHistoryContent"></div>
+    </div>
+
     <!-- settings panel -->
     <div id="adminSettingsPanel" class="hidden">
       <div class="card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:12px;">
         <div style="color:#7B2FBE;font-weight:800;font-size:16px;">👥 พนักงาน</div>
         <div style="color:#888;font-size:12px;">เพิ่ม แก้ไข หรือลบข้อมูลพนักงานและทะเบียนรถ</div>
         <button class="btn btn-purple btn-full" onclick="showEmpManage()">👥 จัดการพนักงาน</button>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:12px;">
+        <div style="color:#7B2FBE;font-weight:800;font-size:16px;">📜 ประวัติ</div>
+        <div style="color:#888;font-size:12px;">รายการซ่อมที่ซ่อมเสร็จแล้ว หรือไม่อนุมัติ จะถูกย้ายมาเก็บที่นี่</div>
+        <button class="btn btn-purple btn-full" onclick="switchAdminTab('history')">📜 ดูประวัติการซ่อม<span id="historyCountBadge" class="badge-num hidden" style="margin-left:6px;">0</span></button>
       </div>
       <div class="card" style="display:flex;flex-direction:column;gap:16px;">
         <div style="color:#7B2FBE;font-weight:800;font-size:16px;">⚙️ ตั้งค่าระบบ</div>
@@ -1718,6 +1732,9 @@ function refreshRepairViews(){
   const adminPanel=document.getElementById('adminMaintPanel');
   if(adminPanel && !adminPanel.classList.contains('hidden'))renderAdminRepairList();
   else updateAdminMaintBadge();
+  const histPanel=document.getElementById('adminHistoryPanel');
+  if(histPanel && !histPanel.classList.contains('hidden'))renderAdminHistory();
+  else updateHistoryBadge();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1987,11 +2004,23 @@ function renderAdminMaint(){
   updateAdminMaintBadge();
 }
 
+// รายการซ่อมที่ "จัดการเสร็จแล้ว" = ซ่อมเสร็จ (done) หรือ ไม่อนุมัติ (rejected) → ย้ายไปเก็บในประวัติ
+// ที่เหลือ (รออนุมัติ/รอใบเสนอราคา/อนุมัติแล้วกำลังซ่อม) ยังถือว่ากำลังดำเนินการ คงอยู่ในแท็บซ่อมบำรุง
+function isRepairResolved(r){return r.status==='done'||r.approval==='rejected';}
+
 function updateAdminMaintBadge(){
   const badge=document.getElementById('maintTabBadge');
   if(!badge)return;
-  const pending=repairs.filter(r=>r.status!=='done').length;
+  const pending=repairs.filter(r=>!isRepairResolved(r)).length;
   if(pending>0){badge.textContent=pending;badge.classList.remove('hidden');}
+  else badge.classList.add('hidden');
+  updateHistoryBadge();
+}
+function updateHistoryBadge(){
+  const badge=document.getElementById('historyCountBadge');
+  if(!badge)return;
+  const n=repairs.filter(isRepairResolved).length;
+  if(n>0){badge.textContent=n;badge.classList.remove('hidden');}
   else badge.classList.add('hidden');
 }
 
@@ -1999,9 +2028,10 @@ function renderAdminRepairList(){
   const statsEl=document.getElementById('adminRepairStats');
   const groupsEl=document.getElementById('adminRepairGroups');
   if(!statsEl||!groupsEl)return;
-  const totalPending=repairs.filter(r=>r.status!=='done').length;
-  const totalUrgent=repairs.filter(r=>r.status!=='done'&&r.urgency==='urgent').length;
-  const totalAwaiting=repairs.filter(r=>!r.approval||r.approval==='pending').length;
+  const activeRepairs=repairs.filter(r=>!isRepairResolved(r));
+  const totalPending=activeRepairs.length;
+  const totalUrgent=activeRepairs.filter(r=>r.urgency==='urgent').length;
+  const totalAwaiting=activeRepairs.filter(r=>!r.approval||r.approval==='pending').length;
   statsEl.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
     <div style="background:${totalAwaiting>0?'#FFFBEB':'#fff'};border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalAwaiting>0?'#FCD34D':'#E8EAF0'};">
       <div style="font-size:22px;font-weight:900;color:${totalAwaiting>0?'#92400E':'#1E90D6'};">${totalAwaiting}</div>
@@ -2017,14 +2047,14 @@ function renderAdminRepairList(){
     </div>
   </div>`;
   updateAdminMaintBadge();
-  if(!repairs.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">🔧</div><div class="empty-text">ยังไม่มีรายการแจ้งซ่อม</div></div>';return;}
+  if(!activeRepairs.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">🔧</div><div class="empty-text">ไม่มีรายการที่กำลังดำเนินการ<br><span style="font-size:11px;color:#aaa;">รายการที่เสร็จแล้วดูได้ในประวัติ (ตั้งค่า)</span></div></div>';return;}
 
   const byEmp={};
-  repairs.forEach(r=>{(byEmp[r.empId]=byEmp[r.empId]||[]).push(r);});
+  activeRepairs.forEach(r=>{(byEmp[r.empId]=byEmp[r.empId]||[]).push(r);});
   const groupArr=Object.entries(byEmp).map(([empId,items])=>{
     const info=_empLookup(empId,items[0].empName,items[0].plate);
     items.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-    return{empId,name:info.name,plate:info.plate,items,pending:items.filter(r=>r.status!=='done').length};
+    return{empId,name:info.name,plate:info.plate,items,pending:items.length};
   }).sort((a,b)=>b.pending-a.pending||a.name.localeCompare(b.name,'th'));
 
   groupsEl.innerHTML=groupArr.map(g=>`<div class="card" style="margin-bottom:12px;padding:14px;">
@@ -2061,6 +2091,73 @@ function renderAdminRepairList(){
         </div>`;
       }).join('')}
     </div>`).join('');
+}
+
+// ── ประวัติการซ่อม — รายการที่ซ่อมเสร็จแล้ว หรือไม่อนุมัติ ──
+function renderAdminHistory(){
+  const el=document.getElementById('adminHistoryContent');
+  if(!el)return;
+  updateHistoryBadge();
+  const resolved=repairs.filter(isRepairResolved);
+  if(!resolved.length){
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">📜</div><div class="empty-text">ยังไม่มีประวัติ<br><span style="font-size:11px;color:#aaa;">รายการที่ซ่อมเสร็จหรือไม่อนุมัติจะมาแสดงที่นี่</span></div></div>';
+    return;
+  }
+  const doneN=resolved.filter(r=>r.status==='done').length;
+  const rejN=resolved.filter(r=>r.approval==='rejected'&&r.status!=='done').length;
+  // จัดกลุ่มตามพนักงาน
+  const byEmp={};
+  resolved.forEach(r=>{(byEmp[r.empId]=byEmp[r.empId]||[]).push(r);});
+  const groupArr=Object.entries(byEmp).map(([empId,items])=>{
+    const info=_empLookup(empId,items[0].empName,items[0].plate);
+    items.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+    return{empId,name:info.name,plate:info.plate,items};
+  }).sort((a,b)=>a.name.localeCompare(b.name,'th'));
+  const stats=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+    <div style="background:#fff;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #E8EAF0;">
+      <div style="font-size:22px;font-weight:900;color:#475569;">${resolved.length}</div>
+      <div style="font-size:10px;color:#888;margin-top:2px;">📜 ทั้งหมด</div>
+    </div>
+    <div style="background:#F0FDF4;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #86EFAC;">
+      <div style="font-size:22px;font-weight:900;color:#10B981;">${doneN}</div>
+      <div style="font-size:10px;color:#888;margin-top:2px;">✅ ซ่อมเสร็จ</div>
+    </div>
+    <div style="background:#FEF2F2;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #FCA5A5;">
+      <div style="font-size:22px;font-weight:900;color:#DC2626;">${rejN}</div>
+      <div style="font-size:10px;color:#888;margin-top:2px;">❌ ไม่อนุมัติ</div>
+    </div>
+  </div>`;
+  el.innerHTML=stats+groupArr.map(g=>`<div class="card" style="margin-bottom:12px;padding:14px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div class="avatar" style="width:36px;height:36px;font-size:15px;">${esc(g.name.charAt(0))}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;color:#1a1a2e;font-size:13.5px;">${esc(g.name)}</div>
+          <div style="color:#888;font-size:11px;">🚛 ${esc(g.plate||'-')}</div>
+        </div>
+        <span class="pill" style="background:#F1F5F9;color:#475569;border:1px solid #CBD5E1;">${g.items.length} รายการ</span>
+      </div>
+      ${g.items.map(r=>{
+        const pill=repairStatusPill(r);
+        return`<div class="maint-card fixed" style="margin-bottom:8px;opacity:.95;">
+          <div style="color:#1a1a2e;font-size:13px;font-weight:600;line-height:1.5;">${esc(r.issue)}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+            <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};">${pill.text}</span>
+            <span style="color:#aaa;font-size:10.5px;">${fmt(r.createdAt)}</span>
+          </div>
+          <div class="row-btns" style="margin-top:8px;">
+            <button class="btn btn-gray btn-sm" style="flex:1;" onclick="restoreRepair('${r.id}')">↺ นำกลับมาดำเนินการ</button>
+            <button class="btn btn-red btn-sm" onclick="doDelRepair('${r.id}')">🗑️</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+// นำรายการในประวัติกลับมาที่แท็บซ่อมบำรุง (รีเซ็ตสถานะให้กลับมารอดำเนินการ)
+function restoreRepair(id){
+  const r=repairs.find(x=>x.id===id);if(!r)return;
+  if(!confirm('นำรายการนี้กลับมาที่แท็บซ่อมบำรุงเพื่อดำเนินการต่อ?'))return;
+  repairs=repairs.map(x=>x.id===id?{...x,status:'open',approval:x.approval==='rejected'?'pending':x.approval,updatedAt:new Date().toISOString()}:x);
+  saveRepairs();refreshRepairViews();
 }
 
 function renderAdminFluidList(){
@@ -2769,7 +2866,10 @@ function renderDoneByProv(){
 
 function switchAdminTab(t){
   document.getElementById('adminEmpPanel').classList.add('hidden');
-  document.getElementById('adminTabBar')?.classList.remove('hidden');
+  document.getElementById('adminHistoryPanel')?.classList.toggle('hidden',t!=='history');
+  // ประวัติเป็นหน้าย่อยที่เปิดจากตั้งค่า — ซ่อนแถบแท็บด้านบนเหมือนหน้าจัดการพนักงาน
+  if(t==='history'){document.getElementById('adminTabBar')?.classList.add('hidden');}
+  else{document.getElementById('adminTabBar')?.classList.remove('hidden');}
   document.getElementById('adminSummaryPanel').classList.toggle('hidden',t!=='summary');
   document.getElementById('adminMaintPanel').classList.toggle('hidden',t!=='maint');
   document.getElementById('adminCashPanel').classList.toggle('hidden',t!=='cash');
@@ -2779,18 +2879,19 @@ function switchAdminTab(t){
   document.getElementById('tabMaintTop')?.classList.toggle('active',t==='maint');
   document.getElementById('tabCashTop')?.classList.toggle('active',t==='cash');
   document.getElementById('tabLeaveTop')?.classList.toggle('active',t==='leave');
-  document.getElementById('tabSettings')?.classList.toggle('active',t==='settings');
+  document.getElementById('tabSettings')?.classList.toggle('active',t==='settings'||t==='history');
   ['navAdminSum','navAdminMaint','navAdminCash','navAdminLeave','navAdminSet'].forEach(id=>{document.getElementById(id)?.classList.remove('active');});
   if(t==='summary')document.getElementById('navAdminSum')?.classList.add('active');
   if(t==='maint')document.getElementById('navAdminMaint')?.classList.add('active');
   if(t==='cash')document.getElementById('navAdminCash')?.classList.add('active');
   if(t==='leave')document.getElementById('navAdminLeave')?.classList.add('active');
-  if(t==='settings')document.getElementById('navAdminSet')?.classList.add('active');
+  if(t==='settings'||t==='history')document.getElementById('navAdminSet')?.classList.add('active');
   if(t==='settings')renderSysInfo();
   if(t==='summary'){const el=document.getElementById('adminSummaryContent');if(el)el.innerHTML=buildSummaryHTML();}
   if(t==='leave'){const el=document.getElementById('adminLeaveContent');if(el)el.innerHTML=buildLeaveHTML();}
   if(t==='maint')renderAdminMaint();
   if(t==='cash')renderAdminCashList();
+  if(t==='history')renderAdminHistory();
 }
 
 // ── พนักงาน ย้ายไปอยู่ใต้ "ตั้งค่า" — เปิด/ปิดเป็นหน้าย่อย ──────────────────
