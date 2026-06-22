@@ -547,7 +547,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       </div>
       <!-- Emergency Reset Panel -->
       <div id="resetPwPanel" class="card hidden" style="margin-top:12px;display:flex;flex-direction:column;gap:12px;">
-        <div style="color:#EF4444;font-weight:700;">⚠️ รีเซ็ตรหัสผ่านฉุกเฉิน</div>
+        <div style="color:#EF4444;font-weight:700;"><span class="ic" data-ic="alert"></span> รีเซ็ตรหัสผ่านฉุกเฉิน</div>
         <div style="font-size:12px;color:#666;">กรอก Emergency Code เพื่อรีเซ็ตรหัสผ่านกลับเป็น <b>admin1234</b></div>
         <div><div class="inp-label">Emergency Code</div><input class="inp" id="emergencyCode" placeholder="SKE-RESET-2025"></div>
         <div id="resetMsg" class="msg-err hidden"></div>
@@ -579,7 +579,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="quick-grid">
     <button class="quick-card" onclick="openRepairModal()">
       <span id="repairDot" class="quick-card-dot hidden">0</span>
-      <div class="quick-card-icon">🔧</div>
+      <div class="quick-card-icon" data-ic="wrench"></div>
       <div class="quick-card-title">รายการแจ้งซ่อม</div>
       <div class="quick-card-sub" id="repairSub">ไม่มีรายการ</div>
     </button>
@@ -590,7 +590,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
     </button>
     <button class="quick-card" onclick="openCashModal()" style="grid-column:1/-1;flex-direction:row;justify-content:flex-start;text-align:left;gap:12px;padding:13px 14px;">
       <span id="cashDot" class="quick-card-dot hidden">0</span>
-      <div class="quick-card-icon" style="font-size:22px;">💰</div>
+      <div class="quick-card-icon" style="font-size:22px;" data-ic="money"></div>
       <div style="flex:1;min-width:0;">
         <div class="quick-card-title" style="margin-top:0;">เบิกเงินพนักงาน</div>
         <div class="quick-card-sub" id="cashSub">ยังไม่มีรายการ</div>
@@ -602,13 +602,13 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- bottom nav -->
   <div class="bottom-nav">
     <button class="nav-btn nav-btn-purple" id="navAdmin" onclick="goAdmin()" style="display:none;">
-      <span class="nav-icon">🛠️</span><span>จัดการ</span>
+      <span class="nav-icon" data-ic="grid"></span><span>จัดการ</span>
     </button>
     <button class="nav-btn nav-btn-orange active" id="navHome" onclick="closeEmpSettings()">
-      <span class="nav-icon">🏠</span><span>หน้าหลัก</span>
+      <span class="nav-icon" data-ic="home"></span><span>หน้าหลัก</span>
     </button>
     <button class="nav-btn" id="navSettings" onclick="openEmpSettings()">
-      <span class="nav-icon">⚙️</span><span>ตั้งค่า</span>
+      <span class="nav-icon" data-ic="settings"></span><span>ตั้งค่า</span>
     </button>
   </div>
 </div>
@@ -617,7 +617,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 <div id="empSettingsModal" class="hidden" style="position:fixed;inset:0;z-index:9998;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5);">
   <div style="background:#fff;border-radius:22px 22px 0 0;padding:18px 16px max(18px,env(safe-area-inset-bottom));max-width:480px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 -6px 30px rgba(0,0,0,.2);">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-      <div style="font-size:17px;font-weight:800;color:#1a1a2e;">⚙️ ตั้งค่า</div>
+      <div style="font-size:17px;font-weight:800;color:#1a1a2e;"><span class="ic" data-ic="settings"></span> ตั้งค่า</div>
       <button onclick="closeEmpSettings()" style="background:#F0F2F8;border:none;border-radius:50%;width:34px;height:34px;font-size:17px;color:#555;">✕</button>
     </div>
     <div class="card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px;">
@@ -636,7 +636,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 <div id="repairModal" class="hidden" style="position:fixed;inset:0;z-index:9998;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5);">
   <div class="maint-sheet">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-      <div style="font-size:17px;font-weight:800;color:#1a1a2e;">🔧 รายการแจ้งซ่อม</div>
+      <div style="font-size:17px;font-weight:800;color:#1a1a2e;"><span class="ic" data-ic="wrench"></span> รายการแจ้งซ่อม</div>
       <button onclick="closeRepairModal()" style="background:#F0F2F8;border:none;border-radius:50%;width:34px;height:34px;font-size:17px;color:#555;">✕</button>
     </div>
     <button class="btn btn-orange btn-full" onclick="toggleRepairForm()" id="repairFormToggleBtn">+ แจ้งซ่อมใหม่</button>
@@ -688,7 +688,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 <div id="cashModal" class="hidden" style="position:fixed;inset:0;z-index:9998;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5);">
   <div class="maint-sheet">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-      <div style="font-size:17px;font-weight:800;color:#1a1a2e;">💰 เบิกเงินพนักงาน</div>
+      <div style="font-size:17px;font-weight:800;color:#1a1a2e;"><span class="ic" data-ic="money"></span> เบิกเงินพนักงาน</div>
       <button onclick="closeCashModal()" style="background:#F0F2F8;border:none;border-radius:50%;width:34px;height:34px;font-size:17px;color:#555;">✕</button>
     </div>
     <div id="cashDayNotice"></div>
@@ -705,7 +705,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 <!-- ══ ALERT MODAL ══ -->
 <div id="alertModal" class="hidden" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:20px;">
   <div style="background:#fff;border-radius:20px;padding:24px 20px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.25);">
-    <div style="font-size:52px;margin-bottom:8px;">⚠️</div>
+    <div style="font-size:52px;margin-bottom:8px;color:#F59E0B;" data-ic="alert"></div>
     <div style="font-size:18px;font-weight:900;color:#DC2626;margin-bottom:6px;">แจ้งเตือน!</div>
     <div id="alertModalMsg" style="font-size:14px;color:#444;line-height:1.7;margin-bottom:18px;"></div>
     <button onclick="dismissAlert()" style="background:linear-gradient(135deg,#F47920,#1E90D6);color:#fff;border-radius:12px;padding:12px 32px;font-size:15px;font-weight:800;width:100%;">✓ รับทราบ — จะอัพเดทเดี๋ยวนี้</button>
@@ -716,7 +716,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 <!-- ══ ADMIN STALE ALERT MODAL — แจ้งเตือนผู้ดูแลเมื่อพนักงานไม่อัพเดทสถานะ ══ -->
 <div id="adminStaleModal" class="hidden" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:20px;">
   <div style="background:#fff;border-radius:20px;padding:24px 20px;max-width:360px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.25);">
-    <div style="font-size:52px;margin-bottom:8px;">🔔</div>
+    <div style="font-size:52px;margin-bottom:8px;color:#7B2FBE;" data-ic="bell"></div>
     <div style="font-size:18px;font-weight:900;color:#DC2626;margin-bottom:6px;">แจ้งเตือนผู้ดูแล!</div>
     <div id="adminStaleMsg" style="font-size:13.5px;color:#444;line-height:1.6;margin-bottom:18px;"></div>
     <button onclick="dismissAdminStale()" style="background:linear-gradient(135deg,#F47920,#1E90D6);color:#fff;border-radius:12px;padding:12px 32px;font-size:15px;font-weight:800;width:100%;">✓ รับทราบ — ไปดูภาพรวม</button>
@@ -731,7 +731,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 
 <!-- ══ TOAST — มีการเปลี่ยนสถานะรถ (กรณีทั่วไป แจ้งผู้ดูแลทันทีพร้อมเสียง) ══ -->
 <div id="statusChangeToast" class="hidden" onclick="dismissStatusChangeToast()" style="position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:10000;background:#1E90D6;color:#fff;padding:12px 18px;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.3);font-size:13px;max-width:90%;align-items:center;gap:8px;cursor:pointer;">
-  <span style="font-size:18px;">🔔</span><span id="statusChangeToastMsg"></span>
+  <span style="font-size:18px;" data-ic="bell"></span><span id="statusChangeToastMsg"></span>
 </div>
 
 <!-- ══ ADMIN ══ -->
@@ -747,11 +747,11 @@ select.inp option{background:#fff;color:#1a1a2e;}
 
   <!-- admin tabs -->
   <div class="admin-tab" id="adminTabBar">
-    <button class="admin-tab-btn active" id="tabSummaryTop" onclick="switchAdminTab('summary')">📊 ภาพรวม<span id="staleTabBadge" class="badge-num hidden">0</span></button>
-    <button class="admin-tab-btn" id="tabMaintTop" onclick="switchAdminTab('maint')">🔧 ซ่อมบำรุง<span id="maintTabBadge" class="badge-num hidden">0</span></button>
-    <button class="admin-tab-btn" id="tabCashTop" onclick="switchAdminTab('cash')">💰 เบิกเงิน<span id="cashTabBadge" class="badge-num hidden">0</span></button>
-    <button class="admin-tab-btn" id="tabLeaveTop" onclick="switchAdminTab('leave')">🌴 ลา<span id="leaveTabBadge" class="badge-num hidden">0</span></button>
-    <button class="admin-tab-btn" id="tabSettings" onclick="switchAdminTab('settings')">⚙️ ตั้งค่า</button>
+    <button class="admin-tab-btn active" id="tabSummaryTop" onclick="switchAdminTab('summary')"><span class="ic" data-ic="overview"></span> ภาพรวม<span id="staleTabBadge" class="badge-num hidden">0</span></button>
+    <button class="admin-tab-btn" id="tabMaintTop" onclick="switchAdminTab('maint')"><span class="ic" data-ic="wrench"></span> ซ่อมบำรุง<span id="maintTabBadge" class="badge-num hidden">0</span></button>
+    <button class="admin-tab-btn" id="tabCashTop" onclick="switchAdminTab('cash')"><span class="ic" data-ic="money"></span> เบิกเงิน<span id="cashTabBadge" class="badge-num hidden">0</span></button>
+    <button class="admin-tab-btn" id="tabLeaveTop" onclick="switchAdminTab('leave')"><span class="ic" data-ic="leave"></span> ลา<span id="leaveTabBadge" class="badge-num hidden">0</span></button>
+    <button class="admin-tab-btn" id="tabSettings" onclick="switchAdminTab('settings')"><span class="ic" data-ic="settings"></span> ตั้งค่า</button>
   </div>
 
   <div class="list-area">
@@ -763,8 +763,8 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <!-- maintenance panel: รายการแจ้งซ่อม + เปลี่ยนถ่ายของเหลว ของพนักงานทุกคน -->
     <div id="adminMaintPanel" class="hidden">
       <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <button class="admin-tab-btn active" id="amTabRepair" onclick="switchAdminMaintTab('repair')" style="flex:1;">🔧 แจ้งซ่อม</button>
-        <button class="admin-tab-btn" id="amTabFluid" onclick="switchAdminMaintTab('fluid')" style="flex:1;">🛢️ เปลี่ยนถ่าย</button>
+        <button class="admin-tab-btn active" id="amTabRepair" onclick="switchAdminMaintTab('repair')" style="flex:1;"><span class="ic" data-ic="wrench"></span> แจ้งซ่อม</button>
+        <button class="admin-tab-btn" id="amTabFluid" onclick="switchAdminMaintTab('fluid')" style="flex:1;"><span class="ic" data-ic="oil"></span> เปลี่ยนถ่าย</button>
       </div>
       <div id="adminRepairView">
         <div id="adminRepairStats"></div>
@@ -806,10 +806,10 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:12px;">
         <div style="color:#7B2FBE;font-weight:800;font-size:16px;">📜 ประวัติ</div>
         <div style="color:#888;font-size:12px;">รายการซ่อมที่ซ่อมเสร็จแล้ว หรือไม่อนุมัติ จะถูกย้ายมาเก็บที่นี่</div>
-        <button class="btn btn-purple btn-full" onclick="switchAdminTab('history')">📜 ดูประวัติการซ่อม<span id="historyCountBadge" class="badge-num hidden" style="margin-left:6px;">0</span></button>
+        <button class="btn btn-purple btn-full" onclick="switchAdminTab('history')"><span class="ic" data-ic="history"></span> ดูประวัติการซ่อม<span id="historyCountBadge" class="badge-num hidden" style="margin-left:6px;">0</span></button>
       </div>
       <div class="card" style="display:flex;flex-direction:column;gap:16px;">
-        <div style="color:#7B2FBE;font-weight:800;font-size:16px;">⚙️ ตั้งค่าระบบ</div>
+        <div style="color:#7B2FBE;font-weight:800;font-size:16px;"><span class="ic" data-ic="settings"></span> ตั้งค่าระบบ</div>
         <div>
           <div class="inp-label" style="margin-bottom:8px;">เปลี่ยนรหัสผ่านผู้ดูแล</div>
           <input class="inp" id="newPwInput" type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 4 ตัว)">
@@ -848,22 +848,22 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- bottom nav admin -->
   <div class="bottom-nav">
     <button class="nav-btn active" id="navAdminSum" onclick="switchAdminTab('summary');highlightAdminNav(this)">
-      <span class="nav-icon">📊</span><span>ภาพรวม</span>
+      <span class="nav-icon" data-ic="overview"></span><span>ภาพรวม</span>
     </button>
     <button class="nav-btn" id="navAdminMaint" onclick="switchAdminTab('maint');highlightAdminNav(this)">
-      <span class="nav-icon">🔧</span><span>ซ่อมบำรุง</span>
+      <span class="nav-icon" data-ic="wrench"></span><span>ซ่อมบำรุง</span>
     </button>
     <button class="nav-btn" id="navAdminCash" onclick="switchAdminTab('cash');highlightAdminNav(this)">
-      <span class="nav-icon">💰</span><span>เบิกเงิน</span>
+      <span class="nav-icon" data-ic="money"></span><span>เบิกเงิน</span>
     </button>
     <button class="nav-btn" id="navAdminLeave" onclick="switchAdminTab('leave');highlightAdminNav(this)">
-      <span class="nav-icon">🌴</span><span>ลา</span>
+      <span class="nav-icon" data-ic="leave"></span><span>ลา</span>
     </button>
     <button class="nav-btn" id="navAdminSet" onclick="switchAdminTab('settings');highlightAdminNav(this)">
-      <span class="nav-icon">⚙️</span><span>ตั้งค่า</span>
+      <span class="nav-icon" data-ic="settings"></span><span>ตั้งค่า</span>
     </button>
     <button class="nav-btn nav-btn-orange" onclick="goBack()">
-      <span class="nav-icon">🏠</span><span>กลับ</span>
+      <span class="nav-icon" data-ic="home"></span><span>กลับ</span>
     </button>
   </div>
 </div>
@@ -872,17 +872,48 @@ select.inp option{background:#fff;color:#1a1a2e;}
 // ── 77 จังหวัด ────────────────────────────────────────────────────────────────
 const PROVINCES=["กรุงเทพมหานคร","กระบี่","กาญจนบุรี","กาฬสินธุ์","กำแพงเพชร","ขอนแก่น","จันทบุรี","ฉะเชิงเทรา","ชลบุรี","ชัยนาท","ชัยภูมิ","ชุมพร","เชียงราย","เชียงใหม่","ตรัง","ตราด","ตาก","นครนายก","นครปฐม","นครพนม","นครราชสีมา","นครศรีธรรมราช","นครสวรรค์","นนทบุรี","นราธิวาส","น่าน","บึงกาฬ","บุรีรัมย์","ปทุมธานี","ประจวบคีรีขันธ์","ปราจีนบุรี","ปัตตานี","พระนครศรีอยุธยา","พะเยา","พังงา","พัทลุง","พิจิตร","พิษณุโลก","เพชรบุรี","เพชรบูรณ์","แพร่","ภูเก็ต","มหาสารคาม","มุกดาหาร","แม่ฮ่องสอน","ยโสธร","ยะลา","ร้อยเอ็ด","ระนอง","ระยอง","ราชบุรี","ลพบุรี","ลำปาง","ลำพูน","เลย","ศรีสะเกษ","สกลนคร","สงขลา","สตูล","สมุทรปราการ","สมุทรสงคราม","สมุทรสาคร","สระแก้ว","สระบุรี","สิงห์บุรี","สุโขทัย","สุพรรณบุรี","สุราษฎร์ธานี","สุรินทร์","หนองคาย","หนองบัวลำภู","อ่างทอง","อำนาจเจริญ","อุดรธานี","อุตรดิตถ์","อุทัยธานี","อุบลราชธานี"];
 
+// ── ชุดไอคอน SVG ระดับมืออาชีพ (เส้นสม่ำเสมอ สไตล์ Lucide) แทนอิโมจิ ───────────────
+// ไอคอนทำตัวเหมือน "ตัวอักษร": กว้าง/สูง = 1em ปรับขนาดตาม font-size และรับสีจาก color (currentColor)
+const SKE_ICONS = {
+  overview:'<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  money:'<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+  leave:'<path d="M13 8c0-2.76-2.46-5-5.5-5S2 5.24 2 8h2l1-1 1 1h4"/><path d="M13 7.14A5.82 5.82 0 0 1 16.5 6c3.04 0 5.5 2.24 5.5 5h-3l-1-1-1 1h-3"/><path d="M5.89 9.71c-2.15 2.15-2.3 5.47-.35 7.43l4.24-4.25.7-.7.71-.71 2.12-2.12c-1.95-1.96-5.27-1.8-7.42.35z"/><path d="M11 15.5c.5 2.5-.17 4.5-1 6.5h4c2-5.5-.5-12-1-14"/>',
+  settings:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  home:'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  grid:'<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  bell:'<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+  check:'<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+  oil:'<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C4 11.1 3 13 3 15a7 7 0 0 0 7 7z"/>',
+  history:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+  truck:'<path d="M5 18H3c-.6 0-1-.4-1-1V7c0-.6.4-1 1-1h10c.6 0 1 .4 1 1v11"/><path d="M14 9h4l4 4v4c0 .6-.4 1-1 1h-2"/><circle cx="7" cy="18" r="2"/><path d="M15 18H9"/><circle cx="17" cy="18" r="2"/>',
+  bayin:'<path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/><rect width="12" height="8" x="6" y="14"/>',
+  boxup:'<path d="m18 9-6-6-6 6"/><path d="M12 3v14"/><path d="M5 21h14"/>',
+  boxdown:'<path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/>',
+  returning:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  hourglass:'<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>',
+  box:'<path d="m16 16 2 2 4-4"/><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><path d="M16.5 9.4 7.55 4.24"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" x2="12" y1="22" y2="12"/>',
+  arrived:'<path d="M12 22s8-5.33 8-12a8 8 0 1 0-16 0c0 6.67 8 12 8 12z"/><path d="m9 10 2 2 4-4"/>',
+  idle:'<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+  user:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  note:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
+  pin:'<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'
+};
+function skeIcon(name){const p=SKE_ICONS[name];return p?('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;display:inline-block;vertical-align:-.18em;flex-shrink:0" aria-hidden="true">'+p+'</svg>'):'';}
+window.skeIcon = skeIcon;
+
 const STATUSES=[
-  {id:"loading_bay",label:"เข้าช่องขึ้นงานแล้ว",emoji:"🟢",color:"#15803D",bg:"#F0FDF4",border:"#86EFAC"},
-  {id:"unload_bay", label:"ถึงแล้วรอลงงาน",  emoji:"🔵",color:"#1D4ED8",bg:"#EFF6FF",border:"#93C5FD"},
-  {id:"loading",    label:"กำลังขึ้นงาน",         emoji:"🟡",color:"#92400E",bg:"#FFFBEB",border:"#FCD34D"},
-  {id:"unloading",  label:"กำลังลงงาน",           emoji:"🟠",color:"#C2410C",bg:"#FFF7ED",border:"#FCA5A5"},
-  {id:"traveling",  label:"ออกเดินทาง",           emoji:"🚛",color:"#0E7490",bg:"#ECFEFF",border:"#67E8F9"},
-  {id:"returning",  label:"กำลังไหลกลับ",         emoji:"🔁",color:"#0F766E",bg:"#F0FDFA",border:"#5EEAD4"},
-  {id:"standby",    label:"สแตนบายรอขึ้นงาน",      emoji:"⏳",color:"#6D28D9",bg:"#F5F3FF",border:"#C4B5FD"},
-  {id:"got_job",    label:"ได้งานแล้ว",            emoji:"📦",color:"#4F46E5",bg:"#EEF2FF",border:"#A5B4FC"},
-  {id:"repairing",  label:"กำลังซ่อมรถอยู่",       emoji:"🔧",color:"#B91C1C",bg:"#FEF2F2",border:"#FCA5A5"},
-  {id:"done",       label:"สแตนบายว่างงาน",        emoji:"✅",color:"#065F46",bg:"#ECFDF5",border:"#6EE7B7"},
+  {id:"loading_bay",label:"เข้าช่องขึ้นงานแล้ว",ic:"bayin",    emoji:"🟢",color:"#15803D",bg:"#F0FDF4",border:"#86EFAC"},
+  {id:"unload_bay", label:"ถึงแล้วรอลงงาน",  ic:"arrived",  emoji:"🔵",color:"#1D4ED8",bg:"#EFF6FF",border:"#93C5FD"},
+  {id:"loading",    label:"กำลังขึ้นงาน",         ic:"boxup",    emoji:"🟡",color:"#92400E",bg:"#FFFBEB",border:"#FCD34D"},
+  {id:"unloading",  label:"กำลังลงงาน",           ic:"boxdown",  emoji:"🟠",color:"#C2410C",bg:"#FFF7ED",border:"#FCA5A5"},
+  {id:"traveling",  label:"ออกเดินทาง",           ic:"truck",    emoji:"🚛",color:"#0E7490",bg:"#ECFEFF",border:"#67E8F9"},
+  {id:"returning",  label:"กำลังไหลกลับ",         ic:"returning",emoji:"🔁",color:"#0F766E",bg:"#F0FDFA",border:"#5EEAD4"},
+  {id:"standby",    label:"สแตนบายรอขึ้นงาน",      ic:"hourglass",emoji:"⏳",color:"#6D28D9",bg:"#F5F3FF",border:"#C4B5FD"},
+  {id:"got_job",    label:"ได้งานแล้ว",            ic:"box",      emoji:"📦",color:"#4F46E5",bg:"#EEF2FF",border:"#A5B4FC"},
+  {id:"repairing",  label:"กำลังซ่อมรถอยู่",       ic:"wrench",   emoji:"🔧",color:"#B91C1C",bg:"#FEF2F2",border:"#FCA5A5"},
+  {id:"done",       label:"สแตนบายว่างงาน",        ic:"idle",     emoji:"✅",color:"#065F46",bg:"#ECFDF5",border:"#6EE7B7"},
 ];
 function getS(id){return STATUSES.find(s=>s.id===id)||STATUSES.find(s=>s.id==='standby')||STATUSES[0];}
 // คำนวณลำดับคิวของพนักงานคนนี้ ตอนสถานะเป็น "สแตนบายว่างงาน" — ใช้ตรรกะเดียวกับฝั่งแอดมิน (เรียงตามเวลาว่างงาน จังหวัดเดียวกัน)
@@ -992,7 +1023,7 @@ function leaveIcon(e){
   if(!e.onLeave)return'';
   const border=e.leaveApproval==='approved'?'#6EE7B7':e.leaveApproval==='rejected'?'#FCA5A5':'#FDE68A';
   const title=e.leaveApproval==='approved'?'ลา (อนุมัติแล้ว)':e.leaveApproval==='rejected'?'ลา (ไม่อนุมัติ)':'ลา (รออนุมัติ)';
-  return`<span class="leave-badge" style="border-color:${border};" title="${title}">🌴</span>`;
+  return`<span class="leave-badge" style="border-color:${border};" title="${title}">${skeIcon('leave')}</span>`;
 }
 
 // ── Helpers: escape user text + clickable phone ──────────────────────────────
@@ -1218,7 +1249,7 @@ function renderEmpList(){
     return `<button class="emp-btn" onclick="askPin('${e.id}')">
       <div class="avatar" style="width:46px;height:46px;font-size:19px;">${esc(e.name.charAt(0))}${leaveIcon(e)}</div>
       <div style="flex:1;min-width:0;"><div style="color:#1a1a2e;font-weight:700;font-size:15px;">${esc(e.name)}</div><div style="color:#888;font-size:12px;">🚛 ${esc(e.plate)}</div></div>
-      <div class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;">${s.emoji} ${esc(lbl)}</div>
+      <div class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;">${skeIcon(s.ic)} ${esc(lbl)}</div>
     </button>`;
   }).join('');
 }
@@ -1358,7 +1389,7 @@ function showAlertModal(me, hoursAgo){
   const timeStr = h > 0 ? `${h} ชม. ${m} นาที` : `${m} นาที`;
   document.getElementById('alertModalMsg').innerHTML =
     `สถานะปัจจุบันของคุณ:<br>
-     <b style="color:${s?.color||'#333'}">${s?.emoji||''} ${s?.label||me.status}</b><br><br>
+     <b style="color:${s?.color||'#333'}">${s?skeIcon(s.ic):''} ${s?.label||me.status}</b><br><br>
      ไม่มีการอัพเดทมาแล้ว <b style="color:#DC2626">${timeStr}</b><br>
      กรุณาอัพเดทสถานะให้เป็นปัจจุบัน`;
   document.getElementById('alertModal').classList.remove('hidden');
@@ -1476,7 +1507,7 @@ function showStatusChangeToast(list){
   if(!el||!msg)return;
   const parts=list.map(e=>{
     const s=getS(e.status);
-    return `<b>${esc(e.name)}</b> → ${s.emoji} ${esc(s.label)}`;
+    return `<b>${esc(e.name)}</b> → ${skeIcon(s.ic)} ${esc(s.label)}`;
   });
   msg.innerHTML=list.length===1?parts[0]:`มีการเปลี่ยนสถานะ ${list.length} คัน: ${parts.join(', ')}`;
   el.classList.remove('hidden');el.style.display='flex';
@@ -1689,7 +1720,7 @@ function renderRepairList(){
   if(!el||!currentUser)return;
   const mine=repairs.filter(r=>r.empId===currentUser.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
   if(!mine.length){
-    el.innerHTML='<div class="maint-empty"><div class="empty-icon">🔧</div><div>ยังไม่มีรายการแจ้งซ่อม</div></div>';
+    el.innerHTML='<div class="maint-empty"><div class="empty-icon">'+skeIcon('wrench')+'</div><div>ยังไม่มีรายการแจ้งซ่อม</div></div>';
     updateMaintBadges();
     return;
   }
@@ -1798,7 +1829,7 @@ function renderFluidList(){
   if(!el||!currentUser)return;
   const mine=fluidLogs.filter(f=>f.empId===currentUser.id).sort((a,b)=>new Date(b.changedAt)-new Date(a.changedAt));
   if(!mine.length){
-    el.innerHTML='<div class="maint-empty"><div class="empty-icon">🛢️</div><div>ยังไม่มีบันทึกการเปลี่ยนถ่าย</div></div>';
+    el.innerHTML='<div class="maint-empty"><div class="empty-icon">'+skeIcon('oil')+'</div><div>ยังไม่มีบันทึกการเปลี่ยนถ่าย</div></div>';
     updateMaintBadges();
     return;
   }
@@ -1810,7 +1841,7 @@ function renderFluidList(){
         <span style="color:#7B2FBE;font-size:11.5px;font-weight:700;">📅 ${fmtDate(f.changedAt)}</span>
       </div>
       ${f.odometer?`<div style="color:#888;font-size:12px;margin-top:6px;">🧭 เลขไมล์: ${esc(f.odometer)} กม.</div>`:''}
-      ${f.note?`<div style="color:#666;font-size:12px;margin-top:4px;">📝 ${esc(f.note)}</div>`:''}
+      ${f.note?`<div style="color:#666;font-size:12px;margin-top:4px;">${skeIcon('note')} ${esc(f.note)}</div>`:''}
       <div class="row-btns" style="margin-top:10px;">
         <button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelFluid('${f.id}')">🗑️ ลบรายการ</button>
       </div>
@@ -1901,7 +1932,7 @@ function renderCashList(){
   if(!el||!currentUser)return;
   const mine=cashRequests.filter(s=>s.empId===currentUser.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
   if(!mine.length){
-    el.innerHTML='<div class="maint-empty"><div class="empty-icon">💰</div><div>ยังไม่มีรายการเบิกเงิน</div></div>';
+    el.innerHTML='<div class="maint-empty"><div class="empty-icon">'+skeIcon('money')+'</div><div>ยังไม่มีรายการเบิกเงิน</div></div>';
     updateMaintBadges();
     return;
   }
@@ -2047,7 +2078,7 @@ function renderAdminRepairList(){
     </div>
   </div>`;
   updateAdminMaintBadge();
-  if(!activeRepairs.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">🔧</div><div class="empty-text">ไม่มีรายการที่กำลังดำเนินการ<br><span style="font-size:11px;color:#aaa;">รายการที่เสร็จแล้วดูได้ในประวัติ (ตั้งค่า)</span></div></div>';return;}
+  if(!activeRepairs.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">'+skeIcon('wrench')+'</div><div class="empty-text">ไม่มีรายการที่กำลังดำเนินการ<br><span style="font-size:11px;color:#aaa;">รายการที่เสร็จแล้วดูได้ในประวัติ (ตั้งค่า)</span></div></div>';return;}
 
   const byEmp={};
   activeRepairs.forEach(r=>{(byEmp[r.empId]=byEmp[r.empId]||[]).push(r);});
@@ -2100,7 +2131,7 @@ function renderAdminHistory(){
   updateHistoryBadge();
   const resolved=repairs.filter(isRepairResolved);
   if(!resolved.length){
-    el.innerHTML='<div class="empty-state"><div class="empty-icon">📜</div><div class="empty-text">ยังไม่มีประวัติ<br><span style="font-size:11px;color:#aaa;">รายการที่ซ่อมเสร็จหรือไม่อนุมัติจะมาแสดงที่นี่</span></div></div>';
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">'+skeIcon('history')+'</div><div class="empty-text">ยังไม่มีประวัติ<br><span style="font-size:11px;color:#aaa;">รายการที่ซ่อมเสร็จหรือไม่อนุมัติจะมาแสดงที่นี่</span></div></div>';
     return;
   }
   const doneN=resolved.filter(r=>r.status==='done').length;
@@ -2165,7 +2196,7 @@ function renderAdminFluidList(){
   const groupsEl=document.getElementById('adminFluidGroups');
   if(!statsEl||!groupsEl)return;
   statsEl.innerHTML=`<div style="color:#7B2FBE;font-size:12px;font-weight:700;margin-bottom:12px;">🛢️ บันทึกทั้งหมด ${fluidLogs.length} รายการ</div>`;
-  if(!fluidLogs.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">🛢️</div><div class="empty-text">ยังไม่มีบันทึกการเปลี่ยนถ่าย</div></div>';return;}
+  if(!fluidLogs.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">'+skeIcon('oil')+'</div><div class="empty-text">ยังไม่มีบันทึกการเปลี่ยนถ่าย</div></div>';return;}
 
   const byEmp={};
   fluidLogs.forEach(f=>{(byEmp[f.empId]=byEmp[f.empId]||[]).push(f);});
@@ -2192,7 +2223,7 @@ function renderAdminFluidList(){
             <span style="color:#7B2FBE;font-size:11px;font-weight:700;">📅 ${fmtDate(f.changedAt)}</span>
           </div>
           ${f.odometer?`<div style="color:#888;font-size:11.5px;margin-top:5px;">🧭 เลขไมล์: ${esc(f.odometer)} กม.</div>`:''}
-          ${f.note?`<div style="color:#666;font-size:11.5px;margin-top:3px;">📝 ${esc(f.note)}</div>`:''}
+          ${f.note?`<div style="color:#666;font-size:11.5px;margin-top:3px;">${skeIcon('note')} ${esc(f.note)}</div>`:''}
           <div class="row-btns" style="margin-top:8px;">
             <button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelFluid('${f.id}')">🗑️ ลบรายการ</button>
           </div>
@@ -2230,11 +2261,11 @@ function renderAdminCashList(){
       </div>
       <div style="background:#fff;border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalPending>0?'#FCD34D':'#E8EAF0'};">
         <div style="font-size:20px;font-weight:900;color:${totalPending>0?'#92400E':'#1E90D6'};">฿${fmtBaht(totalPendingAmount)}</div>
-        <div style="font-size:11px;color:#888;margin-top:2px;">💰 ยอดรอจ่าย</div>
+        <div style="font-size:11px;color:#888;margin-top:2px;">${skeIcon('money')} ยอดรอจ่าย</div>
       </div>
     </div>`;
   updateAdminCashBadge();
-  if(!cashRequests.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">💰</div><div class="empty-text">ยังไม่มีรายการเบิกเงิน</div></div>';return;}
+  if(!cashRequests.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">'+skeIcon('money')+'</div><div class="empty-text">ยังไม่มีรายการเบิกเงิน</div></div>';return;}
 
   const byEmp={};
   cashRequests.forEach(s=>{(byEmp[s.empId]=byEmp[s.empId]||[]).push(s);});
@@ -2289,7 +2320,7 @@ function refreshAdmin(){
 // ── Province HTML ─────────────────────────────────────────────────────────────
 function provHTML(sid,curProv){
   if(sid==='standby'){
-    return`<div class="province-box"><div class="province-title">📍 จังหวัดที่สแตนบาย</div>
+    return`<div class="province-box"><div class="province-title">${skeIcon('pin')} จังหวัดที่สแตนบาย</div>
       <select class="province-sel inp" id="provSel" onchange="_selProv=this.value">
         <option value="">-- เลือกจังหวัด --</option>
         ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
@@ -2310,7 +2341,7 @@ function provHTML(sid,curProv){
       </select></div>`;
   }
   if(sid==='done'){
-    return`<div class="province-box"><div class="province-title">📍 จังหวัดที่ว่างงาน</div>
+    return`<div class="province-box"><div class="province-title">${skeIcon('pin')} จังหวัดที่ว่างงาน</div>
       <select class="province-sel inp" id="provSel" onchange="_selProv=this.value">
         <option value="">-- เลือกจังหวัด --</option>
         ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
@@ -2355,28 +2386,28 @@ function renderDashboard(){
       <button id="editBtn" onclick="toggleEdit()" style="background:${s.color};color:#fff;border-radius:10px;padding:7px 13px;font-size:13px;font-weight:700;flex-shrink:0;">${editOpen?'✕ ยกเลิก':'✎ แก้ไข'}</button>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:10px 12px;background:rgba(255,255,255,.7);border-radius:10px;">
-      <span style="font-size:24px;">${s.emoji}</span>
+      <span style="font-size:24px;color:${s.color};">${skeIcon(s.ic)}</span>
       <span style="color:${s.color};font-weight:700;font-size:15px;">${lbl}</span>
     </div>
     ${queueInfo?`<div style="display:flex;align-items:center;gap:9px;margin-top:8px;padding:9px 12px;background:#ECFDF5;border-radius:10px;border:1.5px solid #6EE7B7;">
       <span style="flex-shrink:0;width:26px;height:26px;border-radius:50%;background:#065F46;color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;">${queueInfo.pos}</span>
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:800;color:#065F46;">คุณอยู่คิวที่ ${queueInfo.pos} จาก ${queueInfo.total} คัน</div>
-        <div style="font-size:11px;color:#888;">${queueInfo.prov!=='ไม่ระบุจังหวัด'?`📍 ${esc(queueInfo.prov)} · `:''}${queueInfo.pos===1?'คิวต่อไปที่ควรได้งานก่อน':'รอคิวก่อนหน้าได้งานก่อน'}</div>
+        <div style="font-size:11px;color:#888;">${queueInfo.prov!=='ไม่ระบุจังหวัด'?`${skeIcon('pin')} ${esc(queueInfo.prov)} · `:''}${queueInfo.pos===1?'คิวต่อไปที่ควรได้งานก่อน':'รอคิวก่อนหน้าได้งานก่อน'}</div>
       </div>
     </div>`:''}
     ${me.province?`<div id="weatherWidget" style="display:flex;align-items:center;gap:9px;margin-top:8px;padding:9px 12px;background:#fff;border-radius:10px;border:1px solid #E0F2FE;">
       <span style="font-size:20px;">🌡️</span>
       <div style="flex:1;"><div style="font-size:12px;color:#aaa;">กำลังโหลดสภาพอากาศ...</div></div>
     </div>`:''}
-    ${me.note?`<div style="color:#666;font-size:12px;margin-top:8px;">📝 ${esc(me.note)}</div>`:''}
+    ${me.note?`<div style="color:#666;font-size:12px;margin-top:8px;">${skeIcon('note')} ${esc(me.note)}</div>`:''}
     ${me.status==='standby'&&me.standbyAt?`<div style="color:#7B2FBE;font-size:12px;font-weight:700;margin-top:6px;padding:5px 10px;background:#F5F3FF;border-radius:8px;border:1px solid #C4B5FD;">⏱️ สแตนบายตั้งแต่: ${fmt(me.standbyAt)}</div>`:''}
     ${me.updatedAt?`<div style="color:#aaa;font-size:11px;margin-top:4px;">🕐 อัพเดท: ${fmt(me.updatedAt)}</div>`:''}
     <div id="editPanel" class="edit-panel ${editOpen?'':'hidden'}">
       <div class="status-grid">${STATUSES.map(st=>`
         <button class="status-opt ${_selStatus===st.id?'sel':''}" id="sopt_${st.id}"
           style="border-color:${_selStatus===st.id?st.color:'#E8EAF0'};color:${_selStatus===st.id?st.color:'#888'};background:${_selStatus===st.id?st.bg:'#F5F6FA'};"
-          onclick="selStat('${st.id}')"><span class="status-emoji">${st.emoji}</span><br>${st.label}</button>`).join('')}</div>
+          onclick="selStat('${st.id}')"><span class="status-emoji" style="color:${st.color}">${skeIcon(st.ic)}</span><br>${st.label}</button>`).join('')}</div>
       <div id="provWrap">${provHTML(_selStatus,_selProv)}</div>
       <textarea id="noteInp" rows="2" class="inp" style="margin-top:10px;width:100%;" placeholder="หมายเหตุ (ไม่บังคับ)">${me.note||''}</textarea>
       <button class="btn btn-blue btn-full" style="margin-top:10px;" onclick="doSave()">✓ บันทึกสถานะ</button>
@@ -2384,20 +2415,20 @@ function renderDashboard(){
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(0,0,0,.08);">
       ${me.onLeave?`
         <div style="color:#475569;font-size:12px;font-weight:700;padding:8px 10px;background:#F1F5F9;border-radius:8px;border:1px solid #CBD5E1;">🌴 แจ้งลา: ${fmtLeaveRange(me)}</div>
-        ${me.leaveNote?`<div style="color:#666;font-size:12px;margin-top:6px;">📝 ${esc(me.leaveNote)}</div>`:''}
+        ${me.leaveNote?`<div style="color:#666;font-size:12px;margin-top:6px;">${skeIcon('note')} ${esc(me.leaveNote)}</div>`:''}
         <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
           <span class="pill" style="background:${leavePill.bg};color:${leavePill.color};border:1px solid ${leavePill.border};">${leavePill.text}</span>
           <button class="btn btn-gray btn-sm" onclick="doCancelLeave()">✕ ยกเลิกการลา</button>
         </div>
       `:`
-        <button class="btn btn-gray btn-full" style="font-size:13px;" onclick="toggleLeaveForm()">${leaveFormOpen?'✕ ยกเลิก':'🌴 แจ้งลา'}</button>
+        <button class="btn btn-gray btn-full" style="font-size:13px;" onclick="toggleLeaveForm()">${leaveFormOpen?'✕ ยกเลิก':skeIcon('leave')+' แจ้งลา'}</button>
         <div id="leaveFormWrap" class="${leaveFormOpen?'':'hidden'}" style="margin-top:10px;">
           <div class="province-box">
             <div class="province-title">📅 ลาตั้งแต่วันที่</div>
             <input type="date" class="inp" id="leaveFromInp" value="${_selLeaveAt||''}">
             <div class="province-title" style="margin-top:10px;">📅 ถึงวันที่</div>
             <input type="date" class="inp" id="leaveToInp" value="${_selLeaveTo||''}">
-            <div class="province-title" style="margin-top:10px;">📝 หมายเหตุการลา</div>
+            <div class="province-title" style="margin-top:10px;">${skeIcon('note')} หมายเหตุการลา</div>
             <textarea class="inp" id="leaveNoteInp2" rows="2" placeholder="เช่น ลากิจ, ลาป่วย, ลาพักร้อน...">${esc(_selLeaveNote||'')}</textarea>
           </div>
           <button class="btn btn-blue btn-full" style="margin-top:10px;" onclick="doRequestLeave()">✓ ส่งคำขอลา</button>
@@ -2457,7 +2488,7 @@ function doCancelLeave(){
 
 function buildSummaryHTML(){
   if(!employees.length){
-    return '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">ยังไม่มีข้อมูลพนักงาน</div></div>';
+    return '<div class="empty-state"><div class="empty-icon">'+skeIcon('overview')+'</div><div class="empty-text">ยังไม่มีข้อมูลพนักงาน</div></div>';
   }
 
   // นับแต่ละสถานะ
@@ -2477,7 +2508,7 @@ function buildSummaryHTML(){
     </div>
     <div style="background:${stale>0?'#FFF5F5':'#F0FDF4'};border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${stale>0?'#FCA5A5':'#86EFAC'};">
       <div style="font-size:28px;font-weight:900;color:${stale>0?'#EF4444':'#10B981'};">${stale}</div>
-      <div style="font-size:11px;color:#888;margin-top:2px;">${stale>0?'⚠️ ยังไม่อัพเดท':'✅ อัพเดทครบ'}</div>
+      <div style="font-size:11px;color:#888;margin-top:2px;">${stale>0?skeIcon('alert')+' ยังไม่อัพเดท':skeIcon('check')+' อัพเดทครบ'}</div>
     </div>
   </div>`;
 
@@ -2486,7 +2517,7 @@ function buildSummaryHTML(){
   if(stale24List.length){
     stale24List.sort((a,b)=>{const av=a.updatedAt?new Date(a.updatedAt).getTime():0,bv=b.updatedAt?new Date(b.updatedAt).getTime():0;return av-bv;});
     html+=`<div style="background:#FEF2F2;border:2px solid #F87171;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
-      <div style="color:#B91C1C;font-weight:800;font-size:13.5px;margin-bottom:8px;">🔔 ไม่อัพเดทสถานะเกิน ${STALE_ALL_HOURS} ชม. — ทุกสถานะ (${stale24List.length} คน)</div>
+      <div style="color:#B91C1C;font-weight:800;font-size:13.5px;margin-bottom:8px;">${skeIcon('alert')} ไม่อัพเดทสถานะเกิน ${STALE_ALL_HOURS} ชม. — ทุกสถานะ (${stale24List.length} คน)</div>
       <div style="display:flex;flex-direction:column;gap:6px;">`;
     stale24List.forEach(e=>{
       const s=getS(e.status);const never=!e.updatedAt;
@@ -2495,7 +2526,7 @@ function buildSummaryHTML(){
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
           <div style="font-size:11px;color:#888;">${esc(e.plate||'-')}${phoneLink(e.phone)}</div>
-          <span class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:9.5px;margin-top:3px;display:inline-block;">${s.emoji} ${esc(s.label)}</span>
+          <span class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:9.5px;margin-top:3px;display:inline-block;">${skeIcon(s.ic)} ${esc(s.label)}</span>
         </div>
         <span style="font-size:10px;color:#DC2626;font-weight:700;white-space:nowrap;text-align:right;">${never?'ยังไม่เคยอัพเดท':'ล่าสุด<br>'+fmt(e.updatedAt)}</span>
       </div>`;
@@ -2508,7 +2539,7 @@ function buildSummaryHTML(){
   if(staleList.length){
     staleList.sort((a,b)=>{const av=a.updatedAt?new Date(a.updatedAt).getTime():0,bv=b.updatedAt?new Date(b.updatedAt).getTime():0;return av-bv;});
     html+=`<div style="background:#FFF5F5;border:1.5px solid #FCA5A5;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
-      <div style="color:#DC2626;font-weight:700;font-size:13px;margin-bottom:8px;">⚠️ ยังไม่อัพเดทเกิน ${ALERT_HOURS} ชม. — เฉพาะกำลังทำงานที่จุดขึ้น-ลงสินค้า (${staleList.length} คน)</div>
+      <div style="color:#DC2626;font-weight:700;font-size:13px;margin-bottom:8px;">${skeIcon('alert')} ยังไม่อัพเดทเกิน ${ALERT_HOURS} ชม. — เฉพาะกำลังทำงานที่จุดขึ้น-ลงสินค้า (${staleList.length} คน)</div>
       <div style="display:flex;flex-direction:column;gap:6px;">`;
     staleList.forEach(e=>{
       const never=!e.updatedAt;
@@ -2531,7 +2562,7 @@ function buildSummaryHTML(){
     if(cnt===0)return;
     html+=`<div style="background:#fff;border-radius:12px;padding:11px 14px;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,.05);border:1.5px solid ${st.border};">
       <div style="display:flex;align-items:center;gap:10px;">
-        <span style="font-size:22px;">${st.emoji}</span>
+        <span style="font-size:22px;color:${st.color};">${skeIcon(st.ic)}</span>
         <div style="flex:1;">
           <div style="font-weight:700;color:${st.color};font-size:13px;">${st.label}</div>
         </div>
@@ -2554,7 +2585,7 @@ function buildSummaryHTML(){
 function buildLeaveHTML(){
   const onLeaveList=employees.filter(e=>e.onLeave);
   if(!onLeaveList.length){
-    return '<div class="empty-state"><div class="empty-icon">🌴</div><div class="empty-text">ไม่มีพนักงานลาในขณะนี้</div></div>';
+    return '<div class="empty-state"><div class="empty-icon">'+skeIcon('leave')+'</div><div class="empty-text">ไม่มีพนักงานลาในขณะนี้</div></div>';
   }
   onLeaveList.sort((a,b)=>(b.updatedAt||'')>(a.updatedAt||'')?1:-1);
   const pending=onLeaveList.filter(e=>!e.leaveApproval||e.leaveApproval==='pending').length;
@@ -2563,7 +2594,7 @@ function buildLeaveHTML(){
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
     <div style="background:#fff;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #E8EAF0;">
       <div style="font-size:22px;font-weight:900;color:#475569;">${onLeaveList.length}</div>
-      <div style="font-size:10px;color:#888;margin-top:2px;">🌴 ลาทั้งหมด</div>
+      <div style="font-size:10px;color:#888;margin-top:2px;">${skeIcon('leave')} ลาทั้งหมด</div>
     </div>
     <div style="background:${pending>0?'#FFFBEB':'#fff'};border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${pending>0?'#FCD34D':'#E8EAF0'};">
       <div style="font-size:22px;font-weight:900;color:${pending>0?'#92400E':'#1E90D6'};">${pending}</div>
@@ -2584,7 +2615,7 @@ function buildLeaveHTML(){
             <div style="font-size:13.5px;font-weight:700;color:#1a1a2e;">${esc(e.name)}</div>
             <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate||'-')}${phoneLink(e.phone)}</div>
             <div style="font-size:12px;color:#475569;margin-top:3px;">📅 ${fmtLeaveRange(e)}</div>
-            ${e.leaveNote?`<div style="font-size:12px;color:#475569;margin-top:2px;">📝 ${esc(e.leaveNote)}</div>`:''}
+            ${e.leaveNote?`<div style="font-size:12px;color:#475569;margin-top:2px;">${skeIcon('note')} ${esc(e.leaveNote)}</div>`:''}
           </div>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
@@ -2619,11 +2650,11 @@ function renderStatusEmployeeList(st){
     const t=e.updatedAt;
     const timeStr=t?fmt(t):'ไม่ระบุ';
     html+=`<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 8px;background:${st.bg};border-radius:7px;border:1px solid ${st.border};">
-      <span style="font-size:14px;">${st.emoji}</span>
+      <span style="font-size:14px;color:${st.color};">${skeIcon(st.ic)}</span>
       <div style="flex:1;min-width:0;">
         <div style="font-size:12px;font-weight:700;color:${st.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
         <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
-        ${e.note?`<div style="font-size:11px;color:${st.color};margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+        ${e.note?`<div style="font-size:11px;color:${st.color};margin-top:1px;">${skeIcon('note')} ${esc(e.note)}</div>`:''}
       </div>
       <span style="font-size:10px;color:#888;white-space:nowrap;">🕐 ${timeStr}</span>
     </div>`;
@@ -2644,7 +2675,7 @@ function renderStandbyByProv(){
   sorted.forEach(([prov,list])=>{
     html+=`<div style="margin-bottom:4px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-        <span style="color:#6D28D9;font-size:12px;font-weight:700;">📍 ${prov}</span>
+        <span style="color:#6D28D9;font-size:12px;font-weight:700;">${skeIcon('pin')} ${prov}</span>
         <span style="background:#F5F3FF;color:#7B2FBE;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;">${list.length} คัน</span>
       </div>`;
     list.forEach((e,i)=>{
@@ -2654,7 +2685,7 @@ function renderStandbyByProv(){
         <span style="font-size:11px;font-weight:800;color:${i===0?'#7B2FBE':'#aaa'};min-width:16px;padding-top:1px;">#${i+1}</span>
         <div style="flex:1;min-width:0;">
           <div style="font-size:12px;color:#333;font-weight:${i===0?'700':'400'};">${esc(e.name)} · ${esc(e.plate)}${phoneLink(e.phone)}</div>
-          ${e.note?`<div style="font-size:11px;color:#7B2FBE;margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+          ${e.note?`<div style="font-size:11px;color:#7B2FBE;margin-top:1px;">${skeIcon('note')} ${esc(e.note)}</div>`:''}
         </div>
         <span style="font-size:10px;color:#888;white-space:nowrap;padding-top:1px;">⏱️ ${timeStr}</span>
       </div>`;
@@ -2783,7 +2814,7 @@ function renderTravelingByProv(){
         <div style="flex:1;min-width:0;">
           <div style="font-size:12px;font-weight:700;color:#0E7490;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
           <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
-          ${e.note?`<div style="font-size:11px;color:#0E7490;margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+          ${e.note?`<div style="font-size:11px;color:#0E7490;margin-top:1px;">${skeIcon('note')} ${esc(e.note)}</div>`:''}
         </div>
         <span style="font-size:10px;color:#888;white-space:nowrap;">🕐 ${timeStr}</span>
       </div>`;
@@ -2817,7 +2848,7 @@ function renderReturningByProv(){
         <div style="flex:1;min-width:0;">
           <div style="font-size:12px;font-weight:700;color:#0F766E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
           <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
-          ${e.note?`<div style="font-size:11px;color:#0F766E;margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+          ${e.note?`<div style="font-size:11px;color:#0F766E;margin-top:1px;">${skeIcon('note')} ${esc(e.note)}</div>`:''}
         </div>
         <span style="font-size:10px;color:#888;white-space:nowrap;">🕐 ${timeStr}</span>
       </div>`;
@@ -2841,7 +2872,7 @@ function renderDoneByProv(){
   sorted.forEach(([prov,list])=>{
     html+=`<div style="margin-bottom:4px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-        <span style="color:#065F46;font-size:12px;font-weight:700;">📍 ${esc(prov)}</span>
+        <span style="color:#065F46;font-size:12px;font-weight:700;">${skeIcon('pin')} ${esc(prov)}</span>
         <span style="background:#ECFDF5;color:#065F46;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;">${list.length} คัน</span>
       </div>`;
     list.forEach((e,idx)=>{
@@ -2853,7 +2884,7 @@ function renderDoneByProv(){
         <div style="flex:1;min-width:0;">
           <div style="font-size:12px;font-weight:700;color:#065F46;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
           <div style="font-size:11px;color:#888;">🚘 ${esc(e.plate)}${phoneLink(e.phone)}</div>
-          ${e.note?`<div style="font-size:11px;color:#065F46;margin-top:1px;">📝 ${esc(e.note)}</div>`:''}
+          ${e.note?`<div style="font-size:11px;color:#065F46;margin-top:1px;">${skeIcon('note')} ${esc(e.note)}</div>`:''}
         </div>
         <span style="font-size:10px;color:#888;white-space:nowrap;">🕐 ${timeStr}</span>
       </div>`;
@@ -2923,7 +2954,7 @@ function doAddEmp(){
 let _aSel={};
 function renderAdminEmpList(){
   const el=document.getElementById('adminEmpList');
-  if(!employees.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">👷</div><div class="empty-text">ยังไม่มีพนักงาน</div></div>';return;}
+  if(!employees.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">'+skeIcon('user')+'</div><div class="empty-text">ยังไม่มีพนักงาน</div></div>';return;}
   // อย่ารีเซ็ตตัวเลือกสถานะที่ผู้ดูแลกำลังเลือกค้างไว้ (ยังไม่ได้กดบันทึก) ของพนักงานที่เปิดแผงแก้ไขอยู่
   // กันไม่ให้ realtime update จากพนักงานคนอื่นมาทับสถานะที่เพิ่งเลือก
   employees.forEach(e=>{
@@ -2940,13 +2971,13 @@ function renderAdminEmpList(){
         <div style="flex:1;min-width:0;">
           <div style="color:#1a1a2e;font-weight:700;">${esc(e.name)}</div>
           <div style="color:#888;font-size:11px;">🚛 ${esc(e.plate)}${phoneLink(e.phone)}</div>
-          ${e.status==='standby'&&e.province?`<div style="color:#7B2FBE;font-size:11px;margin-top:2px;">📍 ${esc(e.province)}</div>`:''}
-          ${e.note?`<div style="color:#92400E;font-size:11px;margin-top:4px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 8px;">📝 ${esc(e.note)}</div>`:''}
-          ${e.onLeave?`<div style="color:#475569;font-size:11px;margin-top:4px;">🌴 ลา: ${fmtLeaveRange(e)}</div>`:''}
-          ${e.onLeave&&e.leaveNote?`<div style="color:#92400E;font-size:11px;margin-top:4px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 8px;">📝 ${esc(e.leaveNote)}</div>`:''}
+          ${e.status==='standby'&&e.province?`<div style="color:#7B2FBE;font-size:11px;margin-top:2px;">${skeIcon('pin')} ${esc(e.province)}</div>`:''}
+          ${e.note?`<div style="color:#92400E;font-size:11px;margin-top:4px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 8px;">${skeIcon('note')} ${esc(e.note)}</div>`:''}
+          ${e.onLeave?`<div style="color:#475569;font-size:11px;margin-top:4px;">${skeIcon('leave')} ลา: ${fmtLeaveRange(e)}</div>`:''}
+          ${e.onLeave&&e.leaveNote?`<div style="color:#92400E;font-size:11px;margin-top:4px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 8px;">${skeIcon('note')} ${esc(e.leaveNote)}</div>`:''}
           ${lp?`<span class="pill" style="background:${lp.bg};color:${lp.color};border:1px solid ${lp.border};font-size:10px;margin-top:4px;display:inline-block;">${lp.text}</span>`:''}
         </div>
-        <div class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:10px;flex-shrink:0;">${s.emoji} ${getS(e.status).label}</div>
+        <div class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:10px;flex-shrink:0;">${skeIcon(s.ic)} ${getS(e.status).label}</div>
       </div>
       <div class="row-btns" style="margin-top:10px;">
         <button class="btn btn-blue btn-sm" style="flex:1;" onclick="openAEdit('${e.id}')">✏️ แก้ไข</button>
@@ -2960,13 +2991,13 @@ function renderAdminEmpList(){
         <div><div class="inp-label">🔒 รีเซ็ต PIN <span style="font-size:10px;color:#888;font-weight:400;">(เว้นว่างถ้าไม่ต้องการเปลี่ยน)</span></div><input class="inp" id="aepin_${e.id}" type="password" inputmode="numeric" maxlength="4" placeholder="PIN ใหม่ 4 หลัก"></div>
         <div class="status-grid">${STATUSES.map(st=>`<button class="status-opt" id="aes_${e.id}_${st.id}"
           style="border-color:${e.status===st.id?st.color:'#E8EAF0'};color:${e.status===st.id?st.color:'#888'};background:${e.status===st.id?st.bg:'#F5F6FA'};"
-          onclick="aSelStat('${e.id}','${st.id}')"><span class="status-emoji">${st.emoji}</span><br>${st.label}</button>`).join('')}</div>
+          onclick="aSelStat('${e.id}','${st.id}')"><span class="status-emoji" style="color:${st.color}">${skeIcon(st.ic)}</span><br>${st.label}</button>`).join('')}</div>
         <div id="aprv_${e.id}">${provHTML(e.status,e.province||'')}</div>
         <div><div class="inp-label">หมายเหตุ</div><textarea class="inp" id="aen2_${e.id}" rows="2">${esc(e.note||'')}</textarea></div>
         <div style="border-top:1px solid #E8EAF0;padding-top:11px;">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#475569;cursor:pointer;">
             <input type="checkbox" id="aeleave_${e.id}" ${e.onLeave?'checked':''} onchange="toggleAEditLeave('${e.id}')" style="width:18px;height:18px;flex-shrink:0;">
-            🌴 อยู่ระหว่างลา / แจ้งลา
+            <span class="ic" style="vertical-align:-.14em">${skeIcon('leave')}</span> อยู่ระหว่างลา / แจ้งลา
           </label>
           <div id="aeleavebox_${e.id}" class="${e.onLeave?'':'hidden'}" style="margin-top:10px;display:flex;flex-direction:column;gap:9px;">
             <div><div class="inp-label">ลาตั้งแต่วันที่</div><input type="date" class="inp" id="aeleavefrom_${e.id}" value="${e.leaveFrom||''}"></div>
@@ -3074,6 +3105,17 @@ setInterval(()=>{
     }
   }catch(e){console.warn('sync error',e);}
 },30000);
+</script>
+<script>
+/* เติมไอคอน SVG ให้องค์ประกอบสแตติก (แท็บบน, เมนูล่าง, ปุ่ม) ที่มี data-ic */
+(function fillStaticIcons(){
+  if(typeof window.skeIcon!=='function'){return setTimeout(fillStaticIcons,30);}
+  document.querySelectorAll('[data-ic]').forEach(function(el){
+    if(el.getAttribute('data-ic-filled'))return;
+    el.innerHTML=window.skeIcon(el.getAttribute('data-ic'));
+    el.setAttribute('data-ic-filled','1');
+  });
+})();
 </script>
 </body>
 </html>
