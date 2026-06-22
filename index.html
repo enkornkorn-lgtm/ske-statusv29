@@ -1727,10 +1727,83 @@ function saveRepairReply(id){
   if(!ta)return;
   const msg=ta.value.trim();
   const now=new Date().toISOString();
-  repairs=repairs.map(r=>r.id===id?{...r,reply:msg,replyAt:msg?now:null,replyRead:false}:r);
+  const cur=repairs.find(r=>r.id===id);
+  const hasPhotos=cur&&cur.photos&&cur.photos.length;
+  repairs=repairs.map(r=>r.id===id?{...r,reply:msg,replyAt:(msg||hasPhotos)?now:null,replyRead:false}:r);
   saveRepairs();refreshRepairViews();
-  alert(msg?'✅ ส่งข้อความถึงพนักงานแล้ว':'🗑️ ลบข้อความแล้ว');
+  alert((msg||hasPhotos)?'✅ ส่งถึงพนักงานแล้ว':'🗑️ ลบข้อความแล้ว');
 }
+
+// ย่อ + บีบอัดรูปเป็น base64 (ด้านยาวสุด 900px, JPEG คุณภาพ 0.6) ก่อนเก็บลง DB
+function _compressImage(file,maxDim,quality){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        let{width:w,height:h}=img;
+        if(w>h){if(w>maxDim){h=Math.round(h*maxDim/w);w=maxDim;}}
+        else{if(h>maxDim){w=Math.round(w*maxDim/h);h=maxDim;}}
+        const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(cv.toDataURL('image/jpeg',quality));
+      };
+      img.onerror=reject;img.src=e.target.result;
+    };
+    reader.onerror=reject;reader.readAsDataURL(file);
+  });
+}
+
+// แนบรูปเข้ารายการซ่อม (สูงสุด 3 รูป) — ย่อก่อนเก็บแล้ว sync ขึ้น Firebase
+async function addRepairPhotos(id,input){
+  const files=Array.from(input.files||[]);
+  input.value='';
+  if(!files.length)return;
+  const r=repairs.find(x=>x.id===id);if(!r)return;
+  const existing=(r.photos||[]).slice();
+  const room=3-existing.length;
+  if(room<=0){alert('⚠️ แนบได้สูงสุด 3 รูปต่อรายการ');return;}
+  const take=files.slice(0,room);
+  if(files.length>room)alert(`⚠️ แนบได้อีก ${room} รูป (สูงสุด 3 รูป) จะเพิ่มให้เฉพาะ ${room} รูปแรก`);
+  try{
+    for(const f of take){
+      const dataUrl=await _compressImage(f,900,0.6);
+      existing.push(dataUrl);
+    }
+    repairs=repairs.map(x=>x.id===id?{...x,photos:existing}:x);
+    saveRepairs();refreshRepairViews();
+  }catch(e){console.error('compress error',e);alert('❌ เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');}
+}
+
+// ลบรูปออกจากรายการซ่อม
+function delRepairPhoto(id,idx){
+  if(!confirm('ลบรูปนี้?'))return;
+  const r=repairs.find(x=>x.id===id);if(!r||!r.photos)return;
+  const photos=r.photos.filter((_,i)=>i!==idx);
+  repairs=repairs.map(x=>x.id===id?{...x,photos}:x);
+  saveRepairs();refreshRepairViews();
+  closePhotoViewer();
+}
+
+// ดูรูปเต็มจอ + ปุ่มลบ (ลบได้เฉพาะตอนผู้ดูแลล็อกอิน)
+function viewRepairPhoto(id,idx){
+  const r=repairs.find(x=>x.id===id);if(!r||!r.photos||!r.photos[idx])return;
+  let ov=document.getElementById('photoViewer');
+  if(!ov){
+    ov=document.createElement('div');ov.id='photoViewer';
+    ov.style.cssText='position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:20px;';
+    ov.onclick=ev=>{if(ev.target===ov)closePhotoViewer();};
+    document.body.appendChild(ov);
+  }
+  const canDel=typeof adminMode!=='undefined'&&adminMode;
+  ov.innerHTML=`<img src="${r.photos[idx]}" style="max-width:100%;max-height:78vh;border-radius:12px;object-fit:contain;">
+    <div style="display:flex;gap:10px;">
+      ${canDel?`<button class="btn btn-red btn-sm" onclick="delRepairPhoto('${id}',${idx})">🗑️ ลบรูปนี้</button>`:''}
+      <button class="btn btn-gray btn-sm" onclick="closePhotoViewer()">✕ ปิด</button>
+    </div>`;
+  ov.style.display='flex';
+}
+function closePhotoViewer(){const ov=document.getElementById('photoViewer');if(ov)ov.style.display='none';}
 function renderRepairList(){
   const el=document.getElementById('repairList');
   if(!el||!currentUser)return;
@@ -1757,6 +1830,12 @@ function renderRepairList(){
       ${r.reply?`<div style="margin-top:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:10px 12px;">
         <div style="font-size:11px;color:#1E90D6;font-weight:700;margin-bottom:3px;">💬 ข้อความจากผู้ดูแล${r.replyAt?` · ${fmt(r.replyAt)}`:''}</div>
         <div style="font-size:13px;color:#1a1a2e;line-height:1.6;white-space:pre-wrap;">${esc(r.reply)}</div>
+      </div>`:''}
+      ${(r.photos&&r.photos.length)?`<div style="margin-top:10px;">
+        <div style="font-size:11px;color:#1E90D6;font-weight:700;margin-bottom:5px;">📷 รูปจากผู้ดูแล (${r.photos.length})</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${r.photos.map((p,i)=>`<img src="${p}" onclick="viewRepairPhoto('${r.id}',${i})" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+        </div>
       </div>`:''}
       <div class="row-btns" style="margin-top:10px;">
         ${approved?`<button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดรายการอีกครั้ง':'✓ แจ้งซ่อมเสร็จแล้ว'}</button>`:''}
@@ -2138,9 +2217,16 @@ function renderAdminRepairList(){
             <div style="font-size:10.5px;color:#1E90D6;font-weight:700;margin-bottom:2px;">💬 ข้อความถึงพนักงาน${r.replyAt?` · ${fmt(r.replyAt)}`:''}</div>
             <div style="font-size:12.5px;color:#1a1a2e;line-height:1.5;white-space:pre-wrap;">${esc(r.reply)}</div>
           </div>`:''}
+          ${(r.photos&&r.photos.length)?`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+            ${r.photos.map((p,i)=>`<img src="${p}" onclick="viewRepairPhoto('${r.id}',${i})" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+          </div>`:''}
           <div style="margin-top:8px;">
             <textarea class="inp" id="rep_reply_${r.id}" rows="2" placeholder="พิมพ์ข้อความถึงพนักงาน เช่น นำรถเข้าศูนย์วันจันทร์ / สั่งอะไหล่แล้ว..." style="font-size:12.5px;">${esc(r.reply||'')}</textarea>
-            <button class="btn btn-blue btn-sm btn-full" style="margin-top:6px;" onclick="saveRepairReply('${r.id}')">💬 ${r.reply?'อัพเดทข้อความ':'ส่งข้อความถึงพนักงาน'}</button>
+            <input type="file" id="rep_img_${r.id}" accept="image/*" multiple style="display:none;" onchange="addRepairPhotos('${r.id}',this)">
+            <div class="row-btns" style="margin-top:6px;">
+              <button class="btn btn-gray btn-sm" style="flex:1;" onclick="document.getElementById('rep_img_${r.id}').click()">📎 แนบรูป${(r.photos&&r.photos.length)?` (${r.photos.length}/3)`:''}</button>
+              <button class="btn btn-blue btn-sm" style="flex:2;" onclick="saveRepairReply('${r.id}')">💬 ${(r.reply||(r.photos&&r.photos.length))?'อัพเดท':'ส่งถึงพนักงาน'}</button>
+            </div>
           </div>
           <div class="row-btns" style="margin-top:8px;">
             ${approved?`<button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดอีกครั้ง':'✓ ทำเครื่องหมายว่าซ่อมเสร็จ'}</button>`:''}
@@ -2201,6 +2287,9 @@ function renderAdminHistory(){
           ${r.reply?`<div style="margin-top:8px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:10px;padding:8px 10px;">
             <div style="font-size:10.5px;color:#475569;font-weight:700;margin-bottom:2px;">💬 ข้อความถึงพนักงาน</div>
             <div style="font-size:12.5px;color:#1a1a2e;line-height:1.5;white-space:pre-wrap;">${esc(r.reply)}</div>
+          </div>`:''}
+          ${(r.photos&&r.photos.length)?`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+            ${r.photos.map((p,i)=>`<img src="${p}" onclick="viewRepairPhoto('${r.id}',${i})" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
           </div>`:''}
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
             <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};">${pill.text}</span>
