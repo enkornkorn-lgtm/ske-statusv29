@@ -1202,7 +1202,7 @@ function doInstall(){
 }
 
 (function(){
-  const m={name:"SKE TRUCK",short_name:"SKE TRUCK",start_url:".",display:"standalone",background_color:"#FFFFFF",theme_color:"#FFFFFF",icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23F47920'/%3E%3Cstop offset='.5' stop-color='%231E90D6'/%3E%3Cstop offset='1' stop-color='%237B2FBE'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='50' fill='url(%23g)'/%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='36' font-weight='900' fill='white' font-family='Arial'%3ESKE%3C/text%3E%3C/svg%3E",sizes:"512x512",type:"image/svg+xml"}]};
+  const m={name:"SKE TRUCK",short_name:"SKETruck",start_url:".",display:"standalone",background_color:"#FFFFFF",theme_color:"#FFFFFF",icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23F47920'/%3E%3Cstop offset='.5' stop-color='%231E90D6'/%3E%3Cstop offset='1' stop-color='%237B2FBE'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='50' fill='url(%23g)'/%3E%3Ctext x='50' y='65' text-anchor='middle' font-size='36' font-weight='900' fill='white' font-family='Arial'%3ESKE%3C/text%3E%3C/svg%3E",sizes:"512x512",type:"image/svg+xml"}]};
   const b=new Blob([JSON.stringify(m)],{type:'application/json'});
   document.getElementById('manifestLink').href=URL.createObjectURL(b);
 })();
