@@ -1588,6 +1588,7 @@ function doConfirmPin(){
 function doLogin(id){
   currentUser=employees.find(e=>e.id===id)||null;
   saveU();adminMode=false;
+  _unlockAudio(); // unlock AudioContext ทันทีที่ login (user gesture)
   show('dashboard');renderDashboard();
   requestNotifPermission();
   startAlertTimer();
@@ -1655,6 +1656,7 @@ function doAdminLogin(){
     adminMode=true;adminRole=wantViewer?'viewer':'super';
     saveA();saveAR();
     document.getElementById('adminPwInput').value='';
+    _unlockAudio(); // unlock AudioContext ทันทีที่ login (user gesture)
     show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();
     requestNotifPermission();
     // ลงทะเบียน FCM push token — รับแจ้งเตือนแม้ปิดแอป (super/viewer ลงทะเบียนได้ทั้งคู่)
@@ -1694,24 +1696,49 @@ const SNOOZE_MIN = 30;       // snooze 30 นาที
 let _alertTimer = null;
 let _snoozeUntil = 0;
 let _audioCtx = null;
+let _audioUnlocked = false;
+
+// unlock AudioContext ทันทีที่ผู้ใช้แตะหน้าจอครั้งแรก
+// (Android บังคับให้มี user gesture ก่อนเล่นเสียงได้)
+function _unlockAudio(){
+  if(_audioUnlocked) return;
+  try{
+    if(!_audioCtx) _audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(_audioCtx.state === 'suspended') _audioCtx.resume();
+    // เล่นเสียง silent สั้นๆ เพื่อ unlock
+    const buf = _audioCtx.createBuffer(1,1,22050);
+    const src = _audioCtx.createBufferSource();
+    src.buffer = buf; src.connect(_audioCtx.destination); src.start(0);
+    _audioUnlocked = true;
+  }catch(e){}
+}
+document.addEventListener('touchstart', _unlockAudio, {once:true, passive:true});
+document.addEventListener('click', _unlockAudio, {once:true, passive:true});
 
 // เล่นเสียงแจ้งเตือน (Web Audio API — ไม่ต้องไฟล์เสียง)
 function playAlertSound(){
   try{
     if(!_audioCtx) _audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     const ctx = _audioCtx;
-    // เสียงด่วน — บี๊บถี่ 5 ครั้ง
-    [0, 0.15, 0.3, 0.45, 0.6].forEach(offset => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(1100, ctx.currentTime + offset);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime + offset);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.12);
-      osc.start(ctx.currentTime + offset);
-      osc.stop(ctx.currentTime + offset + 0.17);
-    });
+    // resume ก่อนเล่นเสมอ (กัน suspended state บน Android)
+    const doPlay = () => {
+      [0, 0.18, 0.36, 0.54, 0.72].forEach(offset => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(1100, ctx.currentTime + offset);
+        gain.gain.setValueAtTime(0.4, ctx.currentTime + offset);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.14);
+        osc.start(ctx.currentTime + offset);
+        osc.stop(ctx.currentTime + offset + 0.18);
+      });
+    };
+    if(ctx.state === 'suspended'){
+      ctx.resume().then(doPlay).catch(()=>{});
+    } else {
+      doPlay();
+    }
   }catch(e){ console.warn('audio error',e); }
 }
 
