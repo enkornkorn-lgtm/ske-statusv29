@@ -50,7 +50,7 @@
   // ติดตามว่าแต่ละชุดข้อมูล sync ครั้งแรกเสร็จหรือยัง — ใช้กันบั๊ก "ข้อมูลที่ลบไปแล้วฟื้นคืนชีพ"
   // (เดิม: พอลบรายการจนหมด ข้อมูลเป็น null → listener เข้าใจผิดว่า Firebase ว่าง แล้วอัพโหลดข้อมูลเก่าในเครื่องกลับขึ้นไป)
   // หลักการใหม่: อัพโหลดข้อมูลเครื่องขึ้น Firebase ได้ "เฉพาะครั้งแรกสุด" เท่านั้น หลังจากนั้น null = ว่างจริง ให้เคารพค่าว่าง
-  const _firstSync = { employees:false, repairs:false, fluidLogs:false, cashRequests:false };
+  const _firstSync = { employees:false, repairs:false, fluidLogs:false, cashRequests:false, leaveLogs:false };
 
 
   // บันทึกข้อมูลพนักงานทั้งหมดขึ้น Firebase
@@ -94,6 +94,11 @@
   // บันทึกรายการเบิกเงินพนักงานขึ้น Firebase
   window.fbSaveCashRequests = function(list) {
     set(ref(db, 'cashRequests'), list).catch(e => console.error('fbSaveCashRequests error', e));
+  };
+
+  // บันทึกประวัติการลาขึ้น Firebase
+  window.fbSaveLeaveLogs = function(list) {
+    set(ref(db, 'leaveLogs'), list).catch(e => console.error('fbSaveLeaveLogs error', e));
   };
 
   // ดึงข้อมูลล่าสุดจาก Firebase ทันที (สำหรับปุ่มรีเฟรชของผู้ดูแล)
@@ -199,6 +204,20 @@
       set(ref(db, 'cashRequests'), cashRequests);
     }
     _firstSync.cashRequests = true;
+  });
+
+  // ฟัง realtime — ประวัติการลา
+  onValue(ref(db, 'leaveLogs'), (snapshot) => {
+    const data = normalizeList(snapshot.val());
+    if (data) {
+      leaveLogs = data;
+      localStorage.setItem('ske_leaveLogs', JSON.stringify(leaveLogs));
+      const lp = document.getElementById('adminLeaveHistoryPanel');
+      if (lp && !lp.classList.contains('hidden') && typeof renderLeaveHistory === 'function') renderLeaveHistory();
+    } else if (!_firstSync.leaveLogs && leaveLogs.length > 0) {
+      set(ref(db, 'leaveLogs'), leaveLogs);
+    }
+    _firstSync.leaveLogs = true;
   });
 
   // ── เฝ้าระวังสถานะการเชื่อมต่อ — ดึงข้อมูลล่าสุดทันทีทุกครั้งที่กลับมาออนไลน์ ──
@@ -825,6 +844,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
         <div style="color:#7B2FBE;font-weight:800;font-size:16px;">📜 ประวัติ</div>
         <div style="color:#888;font-size:12px;">รายการซ่อมที่ซ่อมเสร็จแล้ว หรือไม่อนุมัติ จะถูกย้ายมาเก็บที่นี่</div>
         <button class="btn btn-purple btn-full" onclick="switchAdminTab('history')"><span class="ic" data-ic="history"></span> ดูประวัติการซ่อม<span id="historyCountBadge" class="badge-num hidden" style="margin-left:6px;">0</span></button>
+        <button class="btn btn-purple btn-full" onclick="switchAdminTab('leaveHistory')">🌴 ดูประวัติการลา</button>
       </div>
       <div class="card" style="display:flex;flex-direction:column;gap:16px;">
         <div style="color:#7B2FBE;font-weight:800;font-size:16px;"><span class="ic" data-ic="settings"></span> ตั้งค่าระบบ</div>
@@ -840,6 +860,15 @@ select.inp option{background:#fff;color:#1a1a2e;}
         </div>
       </div>
       <button class="btn btn-red btn-full" style="margin-top:14px;" onclick="doLogout()">🚪 ออกจากระบบ</button>
+    </div>
+
+    <!-- leave history sub-view -->
+    <div id="adminLeaveHistoryPanel" class="hidden">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button class="topbar-back" onclick="switchAdminTab('settings')">←</button>
+        <div class="section-label" style="margin:0;">🌴 ประวัติการลา</div>
+      </div>
+      <div id="leaveHistoryContent"></div>
     </div>
 
     <!-- emp management sub-view (reached from settings) -->
@@ -1074,6 +1103,7 @@ let deferredPrompt=null;
 let repairs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_repairs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let fluidLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_fluid')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let cashRequests=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_cash')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
+let leaveLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_leaveLogs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let _repUrgency='normal';
 let _repNewPhotos=[]; // รูปที่พนักงานเลือกไว้ก่อนกดส่งแจ้งซ่อม (ย่อแล้ว)
 let _fluNewPhotos=[]; // รูปที่พนักงานเลือกไว้ก่อนบันทึกการเปลี่ยนถ่ายของเหลว (ย่อแล้ว)
@@ -1099,6 +1129,10 @@ function saveFluid(){
 function saveCash(){
   localStorage.setItem('ske_cash',JSON.stringify(cashRequests));
   if(window.fbSaveCashRequests) window.fbSaveCashRequests(cashRequests);
+}
+function saveLeaveLogs(){
+  localStorage.setItem('ske_leaveLogs',JSON.stringify(leaveLogs));
+  if(window.fbSaveLeaveLogs) window.fbSaveLeaveLogs(leaveLogs);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1779,8 +1813,41 @@ function leaveApprovalPill(e){
   return{text:'🕐 รอการอนุมัติ',bg:'#FFFBEB',color:'#92400E',border:'#FCD34D'};
 }
 function setLeaveApproval(empId,decision){
+  const e=employees.find(x=>x.id===empId);if(!e)return;
+  if(decision==='approved'){
+    // บันทึกลงประวัติการลา แล้วเคลียร์ข้อมูลการลาออกจาก employee
+    const log={
+      id:'lv_'+Date.now()+'_'+empId,
+      empId,empName:e.name,plate:e.plate||'',phone:e.phone||'',
+      leaveFrom:e.leaveFrom||todayStr(),leaveTo:e.leaveTo||todayStr(),
+      leaveNote:e.leaveNote||'',leaveReply:e.leaveReply||'',
+      approvedAt:new Date().toISOString(),
+      year:new Date().getFullYear(),
+      month:new Date().getMonth()+1,
+    };
+    // คำนวณจำนวนวันลา
+    try{
+      const d1=new Date(log.leaveFrom),d2=new Date(log.leaveTo);
+      log.days=Math.max(1,Math.round((d2-d1)/(86400000))+1);
+    }catch(_){log.days=1;}
+    leaveLogs.unshift(log);
+    // ลบประวัติที่เกิน 1 ปี (ต่างปี ค.ศ. ปัจจุบัน)
+    const curYear=new Date().getFullYear();
+    leaveLogs=leaveLogs.filter(l=>l.year>=curYear-1);
+    saveLeaveLogs();
+    // เคลียร์สถานะลาออกจากพนักงาน
+    const patch={onLeave:false,leaveFrom:null,leaveTo:null,leaveNote:null,leaveApproval:null,leaveReply:null,leaveReplyAt:null};
+    employees=employees.map(x=>x.id===empId?{...x,...patch}:x);
+    if(currentUser?.id===empId){currentUser={...currentUser,...patch};saveU();}
+    localStorage.setItem('ske_emp',JSON.stringify(employees));
+    if(window.fbUpdateEmployeeFields){
+      window.fbUpdateEmployeeFields(empId,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+    } else if(window.fbSaveEmployees){window.fbSaveEmployees(employees);}
+    renderAdmin();
+    return;
+  }
   const patch={leaveApproval:decision};
-  employees=employees.map(e=>e.id===empId?{...e,...patch}:e);
+  employees=employees.map(x=>x.id===empId?{...x,...patch}:x);
   if(currentUser?.id===empId){currentUser={...currentUser,...patch};saveU();}
   localStorage.setItem('ske_emp',JSON.stringify(employees));
   if(window.fbUpdateEmployeeFields){
@@ -3250,39 +3317,131 @@ function renderDoneByProv(){
 
 function switchAdminTab(t){
   document.getElementById('adminEmpPanel').classList.add('hidden');
+  document.getElementById('adminLeaveHistoryPanel')?.classList.add('hidden');
   document.getElementById('adminHistoryPanel')?.classList.toggle('hidden',t!=='history');
-  // ประวัติเป็นหน้าย่อยที่เปิดจากตั้งค่า — ซ่อนแถบแท็บด้านบนเหมือนหน้าจัดการพนักงาน
-  if(t==='history'){document.getElementById('adminTabBar')?.classList.add('hidden');}
+  if(t==='history'||t==='leaveHistory'){document.getElementById('adminTabBar')?.classList.add('hidden');}
   else{document.getElementById('adminTabBar')?.classList.remove('hidden');}
   document.getElementById('adminSummaryPanel').classList.toggle('hidden',t!=='summary');
   document.getElementById('adminMaintPanel').classList.toggle('hidden',t!=='maint');
   document.getElementById('adminCashPanel').classList.toggle('hidden',t!=='cash');
   document.getElementById('adminLeavePanel').classList.toggle('hidden',t!=='leave');
   document.getElementById('adminSettingsPanel').classList.toggle('hidden',t!=='settings');
+  if(t==='leaveHistory')document.getElementById('adminLeaveHistoryPanel')?.classList.remove('hidden');
   document.getElementById('tabSummaryTop')?.classList.toggle('active',t==='summary');
   document.getElementById('tabMaintTop')?.classList.toggle('active',t==='maint');
   document.getElementById('tabCashTop')?.classList.toggle('active',t==='cash');
   document.getElementById('tabLeaveTop')?.classList.toggle('active',t==='leave');
-  document.getElementById('tabSettings')?.classList.toggle('active',t==='settings'||t==='history');
+  document.getElementById('tabSettings')?.classList.toggle('active',t==='settings'||t==='history'||t==='leaveHistory');
   ['navAdminSum','navAdminMaint','navAdminCash','navAdminLeave','navAdminSet'].forEach(id=>{document.getElementById(id)?.classList.remove('active');});
   if(t==='summary')document.getElementById('navAdminSum')?.classList.add('active');
   if(t==='maint')document.getElementById('navAdminMaint')?.classList.add('active');
   if(t==='cash')document.getElementById('navAdminCash')?.classList.add('active');
   if(t==='leave')document.getElementById('navAdminLeave')?.classList.add('active');
-  if(t==='settings'||t==='history')document.getElementById('navAdminSet')?.classList.add('active');
+  if(t==='settings'||t==='history'||t==='leaveHistory')document.getElementById('navAdminSet')?.classList.add('active');
   if(t==='settings')renderSysInfo();
   if(t==='summary'){const el=document.getElementById('adminSummaryContent');if(el)el.innerHTML=buildSummaryHTML();}
   if(t==='leave'){const el=document.getElementById('adminLeaveContent');if(el)el.innerHTML=buildLeaveHTML();}
   if(t==='maint')renderAdminMaint();
   if(t==='cash')renderAdminCashList();
   if(t==='history')renderAdminHistory();
+  if(t==='leaveHistory')renderLeaveHistory();
   // เลื่อนขึ้นบนสุดทุกครั้งที่กดเปลี่ยนแท็บ
   const scrollEl=document.querySelector('#admin .list-area');
   if(scrollEl)scrollEl.scrollTo({top:0,behavior:'smooth'});
   else window.scrollTo({top:0,behavior:'smooth'});
 }
 
-// ── พนักงาน ย้ายไปอยู่ใต้ "ตั้งค่า" — เปิด/ปิดเป็นหน้าย่อย ──────────────────
+// ── ประวัติการลา — แยกเดือน เก็บสูงสุด 1 ปีปฏิทิน ──────────────────────────
+function renderLeaveHistory(){
+  const el=document.getElementById('leaveHistoryContent');
+  if(!el)return;
+
+  // ลบประวัติที่เกินปีก่อนหน้า
+  const curYear=new Date().getFullYear();
+  const before=leaveLogs.length;
+  leaveLogs=leaveLogs.filter(l=>l.year>=curYear-1);
+  if(leaveLogs.length<before)saveLeaveLogs();
+
+  if(!leaveLogs.length){
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">🌴</div><div class="empty-text">ยังไม่มีประวัติการลา<br><span style="font-size:11px;color:#aaa;">เมื่ออนุมัติการลาจะถูกเก็บไว้ที่นี่</span></div></div>';
+    return;
+  }
+
+  const MONTH_TH=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+  // ── สรุปรายคน (เพื่อประเมินงาน) ──
+  const byEmp={};
+  leaveLogs.forEach(l=>{
+    if(!byEmp[l.empId])byEmp[l.empId]={name:l.empName,plate:l.plate,totalDays:0,count:0,months:{}};
+    byEmp[l.empId].totalDays+=(l.days||1);
+    byEmp[l.empId].count++;
+    const mk=`${l.year}-${String(l.month).padStart(2,'0')}`;
+    byEmp[l.empId].months[mk]=(byEmp[l.empId].months[mk]||0)+(l.days||1);
+  });
+  const empArr=Object.values(byEmp).sort((a,b)=>b.totalDays-a.totalDays);
+
+  // ── แบ่งตามเดือน ──
+  const byMonth={};
+  leaveLogs.forEach(l=>{
+    const mk=`${l.year}-${String(l.month).padStart(2,'0')}`;
+    (byMonth[mk]=byMonth[mk]||[]).push(l);
+  });
+  const monthKeys=Object.keys(byMonth).sort().reverse();
+
+  let html=`
+  <!-- สรุปรายคน -->
+  <div class="card" style="margin-bottom:14px;">
+    <div style="font-size:14px;font-weight:800;color:#6C3FE8;margin-bottom:10px;">📊 สรุปรายบุคคล (ประเมินงาน)</div>
+    ${empArr.map(e=>{
+      const bar=Math.min(100,Math.round(e.totalDays/30*100));
+      const color=e.totalDays>=10?'#EF4444':e.totalDays>=5?'#F59E0B':'#10B981';
+      return`<div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+          <div>
+            <span style="font-size:13px;font-weight:700;color:#1a1a2e;">${esc(e.name)}</span>
+            <span style="font-size:10.5px;color:#888;margin-left:6px;">🚛 ${esc(e.plate||'-')}</span>
+          </div>
+          <span style="font-size:12px;font-weight:800;color:${color};">${e.totalDays} วัน (${e.count} ครั้ง)</span>
+        </div>
+        <div style="background:#F1F5F9;border-radius:6px;height:8px;overflow:hidden;">
+          <div style="width:${bar}%;height:100%;background:${color};border-radius:6px;transition:.3s;"></div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+
+  <!-- ประวัติแยกเดือน -->
+  ${monthKeys.map(mk=>{
+    const [yr,mo]=mk.split('-');
+    const items=byMonth[mk];
+    const totalDays=items.reduce((s,l)=>s+(l.days||1),0);
+    return`<div style="margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#F5F3FF;border:1.5px solid #C4B5FD;border-radius:12px;margin-bottom:8px;">
+        <span style="font-size:13px;font-weight:800;color:#6C3FE8;">📅 ${MONTH_TH[parseInt(mo)]} ${parseInt(yr)+543}</span>
+        <span style="font-size:10px;background:#C4B5FD;color:#1a1a2e;border-radius:10px;padding:1px 7px;font-weight:700;">${items.length} ครั้ง · ${totalDays} วัน</span>
+      </div>
+      ${items.map(l=>`<div class="card" style="margin-bottom:6px;padding:10px 12px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:#1a1a2e;">${esc(l.empName)}</div>
+            <div style="font-size:11px;color:#888;">🚛 ${esc(l.plate||'-')}</div>
+            <div style="font-size:12px;color:#475569;margin-top:3px;">📅 ${l.leaveFrom||'-'}${l.leaveTo&&l.leaveTo!==l.leaveFrom?' → '+l.leaveTo:''}</div>
+            ${l.leaveNote?`<div style="font-size:12px;color:#666;margin-top:2px;">📋 ${esc(l.leaveNote)}</div>`:''}
+            ${l.leaveReply?`<div style="font-size:11.5px;color:#1E90D6;margin-top:4px;background:#EFF6FF;border-radius:8px;padding:5px 8px;">💬 ${esc(l.leaveReply)}</div>`:''}
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:14px;font-weight:900;color:#6C3FE8;">${l.days||1}<span style="font-size:10px;font-weight:400;color:#888;"> วัน</span></div>
+            <div style="font-size:9.5px;color:#aaa;margin-top:2px;">✅ ${l.approvedAt?new Date(l.approvedAt).toLocaleDateString('th-TH',{day:'numeric',month:'short'}):'-'}</div>
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>`;
+  }).join('')}`;
+
+  el.innerHTML=html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 function showEmpManage(){
   document.getElementById('adminTabBar')?.classList.add('hidden');
   document.getElementById('adminSummaryPanel').classList.add('hidden');
