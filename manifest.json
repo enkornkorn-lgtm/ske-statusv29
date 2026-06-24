@@ -3,46 +3,20 @@
   "short_name": "SKE TRUCK",
   "description": "ระบบติดตามสถานะรถ SK EVO LOGISTICS",
   "id": "ske-truck-app",
-  "start_url": "/ske-statusv29/index.html",
-  "scope": "/ske-statusv29/",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#1E90D6",
   "lang": "th",
   "icons": [
-    {
-      "src": "/ske-statusv29/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/ske-statusv29/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/ske-statusv29/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/ske-statusv29/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "screenshots": [
-    {
-      "src": "/ske-statusv29/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "SKE TRUCK App"
-    }
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "form_factor": "narrow", "label": "SKE TRUCK" }
   ]
 }
