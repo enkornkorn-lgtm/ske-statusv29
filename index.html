@@ -2733,7 +2733,47 @@ function updateMaintBadges(){
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// ── แผงผู้ดูแล: รวมรายการแจ้งซ่อม + เปลี่ยนถ่ายของเหลว แยกตามพนักงาน ──────────
+// ── ระบบ "seen" — badge แสดงเฉพาะรายการใหม่ที่ยังไม่เคยเปิดดู ────────────
+// ══════════════════════════════════════════════════════════════════════════
+const _SEEN_KEYS = { repair:'ske_seen_repair', cash:'ske_seen_cash', leave:'ske_seen_leave' };
+
+function _loadSeen(type){ try{return new Set(JSON.parse(localStorage.getItem(_SEEN_KEYS[type])||'[]'));}catch{return new Set();} }
+function _saveSeen(type,set){ localStorage.setItem(_SEEN_KEYS[type], JSON.stringify([...set])); }
+
+// เรียกตอนเปิดหน้านั้น → mark รายการปัจจุบันทั้งหมดว่าเห็นแล้ว → badge หาย
+function markSeenRepairs(){
+  const seen=_loadSeen('repair');
+  repairs.filter(r=>!isRepairResolved(r)).forEach(r=>seen.add(r.id));
+  _saveSeen('repair',seen);
+  updateAdminMaintBadge();
+}
+function markSeenCash(){
+  const seen=_loadSeen('cash');
+  cashRequests.filter(s=>s.status!=='done').forEach(s=>seen.add(s.id));
+  _saveSeen('cash',seen);
+  updateAdminCashBadge();
+}
+function markSeenLeave(){
+  const seen=_loadSeen('leave');
+  employees.filter(e=>e.onLeave).forEach(e=>seen.add(e.id+'_'+e.leaveAt));
+  _saveSeen('leave',seen);
+  updateLeaveBadge();
+}
+
+// นับเฉพาะรายการที่ยังไม่เคย seen
+function _countNewRepairs(){
+  const seen=_loadSeen('repair');
+  return repairs.filter(r=>!isRepairResolved(r)&&!seen.has(r.id)).length;
+}
+function _countNewCash(){
+  const seen=_loadSeen('cash');
+  return cashRequests.filter(s=>s.status!=='done'&&!seen.has(s.id)).length;
+}
+function _countNewLeave(){
+  const seen=_loadSeen('leave');
+  return employees.filter(e=>e.onLeave&&!seen.has(e.id+'_'+e.leaveAt)).length;
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 let _adminMaintTab='repair';
 
@@ -2766,7 +2806,7 @@ function isRepairResolved(r){return r.status==='done'||r.approval==='rejected';}
 function updateAdminMaintBadge(){
   const badge=document.getElementById('maintTabBadge');
   const navBadge=document.getElementById('navMaintNavBadge');
-  const pending=repairs.filter(r=>!isRepairResolved(r)).length;
+  const pending=_countNewRepairs();
   [badge,navBadge].forEach(b=>{if(!b)return;if(pending>0){b.textContent=pending;b.classList.remove('hidden');}else b.classList.add('hidden');});
   updateHistoryBadge();
 }
@@ -3147,7 +3187,7 @@ function renderAdminFluidList(){
 function updateAdminCashBadge(){
   const badge=document.getElementById('cashTabBadge');
   const navBadge=document.getElementById('navCashNavBadge');
-  const pending=cashRequests.filter(s=>s.status!=='done').length;
+  const pending=_countNewCash();
   [badge,navBadge].forEach(b=>{if(!b)return;if(pending>0){b.textContent=pending;b.classList.remove('hidden');}else b.classList.add('hidden');});
 }
 
@@ -3560,7 +3600,7 @@ function buildLeaveHTML(){
 function updateLeaveBadge(){
   const badge=document.getElementById('leaveTabBadge');
   const navBadge=document.getElementById('navLeaveNavBadge');
-  const n=employees.filter(e=>e.onLeave).length;
+  const n=_countNewLeave();
   [badge,navBadge].forEach(b=>{if(!b)return;if(n>0){b.textContent=n;b.classList.remove('hidden');}else b.classList.add('hidden');});
 }
 
@@ -3845,9 +3885,9 @@ function switchAdminTab(t){
   if(t==='settings'||t==='history'||t==='fluidHistory'||(t==='leaveHistory'&&adminRole!=='viewer'))document.getElementById('navAdminSet')?.classList.add('active');
   if(t==='settings'){setTimeout(()=>{const si=document.getElementById('sysInfo');if(si&&si.innerHTML==='')renderSysInfo();},100);}
   if(t==='summary'){const el=document.getElementById('adminSummaryContent');if(el)el.innerHTML=buildSummaryHTML();}
-  if(t==='leave'){const el=document.getElementById('adminLeaveContent');if(el)el.innerHTML=buildLeaveHTML();}
-  if(t==='maint')renderAdminMaint();
-  if(t==='cash')renderAdminCashList();
+  if(t==='maint'){renderAdminMaint();markSeenRepairs();}
+  if(t==='cash'){renderAdminCashList();markSeenCash();}
+  if(t==='leave'){const el=document.getElementById('adminLeaveContent');if(el)el.innerHTML=buildLeaveHTML();markSeenLeave();}
   if(t==='history')renderAdminHistory();
   if(t==='fluidHistory')renderAdminFluidHistory();
   if(t==='leaveHistory')renderLeaveHistory();
