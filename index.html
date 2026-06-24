@@ -76,9 +76,14 @@
     });
   };
 
-  // บันทึก admin password
+  // บันทึก admin password (รหัสผู้ดูแล — สิทธิ์เต็ม)
   window.fbSaveAdminPw = function(pw) {
     set(ref(db, 'adminPw'), pw).catch(e => console.error('fbSavePw error', e));
+  };
+
+  // บันทึก viewer password (รหัสแอดมิน — ดูเฉพาะแผนผังงาน)
+  window.fbSaveViewerPw = function(pw) {
+    set(ref(db, 'viewerPw'), pw).catch(e => console.error('fbSaveViewerPw error', e));
   };
 
   // บันทึกรายการแจ้งซ่อมขึ้น Firebase
@@ -149,6 +154,11 @@
   onValue(ref(db, 'adminPw'), (snapshot) => {
     const pw = snapshot.val();
     if (pw) { adminPw = pw; localStorage.setItem('ske_pw', pw); }
+  });
+
+  onValue(ref(db, 'viewerPw'), (snapshot) => {
+    const pw = snapshot.val();
+    if (pw) { viewerPw = pw; localStorage.setItem('ske_viewerPw', pw); }
   });
 
   // ฟัง realtime — รายการแจ้งซ่อม
@@ -264,6 +274,12 @@
     else if (adminPw !== 'admin1234') window.fbSaveAdminPw(adminPw);
   });
 
+  get(ref(db, 'viewerPw')).then(snapshot => {
+    const pw = snapshot.val();
+    if (pw) { viewerPw = pw; localStorage.setItem('ske_viewerPw', pw); }
+    else window.fbSaveViewerPw(viewerPw);
+  });
+
   get(ref(db, 'repairs')).then(snapshot => {
     const data = normalizeList(snapshot.val());
     if (data) {
@@ -331,6 +347,13 @@ textarea{resize:none;}
 .topbar-sub{color:#888;font-size:10px;}
 .topbar-back{width:36px;height:36px;border-radius:50%;background:#F0F2F8;display:flex;align-items:center;justify-content:center;font-size:18px;color:#1a1a2e;flex-shrink:0;}
 .badge-admin{background:#7B2FBE;color:#fff;font-size:10px;font-weight:700;border-radius:6px;padding:2px 8px;}
+.badge-viewer{background:#0E7490;color:#fff;font-size:10px;font-weight:700;border-radius:6px;padding:2px 8px;}
+/* ปุ่มเลือกสิทธิ์ตอนเข้าระบบหลังบ้าน */
+.role-pick{flex:1;padding:11px 6px;border-radius:10px;font-size:13px;font-weight:700;line-height:1.3;border:1.5px solid #E8EAF0;background:#fff;color:#888;text-align:center;cursor:pointer;transition:all .15s;}
+.role-pick.active{border-color:#7B2FBE;background:#F5F3FF;color:#6D28D9;box-shadow:0 0 0 2px #E9D5FF;}
+/* โหมดแอดมิน (viewer): เห็นเฉพาะแผนผังงาน — ซ่อนเมนูล่างทั้งหมด */
+#admin.role-viewer .bottom-nav{display:none;}
+#admin.role-viewer #adminBackBtn{display:none;}
 .badge-num{background:#EF4444;color:#fff;font-size:10px;font-weight:700;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;margin-left:3px;vertical-align:middle;}
 
 /* ── Bottom Nav ── */
@@ -560,17 +583,25 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <div id="mode-adminPw" class="hidden">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
         <button class="topbar-back" onclick="showMode('select')">←</button>
-        <div class="section-label" style="margin:0;">เข้าสู่ระบบผู้ดูแล</div>
+        <div class="section-label" style="margin:0;">เข้าสู่ระบบหลังบ้าน</div>
       </div>
       <div class="card" style="display:flex;flex-direction:column;gap:13px;">
-        <div style="background:#F5F3FF;border:1px solid #D8B4FE;border-radius:10px;padding:10px 12px;font-size:12px;color:#6D28D9;">
+        <!-- เลือกบทบาท -->
+        <div>
+          <div class="inp-label" style="margin-bottom:7px;">เลือกสิทธิ์การเข้าใช้งาน</div>
+          <div style="display:flex;gap:8px;">
+            <button type="button" id="roleBtnSuper" class="role-pick active" onclick="selLoginRole('super')">🛡️ ผู้ดูแล<br><span style="font-size:10px;font-weight:400;">จัดการได้ทุกอย่าง</span></button>
+            <button type="button" id="roleBtnViewer" class="role-pick" onclick="selLoginRole('viewer')">👁️ แอดมิน<br><span style="font-size:10px;font-weight:400;">ดูเฉพาะแผนผังงาน</span></button>
+          </div>
+        </div>
+        <div id="adminPwHint" style="background:#F5F3FF;border:1px solid #D8B4FE;border-radius:10px;padding:10px 12px;font-size:12px;color:#6D28D9;">
           🔑 รหัสผ่านเริ่มต้น: <b>admin1234</b><br>
           <span style="color:#888;font-size:11px;">(เปลี่ยนได้ในหน้าตั้งค่าหลังเข้าระบบ)</span>
         </div>
         <div>
           <div class="inp-label">รหัสผ่าน</div>
           <div style="position:relative;">
-            <input class="inp" id="adminPwInput" type="password" placeholder="กรอกรหัสผ่าน" style="padding-right:44px;">
+            <input class="inp" id="adminPwInput" type="password" placeholder="กรอกรหัสผ่าน" style="padding-right:44px;" onkeydown="if(event.key==='Enter')doAdminLogin()">
             <button onclick="togglePwVis()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;cursor:pointer;color:#888;" id="pwEyeBtn">👁️</button>
           </div>
         </div>
@@ -582,7 +613,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <!-- Emergency Reset Panel -->
       <div id="resetPwPanel" class="card hidden" style="margin-top:12px;display:flex;flex-direction:column;gap:12px;">
         <div style="color:#EF4444;font-weight:700;"><span class="ic" data-ic="alert"></span> รีเซ็ตรหัสผ่านฉุกเฉิน</div>
-        <div style="font-size:12px;color:#666;">กรอก Emergency Code เพื่อรีเซ็ตรหัสผ่านกลับเป็น <b>admin1234</b></div>
+        <div style="font-size:12px;color:#666;">กรอก Emergency Code เพื่อรีเซ็ตรหัสผ่านกลับเป็นค่าเริ่มต้น (ผู้ดูแล=<b>admin1234</b>, แอดมิน=<b>view1234</b>)</div>
         <div><div class="inp-label">Emergency Code</div><input class="inp" id="emergencyCode" placeholder="SKE-RESET-2025"></div>
         <div id="resetMsg" class="msg-err hidden"></div>
         <button class="btn btn-red btn-full" onclick="doEmergencyReset()">รีเซ็ตรหัสผ่าน</button>
@@ -661,6 +692,19 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div><div class="inp-label">เบอร์โทร</div><input class="inp" id="setPhone" type="tel" inputmode="tel" placeholder="เช่น 081-234-5678"></div>
       <div id="setMsg" class="msg-ok hidden"></div>
       <button class="btn btn-blue btn-full" onclick="doSaveProfile()">✓ บันทึกข้อมูล</button>
+    </div>
+
+    <!-- เปลี่ยน PIN ของตนเอง — กรอกรหัสเดิม + รหัสใหม่ 2 บรรทัดเหมือนกัน เพื่อกันบุคคลที่ 3 แก้ -->
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px;">
+      <div style="color:#7B2FBE;font-weight:700;font-size:14px;">🔒 เปลี่ยน PIN ของฉัน</div>
+      <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 11px;font-size:11.5px;color:#92400E;line-height:1.5;">
+        ต้องกรอก <b>PIN เดิม</b> ก่อน แล้วตั้ง PIN ใหม่ให้ตรงกัน 2 ช่อง เพื่อป้องกันบุคคลอื่นมาแอบเปลี่ยน
+      </div>
+      <div><div class="inp-label">PIN เดิม</div><input class="inp" id="myCurPin" type="password" inputmode="numeric" maxlength="4" placeholder="PIN 4 หลักปัจจุบัน"></div>
+      <div><div class="inp-label">ตั้ง PIN ใหม่</div><input class="inp" id="myNewPin" type="password" inputmode="numeric" maxlength="4" placeholder="PIN ใหม่ 4 หลัก"></div>
+      <div><div class="inp-label">ยืนยัน PIN ใหม่อีกครั้ง</div><input class="inp" id="myNewPin2" type="password" inputmode="numeric" maxlength="4" placeholder="กรอก PIN ใหม่ซ้ำ"></div>
+      <div id="myPinMsg" class="msg-ok hidden"></div>
+      <button class="btn btn-purple btn-full" onclick="doChangeMyPin()">🔑 บันทึก PIN ใหม่</button>
     </div>
     <button class="btn btn-red btn-full" onclick="doLogout()">🚪 ออกจากระบบ</button>
   </div>
@@ -784,11 +828,12 @@ select.inp option{background:#fff;color:#1a1a2e;}
 <div id="admin" class="screen hidden">
   <!-- topbar -->
   <div class="topbar">
-    <button class="topbar-back" onclick="goBack()">←</button>
+    <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><span>SKE</span></div>
-    <div style="flex:1;"><div class="topbar-title">แผงผู้ดูแล</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
-    <span class="badge-admin">ADMIN</span>
+    <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
+    <span class="badge-admin" id="adminTopBadge">ADMIN</span>
   </div>
 
   <!-- admin tabs (top bar removed — badges moved to bottom nav) -->
@@ -881,13 +926,21 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <!-- accordion item: เปลี่ยนรหัสผ่าน -->
       <div class="acc-item" id="acc_pw">
         <button class="acc-head" onclick="toggleAcc('pw')">
-          <span>🔑 เปลี่ยนรหัสผ่าน</span><span class="acc-arrow">›</span>
+          <span>🔑 เปลี่ยนรหัสผ่านหลังบ้าน</span><span class="acc-arrow">›</span>
         </button>
         <div class="acc-body hidden">
-          <div class="inp-label" style="margin-bottom:8px;">รหัสผ่านผู้ดูแลใหม่</div>
+          <div style="background:#F5F3FF;border:1px solid #D8B4FE;border-radius:10px;padding:8px 11px;font-size:11.5px;color:#6D28D9;margin-bottom:12px;line-height:1.5;">
+            🛡️ <b>ผู้ดูแล</b> = จัดการได้ทุกอย่าง<br>👁️ <b>แอดมิน</b> = ดูได้เฉพาะหน้าแผนผังงาน แก้ไขอะไรไม่ได้
+          </div>
+          <div class="inp-label" style="margin-bottom:8px;">🛡️ รหัสผ่านผู้ดูแล (สิทธิ์เต็ม)</div>
           <input class="inp" id="newPwInput" type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 4 ตัว)">
           <div id="pwMsg" class="msg-ok hidden" style="margin-top:6px;"></div>
-          <button class="btn btn-purple btn-full" style="margin-top:10px;" onclick="doChangePw()">บันทึกรหัสผ่าน</button>
+          <button class="btn btn-purple btn-full" style="margin-top:10px;" onclick="doChangePw()">บันทึกรหัสผ่านผู้ดูแล</button>
+
+          <div class="inp-label" style="margin:18px 0 8px;">👁️ รหัสผ่านแอดมิน (ดูแผนผังงาน)</div>
+          <input class="inp" id="newViewerPwInput" type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 4 ตัว)">
+          <div id="viewerPwMsg" class="msg-ok hidden" style="margin-top:6px;"></div>
+          <button class="btn btn-full" style="margin-top:10px;background:#0E7490;color:#fff;" onclick="doChangeViewerPw()">บันทึกรหัสผ่านแอดมิน</button>
         </div>
       </div>
 
@@ -1138,7 +1191,10 @@ let employees=(()=>{
 })();
 let currentUser=JSON.parse(localStorage.getItem('ske_user')||'null');
 let adminPw=localStorage.getItem('ske_pw')||'admin1234';
+let viewerPw=localStorage.getItem('ske_viewerPw')||'view1234';
 let adminMode=false,editOpen=false,leaveFormOpen=false;
+// บทบาทผู้เข้าระบบฝั่งหลังบ้าน: 'super' = ผู้ดูแล (สิทธิ์เต็ม), 'viewer' = แอดมิน (ดูเฉพาะแผนผังงาน)
+let adminRole=localStorage.getItem('ske_adminRole')||null;
 let _selStatus='standby',_selProv='';
 let _selLeaveAt='',_selLeaveTo='',_selLeaveNote='';
 let deferredPrompt=null;
@@ -1159,7 +1215,12 @@ function saveP(){
   localStorage.setItem('ske_pw',adminPw);
   if(window.fbSaveAdminPw) window.fbSaveAdminPw(adminPw);
 }
+function saveViewerPw(){
+  localStorage.setItem('ske_viewerPw',viewerPw);
+  if(window.fbSaveViewerPw) window.fbSaveViewerPw(viewerPw);
+}
 function saveA(){localStorage.setItem('ske_admin',adminMode?'1':'0');}
+function saveAR(){if(adminRole)localStorage.setItem('ske_adminRole',adminRole);else localStorage.removeItem('ske_adminRole');}
 function saveRepairs(){
   localStorage.setItem('ske_repairs',JSON.stringify(repairs));
   if(window.fbSaveRepairs) window.fbSaveRepairs(repairs);
@@ -1333,7 +1394,12 @@ window.onload=function(){
       pruneOldMaintenance();
       migrateLegacyLeaveStatus();
       const savedAdmin=localStorage.getItem('ske_admin')==='1';
-      if(savedAdmin){adminMode=true;show('admin');renderAdmin();switchAdminTab('summary');startAdminAlertTimer();}
+      if(savedAdmin){
+        adminMode=true;
+        adminRole=localStorage.getItem('ske_adminRole')||'super';
+        show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();
+        if(adminRole!=='viewer')startAdminAlertTimer();
+      }
       else if(currentUser){show('dashboard');renderDashboard();startAlertTimer();}
       else{show('login');renderEmpList();}
     } else {
@@ -1364,7 +1430,7 @@ document.addEventListener('visibilitychange',()=>{
 
 // ── Nav helpers ───────────────────────────────────────────────────────────────
 function show(id){['splash','login','dashboard','admin'].forEach(s=>document.getElementById(s).classList.add('hidden'));document.getElementById(id).classList.remove('hidden');}
-function showMode(m){['mode-select','mode-register','mode-adminPw','mode-pin'].forEach(x=>document.getElementById(x).classList.add('hidden'));document.getElementById('mode-'+m).classList.remove('hidden');['loginMsg','regMsg','adminPwMsg','pinMsg'].forEach(x=>{const el=document.getElementById(x);if(el)el.classList.add('hidden');});}
+function showMode(m){['mode-select','mode-register','mode-adminPw','mode-pin'].forEach(x=>document.getElementById(x).classList.add('hidden'));document.getElementById('mode-'+m).classList.remove('hidden');['loginMsg','regMsg','adminPwMsg','pinMsg'].forEach(x=>{const el=document.getElementById(x);if(el)el.classList.add('hidden');});if(m==='adminPw'){const i=document.getElementById('adminPwInput');if(i)i.value='';if(typeof selLoginRole==='function')selLoginRole('super');}}
 
 function highlightNav(btn){document.querySelectorAll('#dashboard .nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
 function highlightAdminNav(btn){document.querySelectorAll('#admin .bottom-nav .nav-btn').forEach(b=>{if(b!==document.querySelector('#admin .nav-btn-orange'))b.classList.remove('active')});btn.classList.add('active');}
@@ -1438,11 +1504,55 @@ function doRegister(){
   const lg=document.getElementById('loginMsg');lg.textContent='✅ ลงทะเบียนสำเร็จ! เลือกชื่อด้านล่าง';lg.classList.remove('hidden');
 }
 
+// ── สิทธิ์เข้าระบบหลังบ้าน: super = ผู้ดูแล (เต็ม), viewer = แอดมิน (ดูแผนผังงานอย่างเดียว) ──
+let _loginRole='super';
+function selLoginRole(r){
+  _loginRole=r;
+  document.getElementById('roleBtnSuper')?.classList.toggle('active',r==='super');
+  document.getElementById('roleBtnViewer')?.classList.toggle('active',r==='viewer');
+  const hint=document.getElementById('adminPwHint');
+  if(hint){
+    if(r==='super'){
+      hint.innerHTML='🔑 รหัสผ่านเริ่มต้น: <b>admin1234</b><br><span style="color:#888;font-size:11px;">(สิทธิ์เต็ม — จัดการได้ทุกอย่าง · เปลี่ยนรหัสได้ในหน้าตั้งค่า)</span>';
+      hint.style.background='#F5F3FF';hint.style.borderColor='#D8B4FE';hint.style.color='#6D28D9';
+    }else{
+      hint.innerHTML='🔑 รหัสผ่านเริ่มต้น: <b>view1234</b><br><span style="color:#888;font-size:11px;">(ดูเฉพาะหน้าแผนผังงาน — แก้ไขอะไรไม่ได้ · ผู้ดูแลตั้งรหัสนี้ได้ในหน้าตั้งค่า)</span>';
+      hint.style.background='#ECFEFF';hint.style.borderColor='#A5F3FC';hint.style.color='#0E7490';
+    }
+  }
+  const m=document.getElementById('adminPwMsg');if(m)m.classList.add('hidden');
+}
+
+// ปรับหน้าจอแผงหลังบ้านตามบทบาท — viewer เห็นเฉพาะแผนผังงาน, ซ่อนเมนูล่าง + ปุ่มที่แก้ไขได้
+function applyAdminRoleUI(){
+  const adminEl=document.getElementById('admin');
+  const isViewer=adminRole==='viewer';
+  if(adminEl)adminEl.classList.toggle('role-viewer',isViewer);
+  const title=document.getElementById('adminPanelTitle');
+  if(title)title.textContent=isViewer?'แผนผังงาน':'แผงผู้ดูแล';
+  const badge=document.getElementById('adminTopBadge');
+  if(badge){badge.textContent=isViewer?'แอดมิน':'ADMIN';badge.className=isViewer?'badge-viewer':'badge-admin';}
+  document.getElementById('adminViewerLogout')?.classList.toggle('hidden',!isViewer);
+  document.getElementById('adminRefreshBtn')?.classList.toggle('hidden',false);
+  // viewer ถูกบังคับให้อยู่หน้าแผนผังงาน (summary) เสมอ
+  if(isViewer)switchAdminTab('summary');
+}
+
 function doAdminLogin(){
   const pw=document.getElementById('adminPwInput').value;
   const m=document.getElementById('adminPwMsg');
-  if(pw===adminPw){adminMode=true;saveA();document.getElementById('adminPwInput').value='';show('admin');renderAdmin();switchAdminTab('summary');requestNotifPermission();startAdminAlertTimer();}
-  else{m.textContent='❌ รหัสผ่านไม่ถูกต้อง  (รหัสเริ่มต้น: admin1234)';m.classList.remove('hidden');}
+  const wantViewer=_loginRole==='viewer';
+  const expect=wantViewer?viewerPw:adminPw;
+  const defHint=wantViewer?'view1234':'admin1234';
+  if(pw===expect){
+    adminMode=true;adminRole=wantViewer?'viewer':'super';
+    saveA();saveAR();
+    document.getElementById('adminPwInput').value='';
+    show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();
+    requestNotifPermission();
+    if(!wantViewer)startAdminAlertTimer(); // viewer ไม่ต้องเด้งแจ้งเตือนผู้ดูแล
+  }
+  else{m.textContent=`❌ รหัสผ่านไม่ถูกต้อง  (รหัสเริ่มต้น: ${defHint})`;m.classList.remove('hidden');}
 }
 
 function togglePwVis(){
@@ -1459,9 +1569,10 @@ function doEmergencyReset(){
   const m=document.getElementById('resetMsg');
   if(code==='SKE-RESET-2025'){
     adminPw='admin1234';saveP();
-    m.textContent='✅ รีเซ็ตสำเร็จ! รหัสผ่านกลับเป็น admin1234';m.style.color='#10B981';m.classList.remove('hidden');
-    document.getElementById('adminPwInput').value='admin1234';
-    setTimeout(()=>{document.getElementById('resetPwPanel').classList.add('hidden');m.classList.add('hidden');},2000);
+    viewerPw='view1234';saveViewerPw();
+    m.textContent='✅ รีเซ็ตสำเร็จ! ผู้ดูแล=admin1234, แอดมิน=view1234';m.style.color='#10B981';m.classList.remove('hidden');
+    document.getElementById('adminPwInput').value=(_loginRole==='viewer')?'view1234':'admin1234';
+    setTimeout(()=>{document.getElementById('resetPwPanel').classList.add('hidden');m.classList.add('hidden');},2500);
   }else{m.textContent='❌ Emergency Code ไม่ถูกต้อง';m.style.color='#EF4444';m.classList.remove('hidden');}
 }
 
@@ -1723,7 +1834,7 @@ function requestNotifPermission(){
   }
 }
 
-function doLogout(){closeEmpSettings();closeRepairModal();closeFluidModal();stopAlertTimer();stopAdminAlertTimer();currentUser=null;adminMode=false;saveU();saveA();show('login');renderEmpList();showMode('select');}
+function doLogout(){closeEmpSettings();closeRepairModal();closeFluidModal();stopAlertTimer();stopAdminAlertTimer();currentUser=null;adminMode=false;adminRole=null;saveU();saveA();saveAR();document.getElementById('admin')?.classList.remove('role-viewer');show('login');renderEmpList();showMode('select');}
 
 // ── Employee settings sheet (โปรไฟล์ + ออกจากระบบ) ───────────────────────────
 function openEmpSettings(){
@@ -1734,6 +1845,9 @@ function openEmpSettings(){
   if(p)p.value=me.plate||'';
   if(ph)ph.value=me.phone||'';
   const msg=document.getElementById('setMsg');if(msg)msg.classList.add('hidden');
+  // ล้างฟอร์มเปลี่ยน PIN ทุกครั้งที่เปิด
+  ['myCurPin','myNewPin','myNewPin2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const pm=document.getElementById('myPinMsg');if(pm)pm.classList.add('hidden');
   const m=document.getElementById('empSettingsModal');
   if(m){m.classList.remove('hidden');m.style.display='flex';}
   document.getElementById('navSettings')?.classList.add('active');
@@ -1765,6 +1879,35 @@ function doSaveProfile(){
   if(msg){msg.textContent='✅ บันทึกข้อมูลแล้ว';msg.className='msg-ok';msg.classList.remove('hidden');}
   renderDashboard();
   setTimeout(closeEmpSettings,800);
+}
+
+// เปลี่ยน PIN ของตนเอง: ตรวจ PIN เดิม + PIN ใหม่ 2 ช่องต้องตรงกัน (กันบุคคลที่ 3 มาแก้)
+function doChangeMyPin(){
+  const m=document.getElementById('myPinMsg');
+  const showErr=(t)=>{if(m){m.textContent=t;m.className='msg-err';m.classList.remove('hidden');}};
+  if(!currentUser){closeEmpSettings();return;}
+  const me=employees.find(e=>e.id===currentUser.id)||currentUser;
+  const cur=(document.getElementById('myCurPin').value||'').trim();
+  const np=(document.getElementById('myNewPin').value||'').trim();
+  const np2=(document.getElementById('myNewPin2').value||'').trim();
+  // ถ้าพนักงานยังไม่เคยตั้ง PIN ให้ผ่านได้โดยไม่ต้องกรอกของเดิม
+  if(me.pin && cur!==me.pin){showErr('❌ PIN เดิมไม่ถูกต้อง');return;}
+  if(!/^\d{4}$/.test(np)){showErr('PIN ใหม่ต้องเป็นตัวเลข 4 หลัก');return;}
+  if(np!==np2){showErr('❌ PIN ใหม่ทั้งสองช่องไม่ตรงกัน');return;}
+  if(me.pin && np===me.pin){showErr('⚠️ PIN ใหม่ต้องไม่ซ้ำกับ PIN เดิม');return;}
+  const patch={pin:np};
+  employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
+  currentUser={...currentUser,...patch};
+  saveU();
+  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  if(window.fbUpdateEmployeeFields){
+    window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+  } else if(window.fbSaveEmployees){
+    window.fbSaveEmployees(employees);
+  }
+  ['myCurPin','myNewPin','myNewPin2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  if(m){m.textContent='✅ เปลี่ยน PIN สำเร็จ! ครั้งต่อไปใช้ PIN ใหม่เข้าใช้งาน';m.className='msg-ok';m.classList.remove('hidden');}
+  setTimeout(()=>{if(m)m.classList.add('hidden');},2800);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -3209,13 +3352,13 @@ function doSave(){
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
-function goAdmin(){show('admin');renderAdmin();switchAdminTab('summary');startAdminAlertTimer();}
+function goAdmin(){show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();if(adminRole!=='viewer')startAdminAlertTimer();}
 function goBack(){
   // ปุ่ม "กลับ" ต้องไม่ทำให้ออกจากระบบเด็ดขาด
   // ถ้ามีพนักงาน login อยู่ → กลับไปหน้าหลักของพนักงานคนนั้น
   if(currentUser){stopAdminAlertTimer();show('dashboard');renderDashboard();return;}
   // ถ้าเข้ามาแบบผู้ดูแลอย่างเดียว (ไม่มี currentUser) → อยู่ในแผงผู้ดูแลต่อ ไม่เด้งไปหน้า login
-  if(adminMode){show('admin');renderAdmin();switchAdminTab('summary');startAdminAlertTimer();return;}
+  if(adminMode){show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();if(adminRole!=='viewer')startAdminAlertTimer();return;}
   // กรณีอื่นๆ (ไม่ได้ login เลยจริงๆ) ค่อยกลับไปหน้าเลือกชื่อ
   stopAdminAlertTimer();
   show('login');renderEmpList();showMode('select');
@@ -3358,6 +3501,8 @@ function renderDoneByProv(){
 }
 
 function switchAdminTab(t){
+  // แอดมิน (viewer) ดูได้เฉพาะแผนผังงานเท่านั้น — กันการเข้าแท็บอื่นทุกกรณี
+  if(adminRole==='viewer')t='summary';
   document.getElementById('adminEmpPanel').classList.add('hidden');
   document.getElementById('adminLeaveHistoryPanel')?.classList.add('hidden');
   document.getElementById('adminHistoryPanel')?.classList.toggle('hidden',t!=='history');
@@ -3558,6 +3703,10 @@ function renderAdminEmpList(){
         <div><div class="inp-label">ชื่อ</div><input class="inp" id="aen_${e.id}" value="${esc(e.name)}"></div>
         <div><div class="inp-label">ทะเบียน</div><input class="inp" id="aep_${e.id}" value="${esc(e.plate)}"></div>
         <div><div class="inp-label">เบอร์โทร</div><input class="inp" id="aeph_${e.id}" value="${esc(e.phone||'')}" type="tel" inputmode="tel"></div>
+        <div style="background:#F0FDFA;border:1px solid #99F6E4;border-radius:8px;padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <span style="font-size:12.5px;color:#0F766E;font-weight:600;">🔑 PIN ปัจจุบัน: <b id="curpin_${e.id}" data-pin="${esc(e.pin||'')}" style="letter-spacing:2px;">••••</b></span>
+          <button type="button" class="btn btn-sm btn-gray" style="padding:4px 12px;font-size:11px;" onclick="toggleEmpPin('${e.id}',this)">👁️ แสดง</button>
+        </div>
         <div><div class="inp-label">🔒 รีเซ็ต PIN <span style="font-size:10px;color:#888;font-weight:400;">(เว้นว่างถ้าไม่ต้องการเปลี่ยน)</span></div><input class="inp" id="aepin_${e.id}" type="password" inputmode="numeric" maxlength="4" placeholder="PIN ใหม่ 4 หลัก"></div>
         <div class="status-grid">${STATUSES.map(st=>`<button class="status-opt" id="aes_${e.id}_${st.id}"
           style="border-color:${e.status===st.id?st.color:'#E8EAF0'};color:${e.status===st.id?st.color:'#888'};background:${e.status===st.id?st.bg:'#F5F6FA'};"
@@ -3589,6 +3738,15 @@ function renderAdminEmpList(){
 }
 
 function openAEdit(id){document.getElementById('aef_'+id).classList.remove('hidden');document.getElementById('aef_'+id).style.display='flex';}
+// ผู้ดูแลกดดู PIN ปัจจุบันของพนักงาน
+function toggleEmpPin(id,btn){
+  const el=document.getElementById('curpin_'+id);
+  if(!el)return;
+  const pin=el.getAttribute('data-pin')||'';
+  const shown=el.getAttribute('data-shown')==='1';
+  if(shown){el.textContent='••••';el.setAttribute('data-shown','0');if(btn)btn.textContent='👁️ แสดง';}
+  else{el.textContent=pin?pin:'(ยังไม่ตั้ง PIN)';el.setAttribute('data-shown','1');if(btn)btn.textContent='🙈 ซ่อน';}
+}
 function closeAEdit(id){document.getElementById('aef_'+id).classList.add('hidden');}
 function toggleAEditLeave(id){
   const box=document.getElementById('aeleavebox_'+id);
@@ -3657,7 +3815,16 @@ function doChangePw(){
   const m=document.getElementById('pwMsg');
   if(v.length<4){m.textContent='ต้องมีอย่างน้อย 4 ตัวอักษร';m.style.color='#EF4444';m.classList.remove('hidden');return;}
   adminPw=v;saveP();document.getElementById('newPwInput').value='';
-  m.textContent='✅ เปลี่ยนรหัสผ่านสำเร็จ!';m.style.color='#10B981';m.classList.remove('hidden');
+  m.textContent='✅ เปลี่ยนรหัสผ่านผู้ดูแลสำเร็จ!';m.style.color='#10B981';m.classList.remove('hidden');
+  setTimeout(()=>m.classList.add('hidden'),2500);
+}
+function doChangeViewerPw(){
+  const v=document.getElementById('newViewerPwInput').value;
+  const m=document.getElementById('viewerPwMsg');
+  if(v.length<4){m.textContent='ต้องมีอย่างน้อย 4 ตัวอักษร';m.style.color='#EF4444';m.classList.remove('hidden');return;}
+  if(v===adminPw){m.textContent='⚠️ ห้ามตั้งซ้ำกับรหัสผู้ดูแล';m.style.color='#EF4444';m.classList.remove('hidden');return;}
+  viewerPw=v;saveViewerPw();document.getElementById('newViewerPwInput').value='';
+  m.textContent='✅ เปลี่ยนรหัสผ่านแอดมินสำเร็จ!';m.style.color='#10B981';m.classList.remove('hidden');
   setTimeout(()=>m.classList.add('hidden'),2500);
 }
 
