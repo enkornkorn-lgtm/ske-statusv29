@@ -408,7 +408,7 @@ textarea{resize:none;}
 .badge-num{background:#EF4444;color:#fff;font-size:10px;font-weight:700;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;margin-left:3px;vertical-align:middle;}
 
 /* ── Bottom Nav ── */
-.bottom-nav{background:#fff;border-top:1px solid #E8EAF0;display:flex;align-items:center;justify-content:space-around;padding:8px 0 max(12px,env(safe-area-inset-bottom));flex-shrink:0;box-shadow:0 -2px 8px rgba(0,0,0,.06);}
+.bottom-nav{background:#fff;border-top:1px solid #E8EAF0;display:flex;align-items:center;justify-content:space-around;padding:8px 0 max(12px,env(safe-area-inset-bottom));flex-shrink:0;box-shadow:0 -2px 8px rgba(0,0,0,.06);padding-bottom:max(12px,env(safe-area-inset-bottom),var(--nav-extra,0px));}
 .nav-btn{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;padding:4px 0;background:transparent;color:#999;font-size:10px;font-weight:600;border-radius:8px;}
 .nav-btn.active{color:#1E90D6;}
 .nav-btn .nav-icon{font-size:22px;line-height:1;display:inline-block;transition:transform .18s cubic-bezier(.34,1.56,.64,1),filter .18s;}
@@ -3915,6 +3915,44 @@ setInterval(()=>{
     el.innerHTML=window.skeIcon(el.getAttribute('data-ic'));
     el.setAttribute('data-ic-filled','1');
   });
+})();
+</script>
+<script>
+/* แก้ช่องว่างด้านล่างบน Android WebApp/TWA
+   ปัญหา: ใน standalone WebApp, window.innerHeight เล็กกว่า screen.height
+   แต่ env(safe-area-inset-bottom) คืน 0 — gesture bar กิน space โดยไม่บอก CSS
+   แก้โดยวัด gap จริง แล้วยัดเป็น --nav-extra ให้ bottom-nav ขยายเอง */
+(function fixAndroidWebAppGap(){
+  function apply(){
+    // คำนวณพื้นที่ที่ gesture bar กิน
+    // window.outerHeight ≈ screen จริง, window.innerHeight = viewport ที่ browser ให้
+    // ใน WebApp standalone mode ทั้งคู่จะเท่ากันหรือ outerHeight > innerHeight
+    var gap = 0;
+    if(window.navigator.standalone === true){
+      // iOS standalone — safe-area ทำงานเองอยู่แล้ว
+      return;
+    }
+    // Android: เปรียบเทียบ visualViewport กับ window
+    if(window.visualViewport){
+      // gap = พื้นที่ที่ OS จอง (gesture bar + status bar ด้านล่าง)
+      var vvh = window.visualViewport.height;
+      var wh  = window.screen.height - window.visualViewport.offsetTop - vvh;
+      // กัน false positive ตอนคีย์บอร์ดขึ้น
+      if(wh > 0 && wh < 200) gap = wh;
+    }
+    // fallback: เปรียบ outerHeight vs innerHeight
+    if(!gap && window.outerHeight && window.innerHeight){
+      var d = window.outerHeight - window.innerHeight;
+      if(d > 0 && d < 200) gap = Math.round(d * 0.4); // เอาแค่ส่วนล่าง ~40%
+    }
+    document.documentElement.style.setProperty('--nav-extra', gap > 0 ? gap+'px' : '0px');
+  }
+  apply();
+  window.addEventListener('resize', apply);
+  if(window.visualViewport) window.visualViewport.addEventListener('resize', apply);
+  // รอให้ layout นิ่งก่อนวัดซ้ำ
+  setTimeout(apply, 500);
+  setTimeout(apply, 1500);
 })();
 </script>
 </body>
