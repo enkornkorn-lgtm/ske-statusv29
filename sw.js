@@ -1,41 +1,69 @@
-/* Service Worker — สถานะรถ SKE
-   ทำให้การแจ้งเตือนเด้งขึ้นถาดแจ้งเตือนของระบบ (system tray) พร้อมสั่นได้
-   แม้ผู้ใช้สลับไปแอพอื่น/จอดับ ตราบใดที่แอพยังรันอยู่เบื้องหลัง
-   (หมายเหตุ: นี่คือ background notification แบบไม่ใช้เซิร์ฟเวอร์ — ใช้ได้ฟรี
-    ข้อจำกัด: ถ้าผู้ใช้ปิดแอพสนิทจริงๆ จะไม่เด้ง เพราะไม่มี push จากเซิร์ฟเวอร์) */
+// ─────────────────────────────────────────────
+//  SKE TRUCK — Service Worker  (sw.js)
+//  วางไว้ในโฟลเดอร์เดียวกับ index.html
+// ─────────────────────────────────────────────
 
-const SW_VERSION = 'ske-sw-v1';
+const CACHE_NAME = 'ske-truck-v1';
 
-self.addEventListener('install', (event) => {
-  // เปิดใช้ SW เวอร์ชันใหม่ทันที ไม่ต้องรอปิดแท็บเก่า
+// ── Install: activate ทันที ──────────────────
+self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
-  // เข้าควบคุมทุกหน้าที่เปิดอยู่ทันที
+// ── Activate: เข้าควบคุม client ทันที ────────
+self.addEventListener('activate', event => {
   event.waitUntil(self.clients.claim());
 });
 
-// เมื่อผู้ใช้แตะการแจ้งเตือน → เปิด/โฟกัสแอพ
-self.addEventListener('notificationclick', (event) => {
+// ── Fetch: pass-through (ไม่ cache ซับซ้อน) ──
+self.addEventListener('fetch', event => {
+  // ให้ browser จัดการเองตามปกติ
+});
+
+// ── Notification Click ────────────────────────
+// เมื่อผู้ใช้กดที่การแจ้งเตือน → เปิดหน้าแอพ
+self.addEventListener('notificationclick', event => {
   event.notification.close();
+
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // ถ้าแอพเปิดอยู่แล้ว → โฟกัสหน้าต่างนั้น
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+      // ถ้ามีแท็บเปิดอยู่แล้ว → focus แท็บนั้น
       for (const client of clientList) {
-        if ('focus' in client) return client.focus();
+        if ('focus' in client) {
+          return client.focus();
+        }
       }
-      // ถ้าไม่ได้เปิดอยู่ → เปิดหน้าแอพใหม่
-      if (self.clients.openWindow) return self.clients.openWindow('.');
+      // ถ้าไม่มีแท็บเลย → เปิดหน้าใหม่
+      if (self.clients.openWindow) {
+        return self.clients.openWindow('./');
+      }
     })
   );
 });
 
-// รับคำสั่งจากหน้าเว็บให้แสดงการแจ้งเตือนผ่าน SW (เด้งขึ้น system tray ได้แม้อยู่เบื้องหลัง)
-self.addEventListener('message', (event) => {
-  const data = event.data || {};
-  if (data.type === 'SHOW_NOTIFICATION') {
-    const { title, options } = data;
-    self.registration.showNotification(title, options || {});
-  }
+// ── Notification Close ────────────────────────
+self.addEventListener('notificationclose', event => {
+  // ปิดแจ้งเตือนโดยไม่กด — ไม่ต้องทำอะไร
+});
+
+// ── Push (สำหรับรองรับ Web Push ในอนาคต) ────
+self.addEventListener('push', event => {
+  if (!event.data) return;
+
+  let data = {};
+  try { data = event.data.json(); } catch (e) { data = { title: event.data.text() }; }
+
+  const title   = data.title  || '🔔 SKE TRUCK';
+  const options = {
+    body:              data.body    || '',
+    icon:              data.icon    || './icon-192.png',
+    badge:             data.badge   || './icon-192.png',
+    vibrate:           data.vibrate || [200, 100, 200],
+    tag:               data.tag     || 'ske-alert',
+    renotify:          true,
+    requireInteraction: false,
+    data:              data.data    || {}
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
 });
