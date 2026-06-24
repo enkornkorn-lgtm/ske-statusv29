@@ -12,7 +12,8 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getDatabase, ref, set, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  import { getDatabase, ref, set, onValue, get, update, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDE1EAH7Uf2cVOkguXW7vfObisEH3NMvh4",
@@ -26,6 +27,53 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
+
+  // ══ Firebase Cloud Messaging (FCM) — แจ้งเตือนเข้าโทรศัพท์แม้ปิดแอป ══
+  // ⚠️ ต้องใส่ VAPID key จาก Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
+  const VAPID_KEY = "PASTE_YOUR_VAPID_KEY_HERE";
+  let _messaging = null;
+
+  // ขอ permission + ลงทะเบียน FCM token ของเครื่องนี้ขึ้น Firebase
+  // ลงทะเบียนเฉพาะ "เครื่องผู้ดูแล/แอดมิน" เท่านั้น (คนที่ต้องรับแจ้งเตือนเมื่อพนักงานเปลี่ยนสถานะ)
+  window.fbRegisterPushToken = async function(role) {
+    try {
+      if (!('serviceWorker' in navigator) || !('Notification' in window)) return;
+      if (VAPID_KEY === "PASTE_YOUR_VAPID_KEY_HERE") { console.info('FCM: ยังไม่ได้ใส่ VAPID key — ข้ามการลงทะเบียน push'); return; }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return;
+      // ลงทะเบียน service worker สำหรับ FCM โดยเฉพาะ
+      const swReg = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+      if (!_messaging) _messaging = getMessaging(app);
+      const token = await getToken(_messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+      if (!token) return;
+      // เก็บ token ไว้ใน Firebase ใต้ pushTokens/<token> = {role, ts}
+      // ใช้ token เป็น key กันซ้ำ — เครื่องเดิมลงทะเบียนใหม่ก็ทับ key เดิม
+      await set(ref(db, 'pushTokens/' + token.replace(/[.#$\[\]\/]/g, '_')), {
+        token: token, role: role || 'admin', ts: Date.now()
+      });
+      localStorage.setItem('ske_push_token', token);
+      console.info('FCM: ลงทะเบียน push token สำเร็จ');
+      // รับข้อความตอนแอปเปิดอยู่ (foreground) — เด้ง notification เอง
+      onMessage(_messaging, (payload) => {
+        const n = payload.notification || {};
+        if (typeof showSystemNotification === 'function') {
+          showSystemNotification(n.title || '🔔 SKE TRUCK', { body: n.body || '' });
+        }
+        if (typeof playAlertSound === 'function') playAlertSound();
+      });
+    } catch (e) { console.warn('FCM register error', e); }
+  };
+
+  // ลบ token ออกจาก Firebase ตอน logout (กันแจ้งเตือนค้างไปเครื่องที่ออกจากระบบแล้ว)
+  window.fbUnregisterPushToken = async function() {
+    try {
+      const token = localStorage.getItem('ske_push_token');
+      if (token) {
+        await remove(ref(db, 'pushTokens/' + token.replace(/[.#$\[\]\/]/g, '_')));
+        localStorage.removeItem('ske_push_token');
+      }
+    } catch (e) { console.warn('FCM unregister error', e); }
+  };
 
   // ── Firebase helpers ──────────────────────────────────────────────────────────
   window._fbReady = false;
@@ -1405,6 +1453,7 @@ window.onload=function(){
         adminMode=true;
         adminRole=localStorage.getItem('ske_adminRole')||'super';
         show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();
+        if(window.fbRegisterPushToken)window.fbRegisterPushToken(adminRole==='viewer'?'viewer':'super');
         if(adminRole!=='viewer')startAdminAlertTimer();
       }
       else if(currentUser){show('dashboard');renderDashboard();startAlertTimer();}
@@ -1559,6 +1608,8 @@ function doAdminLogin(){
     document.getElementById('adminPwInput').value='';
     show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();
     requestNotifPermission();
+    // ลงทะเบียน FCM push token — รับแจ้งเตือนแม้ปิดแอป (super/viewer ลงทะเบียนได้ทั้งคู่)
+    if(window.fbRegisterPushToken)window.fbRegisterPushToken(wantViewer?'viewer':'super');
     if(!wantViewer)startAdminAlertTimer(); // viewer ไม่ต้องเด้งแจ้งเตือนผู้ดูแล
   }
   else{m.textContent=`❌ รหัสผ่านไม่ถูกต้อง  (รหัสเริ่มต้น: ${defHint})`;m.classList.remove('hidden');}
@@ -1843,7 +1894,7 @@ function requestNotifPermission(){
   }
 }
 
-function doLogout(){closeEmpSettings();closeRepairModal();closeFluidModal();stopAlertTimer();stopAdminAlertTimer();currentUser=null;adminMode=false;adminRole=null;saveU();saveA();saveAR();document.getElementById('admin')?.classList.remove('role-viewer');show('login');renderEmpList();showMode('select');}
+function doLogout(){if(window.fbUnregisterPushToken)window.fbUnregisterPushToken();closeEmpSettings();closeRepairModal();closeFluidModal();stopAlertTimer();stopAdminAlertTimer();currentUser=null;adminMode=false;adminRole=null;saveU();saveA();saveAR();document.getElementById('admin')?.classList.remove('role-viewer');show('login');renderEmpList();showMode('select');}
 
 // ── Employee settings sheet (โปรไฟล์ + ออกจากระบบ) ───────────────────────────
 function openEmpSettings(){
