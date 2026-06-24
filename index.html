@@ -3277,8 +3277,8 @@ function switchAdminTab(t){
   if(t==='cash')renderAdminCashList();
   if(t==='history')renderAdminHistory();
   // เลื่อนขึ้นบนสุดทุกครั้งที่กดเปลี่ยนแท็บ
-  const adminEl=document.getElementById('admin');
-  if(adminEl)adminEl.scrollTo({top:0,behavior:'smooth'});
+  const scrollEl=document.querySelector('#admin .list-area');
+  if(scrollEl)scrollEl.scrollTo({top:0,behavior:'smooth'});
   else window.scrollTo({top:0,behavior:'smooth'});
 }
 
