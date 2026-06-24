@@ -1,30 +1,48 @@
-// sw.js — Service Worker สำหรับ SKE TRUCK PWA
-const CACHE = 'ske-truck-v1';
-const ASSETS = [
-  './',
+// SKE TRUCK Service Worker v2
+const CACHE_NAME = 'ske-truck-v2';
+
+// Cache เฉพาะ static assets หลัก
+const PRECACHE = [
   './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
 ];
 
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(PRECACHE))
+      .then(() => self.skipWaiting())
   );
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(
+self.addEventListener('activate', event => {
+  event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(
+        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+      )
     ).then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
+self.addEventListener('fetch', event => {
+  // ไม่ cache firebase หรือ googleapis
+  const url = event.request.url;
+  if (url.includes('firebase') || url.includes('googleapis') || url.includes('gstatic')) return;
+  if (event.request.method !== 'GET') return;
+
+  event.respondWith(
+    // Network first, fallback to cache
+    fetch(event.request)
+      .then(response => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

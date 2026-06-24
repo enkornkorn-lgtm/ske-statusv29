@@ -556,6 +556,11 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <div class="splash-title">สถานะรถ SKE</div>
     <div class="splash-sub">SK EVO LOGISTICS</div>
   </div>
+  <div id="splashInstallBtn" style="display:none;margin-top:24px;">
+    <button onclick="doInstall()" style="background:#F47920;color:#fff;border:none;border-radius:16px;padding:14px 32px;font-size:16px;font-weight:800;box-shadow:0 4px 16px rgba(244,121,32,.4);cursor:pointer;">
+      📲 ติดตั้งแอป
+    </button>
+  </div>
   <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
 </div>
 
@@ -1409,7 +1414,14 @@ function migrateLegacyLeaveStatus(){
 }
 
 // ── PWA ───────────────────────────────────────────────────────────────────────
-window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;showInstallBar();});
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();
+  deferredPrompt=e;
+  showInstallBar();
+  // แสดงปุ่มติดตั้งบน splash ด้วย
+  const splashBtn=document.getElementById('splashInstallBtn');
+  if(splashBtn)splashBtn.style.display='block';
+});
 window.addEventListener('appinstalled',()=>{document.getElementById('installBar').classList.add('hidden');deferredPrompt=null;});
 
 function showInstallBar(){
