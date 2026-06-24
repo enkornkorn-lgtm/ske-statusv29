@@ -456,7 +456,12 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .empty-state .empty-text{font-size:14px;}
 
 /* ── Avatar ── */
-.avatar{position:relative;border-radius:50%;background:linear-gradient(135deg,#F47920,#1E90D6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;flex-shrink:0;}
+.avatar{position:relative;border-radius:50%;background:linear-gradient(135deg,#F47920,#1E90D6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;flex-shrink:0;overflow:hidden;}
+.avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;}
+.avatar-upload{position:relative;cursor:pointer;display:inline-block;}
+.avatar-upload-overlay{position:absolute;inset:0;border-radius:50%;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;pointer-events:none;}
+.avatar-upload:hover .avatar-upload-overlay,.avatar-upload:active .avatar-upload-overlay{opacity:1;}
+.avatar-upload-overlay span{color:#fff;font-size:18px;}
 .leave-badge{position:absolute;bottom:-3px;right:-3px;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid #FDE68A;display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.25);}
 
 /* ── Login page ── */
@@ -739,6 +744,16 @@ select.inp option{background:#fff;color:#1a1a2e;}
     </div>
     <div class="card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px;">
       <div style="color:#1E90D6;font-weight:700;font-size:14px;">👤 ข้อมูลพนักงาน</div>
+      <!-- รูปโปรไฟล์ -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+        <div class="avatar-upload" onclick="document.getElementById('avatarFileInput').click()">
+          <div class="avatar" id="settingsAvatar" style="width:80px;height:80px;font-size:32px;"></div>
+          <div class="avatar-upload-overlay"><span>📷</span></div>
+        </div>
+        <div style="font-size:11px;color:#888;">กดเพื่อเปลี่ยนรูปโปรไฟล์</div>
+        <input type="file" id="avatarFileInput" accept="image/*" style="display:none;" onchange="handleAvatarChange(this)">
+        <button id="removeAvatarBtn" class="btn btn-sm btn-gray hidden" onclick="removeAvatar()" style="font-size:11px;padding:4px 12px;">🗑️ ลบรูปโปรไฟล์</button>
+      </div>
       <div><div class="inp-label">ชื่อ-นามสกุล</div><input class="inp" id="setName" placeholder="ชื่อ-นามสกุล"></div>
       <div><div class="inp-label">ทะเบียนรถ</div><input class="inp" id="setPlate" placeholder="ทะเบียนรถ"></div>
       <div><div class="inp-label">เบอร์โทร</div><input class="inp" id="setPhone" type="tel" inputmode="tel" placeholder="เช่น 081-234-5678"></div>
@@ -1492,6 +1507,39 @@ function showMode(m){['mode-select','mode-register','mode-adminPw','mode-pin'].f
 function highlightNav(btn){document.querySelectorAll('#dashboard .nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
 function highlightAdminNav(btn){document.querySelectorAll('#admin .bottom-nav .nav-btn').forEach(b=>{if(b!==document.querySelector('#admin .nav-btn-orange'))b.classList.remove('active')});btn.classList.add('active');}
 
+// ── Avatar helpers ────────────────────────────────────────────────────────────
+// คืน HTML ของรูปภายใน .avatar — ถ้ามี photo ใช้รูป ถ้าไม่มีใช้ตัวอักษร
+function avatarImg(emp, size){
+  if(emp && emp.photo){
+    return `<img src="${emp.photo}" alt="${esc(emp.name)}" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;display:block;">`;
+  }
+  return esc((emp && emp.name) ? emp.name.charAt(0) : '?');
+}
+
+// บีบอัดรูปให้เล็กลงก่อนบันทึก (max 200x200, quality 0.7) — คืน Promise<base64>
+function compressAvatar(file){
+  return new Promise((resolve, reject)=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const MAX=200;
+        let w=img.width, h=img.height;
+        if(w>h){if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}}
+        else{if(h>MAX){w=Math.round(w*MAX/h);h=MAX;}}
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg',0.75));
+      };
+      img.onerror=reject;
+      img.src=e.target.result;
+    };
+    r.onerror=reject;
+    r.readAsDataURL(file);
+  });
+}
+
 // ── Login ─────────────────────────────────────────────────────────────────────
 function renderEmpList(){
   const el=document.getElementById('empList');
@@ -1499,7 +1547,7 @@ function renderEmpList(){
   el.innerHTML=employees.map(e=>{
     const s=getS(e.status);const lbl=getFullLabel(e);
     return `<button class="emp-btn" onclick="askPin('${e.id}')">
-      <div class="avatar" style="width:46px;height:46px;font-size:19px;">${esc(e.name.charAt(0))}${leaveIcon(e)}</div>
+      <div class="avatar" style="width:46px;height:46px;font-size:19px;">${avatarImg(e,46)}${leaveIcon(e)}</div>
       <div style="flex:1;min-width:0;"><div style="color:#1a1a2e;font-weight:700;font-size:15px;">${esc(e.name)}</div><div style="color:#888;font-size:12px;">🚛 ${esc(e.plate)}</div></div>
       <div class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;">${skeIcon(s.ic)} ${esc(lbl)}</div>
     </button>`;
@@ -1512,7 +1560,7 @@ function askPin(id){
   _pinTargetId=id;
   const s=getS(emp.status);
   document.getElementById('pinEmpInfo').innerHTML=`
-    <div class="avatar" style="width:52px;height:52px;font-size:22px;margin:0 auto 8px;">${esc(emp.name.charAt(0))}</div>
+    <div class="avatar" style="width:52px;height:52px;font-size:22px;margin:0 auto 8px;">${avatarImg(emp,52)}</div>
     <div style="font-weight:800;font-size:16px;color:#1a1a2e;">${esc(emp.name)}</div>
     <div style="color:#888;font-size:12px;margin-top:2px;">🚛 ${esc(emp.plate)}</div>`;
   document.getElementById('pinInput').value='';
@@ -1909,10 +1957,61 @@ function openEmpSettings(){
   // ล้างฟอร์มเปลี่ยน PIN ทุกครั้งที่เปิด
   ['myCurPin','myNewPin','myNewPin2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const pm=document.getElementById('myPinMsg');if(pm)pm.classList.add('hidden');
+  // แสดงรูปโปรไฟล์ปัจจุบัน
+  _refreshSettingsAvatar(me);
   const m=document.getElementById('empSettingsModal');
   if(m){m.classList.remove('hidden');m.style.display='flex';}
   document.getElementById('navSettings')?.classList.add('active');
   document.getElementById('navHome')?.classList.remove('active');
+}
+
+function _refreshSettingsAvatar(me){
+  const av=document.getElementById('settingsAvatar');
+  const removeBtn=document.getElementById('removeAvatarBtn');
+  if(!av)return;
+  if(me && me.photo){
+    av.innerHTML=`<img src="${me.photo}" style="width:80px;height:80px;object-fit:cover;border-radius:50%;display:block;">`;
+    if(removeBtn)removeBtn.classList.remove('hidden');
+  } else {
+    av.innerHTML=esc((me&&me.name)?me.name.charAt(0):'?');
+    if(removeBtn)removeBtn.classList.add('hidden');
+  }
+}
+
+async function handleAvatarChange(input){
+  const file=input.files&&input.files[0];
+  if(!file||!currentUser)return;
+  try{
+    const compressed=await compressAvatar(file);
+    // แสดง preview ทันที
+    const av=document.getElementById('settingsAvatar');
+    if(av)av.innerHTML=`<img src="${compressed}" style="width:80px;height:80px;object-fit:cover;border-radius:50%;display:block;">`;
+    document.getElementById('removeAvatarBtn')?.classList.remove('hidden');
+    // บันทึกลง employee
+    const patch={photo:compressed};
+    employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
+    currentUser={...currentUser,...patch};
+    saveE();saveU();
+    if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+    renderDashboard();
+    const msg=document.getElementById('setMsg');
+    if(msg){msg.textContent='✅ อัปเดตรูปโปรไฟล์แล้ว';msg.className='msg-ok';msg.classList.remove('hidden');setTimeout(()=>msg.classList.add('hidden'),2000);}
+  }catch(e){console.error('avatar error',e);}
+  input.value='';
+}
+
+function removeAvatar(){
+  if(!currentUser)return;
+  const av=document.getElementById('settingsAvatar');
+  const me=employees.find(e=>e.id===currentUser.id)||currentUser;
+  if(av)av.innerHTML=esc((me&&me.name)?me.name.charAt(0):'?');
+  document.getElementById('removeAvatarBtn')?.classList.add('hidden');
+  const patch={photo:null};
+  employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
+  currentUser={...currentUser,...patch};
+  saveE();saveU();
+  if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+  renderDashboard();
 }
 function closeEmpSettings(){
   const m=document.getElementById('empSettingsModal');
@@ -3030,7 +3129,7 @@ function renderDashboard(){
   mc.style.boxShadow=`0 4px 20px ${s.border}55`;
   mc.innerHTML=`
     <div class="my-card-row" style="display:flex;align-items:center;gap:12px;">
-      <div class="avatar" style="width:50px;height:50px;font-size:21px;">${me.name.charAt(0)}${leaveIcon(me)}</div>
+      <div class="avatar" style="width:50px;height:50px;font-size:21px;">${avatarImg(me,50)}${leaveIcon(me)}</div>
       <div style="flex:1;min-width:0;">
         <div style="color:#1a1a2e;font-weight:800;font-size:16px;">${esc(me.name)}</div>
         <div style="color:#888;font-size:12px;">🚛 ${esc(me.plate)}${phoneLink(me.phone)}</div>
@@ -3746,7 +3845,7 @@ function renderAdminEmpList(){
     const lp=e.onLeave?leaveApprovalPill(e):null;
     return`<div class="emp-card" style="margin-bottom:12px;">
       <div class="emp-card-row">
-        <div class="avatar" style="width:42px;height:42px;font-size:18px;">${esc(e.name.charAt(0))}${leaveIcon(e)}</div>
+        <div class="avatar" style="width:42px;height:42px;font-size:18px;">${avatarImg(e,42)}${leaveIcon(e)}</div>
         <div style="flex:1;min-width:0;">
           <div style="color:#1a1a2e;font-weight:700;">${esc(e.name)}</div>
           <div style="color:#888;font-size:11px;">🚛 ${esc(e.plate)}${phoneLink(e.phone)}</div>
