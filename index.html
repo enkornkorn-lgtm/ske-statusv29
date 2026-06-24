@@ -3276,6 +3276,10 @@ function switchAdminTab(t){
   if(t==='maint')renderAdminMaint();
   if(t==='cash')renderAdminCashList();
   if(t==='history')renderAdminHistory();
+  // เลื่อนขึ้นบนสุดทุกครั้งที่กดเปลี่ยนแท็บ
+  const adminEl=document.getElementById('admin');
+  if(adminEl)adminEl.scrollTo({top:0,behavior:'smooth'});
+  else window.scrollTo({top:0,behavior:'smooth'});
 }
 
 // ── พนักงาน ย้ายไปอยู่ใต้ "ตั้งค่า" — เปิด/ปิดเป็นหน้าย่อย ──────────────────
