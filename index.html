@@ -877,6 +877,10 @@ select.inp option{background:#fff;color:#1a1a2e;}
 
     <!-- leave panel: รายชื่อพนักงานที่ลา — แยกออกมาเป็นแท็บของตัวเอง ไม่ปนกับภาพรวมสถานะรถ -->
     <div id="adminLeavePanel" class="hidden">
+      <!-- ปุ่มดูประวัติการลา — แสดงเฉพาะ viewer เพราะไม่มีเมนูตั้งค่า -->
+      <div id="viewerLeaveHistoryBar" class="hidden" style="padding:0 0 10px;">
+        <button class="btn btn-full" style="background:#F5F3FF;color:#7B2FBE;border:1.5px solid #D8B4FE;font-weight:700;" onclick="switchAdminTab('leaveHistory')">🌴 ดูประวัติการลา</button>
+      </div>
       <div id="adminLeaveContent"></div>
     </div>
 
@@ -963,7 +967,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <!-- leave history sub-view -->
     <div id="adminLeaveHistoryPanel" class="hidden">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <button class="topbar-back" onclick="switchAdminTab('settings')">←</button>
+        <button class="topbar-back" onclick="switchAdminTab(adminRole==='viewer'?'leave':'settings')">←</button>
         <div class="section-label" style="margin:0;">🌴 ประวัติการลา</div>
       </div>
       <div id="leaveHistoryContent"></div>
@@ -1537,6 +1541,8 @@ function applyAdminRoleUI(){
   if(badge){badge.textContent=isViewer?'แอดมิน':'ADMIN';badge.className=isViewer?'badge-viewer':'badge-admin';}
   document.getElementById('adminViewerLogout')?.classList.toggle('hidden',!isViewer);
   document.getElementById('adminRefreshBtn')?.classList.toggle('hidden',false);
+  // แสดงปุ่ม "ดูประวัติการลา" ในหน้าลาเฉพาะ viewer (ผู้ดูแลมีปุ่มนี้ใน accordion ตั้งค่าอยู่แล้ว)
+  document.getElementById('viewerLeaveHistoryBar')?.classList.toggle('hidden',!isViewer);
   // viewer ถูกบังคับให้อยู่หน้าแผนผังงาน (summary) เสมอ
   if(isViewer)switchAdminTab('summary');
 }
@@ -3505,12 +3511,13 @@ function renderDoneByProv(){
 }
 
 function switchAdminTab(t){
-  // แอดมิน (viewer) ดูได้เฉพาะแผนผังงาน + หน้าลา (เพื่อวางแผนงาน) เท่านั้น — แท็บอื่นถูกบังคับกลับไปแผนผังงาน
-  if(adminRole==='viewer'&&t!=='summary'&&t!=='leave')t='summary';
+  // แอดมิน (viewer) ดูได้เฉพาะแผนผังงาน + หน้าลา + ประวัติการลา (เพื่อวางแผนงาน) เท่านั้น
+  if(adminRole==='viewer'&&t!=='summary'&&t!=='leave'&&t!=='leaveHistory')t='summary';
   document.getElementById('adminEmpPanel').classList.add('hidden');
   document.getElementById('adminLeaveHistoryPanel')?.classList.add('hidden');
   document.getElementById('adminHistoryPanel')?.classList.toggle('hidden',t!=='history');
-  if(t==='history'||t==='leaveHistory'){document.getElementById('adminTabBar')?.classList.add('hidden');}
+  // viewer ไม่มีแท็บตั้งค่า — ให้แสดง bottom-nav เสมอ แม้อยู่หน้า leaveHistory
+  if((t==='history'||t==='leaveHistory')&&adminRole!=='viewer'){document.getElementById('adminTabBar')?.classList.add('hidden');}
   else{document.getElementById('adminTabBar')?.classList.remove('hidden');}
   document.getElementById('adminSummaryPanel').classList.toggle('hidden',t!=='summary');
   document.getElementById('adminMaintPanel').classList.toggle('hidden',t!=='maint');
@@ -3527,8 +3534,9 @@ function switchAdminTab(t){
   if(t==='summary')document.getElementById('navAdminSum')?.classList.add('active');
   if(t==='maint')document.getElementById('navAdminMaint')?.classList.add('active');
   if(t==='cash')document.getElementById('navAdminCash')?.classList.add('active');
-  if(t==='leave')document.getElementById('navAdminLeave')?.classList.add('active');
-  if(t==='settings'||t==='history'||t==='leaveHistory')document.getElementById('navAdminSet')?.classList.add('active');
+  // viewer: ไฮไลต์ปุ่ม "ลา" เมื่ออยู่ทั้งหน้าลา และหน้าประวัติการลา
+  if(t==='leave'||(t==='leaveHistory'&&adminRole==='viewer'))document.getElementById('navAdminLeave')?.classList.add('active');
+  if(t==='settings'||t==='history'||(t==='leaveHistory'&&adminRole!=='viewer'))document.getElementById('navAdminSet')?.classList.add('active');
   if(t==='settings'){setTimeout(()=>{const si=document.getElementById('sysInfo');if(si&&si.innerHTML==='')renderSysInfo();},100);}
   if(t==='summary'){const el=document.getElementById('adminSummaryContent');if(el)el.innerHTML=buildSummaryHTML();}
   if(t==='leave'){const el=document.getElementById('adminLeaveContent');if(el)el.innerHTML=buildLeaveHTML();}
