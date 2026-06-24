@@ -2794,52 +2794,83 @@ function _repairCardHTML(r){
   const done=r.status==='done';const urg=r.urgency==='urgent';
   const pill=repairStatusPill(r);
   const approved=r.approval==='approved';const rejected=r.approval==='rejected';
+  const checking=r.approval==='checking_price';
+  const pending=!r.approval||r.approval==='pending';
   const info=_empLookup(r.empId,r.empName,r.plate);
-  return`<div class="maint-card ${urg&&!done?'urgent':''} ${done?'fixed':''}" style="margin-bottom:10px;">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #F1F5F9;">
-      <div class="avatar" style="width:30px;height:30px;font-size:13px;flex-shrink:0;">${esc(info.name.charAt(0))}</div>
+  const emp=employees.find(e=>e.id===r.empId);
+  // สีขอบตามสถานะ
+  const borderColor=urg&&!done?'#FCA5A5':approved?'#6EE7B7':checking?'#C4B5FD':'#E8EAF0';
+  const bgColor=urg&&!done?'#FFF5F5':approved?'#F0FDF9':checking?'#F5F3FF':'#fff';
+  const panelId='rpanel_'+r.id;
+  return`<div class="maint-card" style="background:${bgColor};border-color:${borderColor};padding:0;overflow:hidden;">
+    <!-- ── header row (always visible) ── -->
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;" onclick="toggleRepairPanel('${r.id}')">
+      <div class="avatar" style="width:36px;height:36px;font-size:15px;flex-shrink:0;">${avatarImg(emp,36)||esc(info.name.charAt(0))}</div>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:12.5px;font-weight:700;color:#1a1a2e;">${esc(info.name)}</div>
-        <div style="font-size:10.5px;color:#888;">🚛 ${esc(info.plate||'-')}</div>
+        <div style="font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(info.name)}</div>
+        <div style="font-size:10.5px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🚛 ${esc(info.plate||'-')}</div>
       </div>
-      <span class="urgency-pill" style="background:${urg?'#FEF2F2':'#EFF6FF'};color:${urg?'#DC2626':'#1E90D6'};border:1px solid ${urg?'#FCA5A5':'#93C5FD'};">${urg?'🔴 เร่งด่วน':'🔵 ปกติ'}</span>
+      ${urg&&!done?`<span style="background:#FEF2F2;color:#DC2626;border:1px solid #FCA5A5;border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;flex-shrink:0;">🔴 ด่วน</span>`:''}
+      <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};flex-shrink:0;font-size:10px;">${pill.text}</span>
+      <span id="rpanel_arrow_${r.id}" style="color:#aaa;font-size:16px;flex-shrink:0;transition:transform .2s;">›</span>
     </div>
-    <div style="color:#1a1a2e;font-size:13px;font-weight:600;line-height:1.5;margin-bottom:8px;">${esc(r.issue)}</div>
-    ${(r.empPhotos&&r.empPhotos.length)?`<div style="margin-bottom:8px;">
-      <div style="font-size:10.5px;color:#F47920;font-weight:700;margin-bottom:4px;">📷 รูปจากพนักงาน (${r.empPhotos.length})</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${r.empPhotos.map((p,i)=>`<img src="${p}" onclick="viewRepairPhoto('${r.id}',${i},'empPhotos')" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+    <!-- ── issue text ── -->
+    <div style="padding:0 14px 10px;font-size:13px;font-weight:600;color:#1a1a2e;line-height:1.5;border-bottom:1px solid #F1F5F9;">${esc(r.issue)}</div>
+    <!-- ── approval quick-buttons (always visible, compact) ── -->
+    <div style="display:flex;gap:6px;padding:10px 14px;border-bottom:1px solid #F1F5F9;">
+      <button class="btn btn-sm ${approved?'btn-green':'btn-gray'}" style="flex:1;font-size:11px;padding:6px 2px;" onclick="setRepairApproval('${r.id}','approved');event.stopPropagation()">✅ อนุมัติ</button>
+      <button class="btn btn-sm ${checking?'btn-purple':'btn-gray'}" style="flex:1;font-size:11px;padding:6px 2px;" onclick="setRepairApproval('${r.id}','checking_price');event.stopPropagation()">🔍 รอราคา</button>
+      <button class="btn btn-sm ${rejected?'btn-red':'btn-gray'}" style="flex:1;font-size:11px;padding:6px 2px;" onclick="setRepairApproval('${r.id}','rejected');event.stopPropagation()">❌ ไม่อนุมัติ</button>
+    </div>
+    <!-- ── expandable detail panel ── -->
+    <div id="${panelId}" style="display:none;">
+      <!-- รูปจากพนักงาน -->
+      ${(r.empPhotos&&r.empPhotos.length)?`<div style="padding:10px 14px 0;">
+        <div style="font-size:10.5px;color:#F47920;font-weight:700;margin-bottom:6px;">📷 รูปจากพนักงาน</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${r.empPhotos.map((p,i)=>`<img src="${p}" onclick="viewRepairPhoto('${r.id}',${i},'empPhotos')" style="width:68px;height:68px;object-fit:cover;border-radius:8px;border:1px solid #FED7AA;cursor:pointer;">`).join('')}
+        </div>
+      </div>`:''}
+      <!-- ข้อความถึงพนักงาน (ถ้ามี) -->
+      ${r.reply?`<div style="margin:10px 14px 0;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:9px 11px;">
+        <div style="font-size:10px;color:#1E90D6;font-weight:700;margin-bottom:3px;">💬 ข้อความถึงพนักงาน${r.replyAt?` · ${fmt(r.replyAt)}`:''}</div>
+        <div style="font-size:12.5px;color:#1a1a2e;line-height:1.5;white-space:pre-wrap;">${esc(r.reply)}</div>
+      </div>`:''}
+      <!-- รูปจากผู้ดูแล -->
+      ${(r.photos&&r.photos.length)?`<div style="padding:10px 14px 0;display:flex;gap:6px;flex-wrap:wrap;">
+        ${r.photos.map((p,i)=>`<img src="${p}" onclick="viewRepairPhoto('${r.id}',${i})" style="width:68px;height:68px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+      </div>`:''}
+      <!-- ส่งข้อความ / แนบรูป -->
+      <div style="padding:10px 14px;">
+        <textarea class="inp" id="rep_reply_${r.id}" rows="2"
+          placeholder="ส่งข้อความถึงพนักงาน เช่น นำรถเข้าศูนย์วันจันทร์ / สั่งอะไหล่แล้ว..."
+          style="font-size:12.5px;margin-bottom:6px;">${esc(r.reply||'')}</textarea>
+        <input type="file" id="rep_img_${r.id}" accept="image/*" multiple style="display:none;" onchange="addRepairPhotos('${r.id}',this)">
+        <div class="row-btns">
+          <button class="btn btn-gray btn-sm" style="flex:1;" onclick="document.getElementById('rep_img_${r.id}').click()">📎 แนบรูป${(r.photos&&r.photos.length)?` (${r.photos.length})`:''}</button>
+          <button class="btn btn-blue btn-sm" style="flex:2;" onclick="saveRepairReply('${r.id}')">💬 ${(r.reply||(r.photos&&r.photos.length))?'อัพเดท':'ส่งถึงพนักงาน'}</button>
+        </div>
       </div>
-    </div>`:''}
-    <div style="display:flex;gap:5px;margin-bottom:8px;">
-      <button class="btn btn-sm ${approved?'btn-green':'btn-gray'}" style="flex:1;padding:7px 2px;font-size:11px;" onclick="setRepairApproval('${r.id}','approved')">✅ อนุมัติทำ</button>
-      <button class="btn btn-sm ${r.approval==='checking_price'?'btn-purple':'btn-gray'}" style="flex:1;padding:7px 2px;font-size:11px;" onclick="setRepairApproval('${r.id}','checking_price')">🔍 รอใบเสนอราคา</button>
-      <button class="btn btn-sm ${rejected?'btn-red':'btn-gray'}" style="flex:1;padding:7px 2px;font-size:11px;" onclick="setRepairApproval('${r.id}','rejected')">❌ ไม่อนุมัติทำ</button>
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};">${pill.text}</span>
-      <span style="color:#aaa;font-size:10.5px;">${fmt(r.createdAt)}</span>
-    </div>
-    ${r.reply?`<div style="margin-bottom:8px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:8px 10px;">
-      <div style="font-size:10.5px;color:#1E90D6;font-weight:700;margin-bottom:2px;">💬 ข้อความถึงพนักงาน${r.replyAt?` · ${fmt(r.replyAt)}`:''}</div>
-      <div style="font-size:12.5px;color:#1a1a2e;line-height:1.5;white-space:pre-wrap;">${esc(r.reply)}</div>
-    </div>`:''}
-    ${(r.photos&&r.photos.length)?`<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">
-      ${r.photos.map((p,i)=>`<img src="${p}" onclick="viewRepairPhoto('${r.id}',${i})" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
-    </div>`:''}
-    <div style="margin-bottom:8px;">
-      <textarea class="inp" id="rep_reply_${r.id}" rows="2" placeholder="พิมพ์ข้อความถึงพนักงาน เช่น นำรถเข้าศูนย์วันจันทร์ / สั่งอะไหล่แล้ว..." style="font-size:12.5px;">${esc(r.reply||'')}</textarea>
-      <input type="file" id="rep_img_${r.id}" accept="image/*" multiple style="display:none;" onchange="addRepairPhotos('${r.id}',this)">
-      <div class="row-btns" style="margin-top:6px;">
-        <button class="btn btn-gray btn-sm" style="flex:1;" onclick="document.getElementById('rep_img_${r.id}').click()">📎 แนบรูป${(r.photos&&r.photos.length)?` (${r.photos.length}/3)`:''}</button>
-        <button class="btn btn-blue btn-sm" style="flex:2;" onclick="saveRepairReply('${r.id}')">💬 ${(r.reply||(r.photos&&r.photos.length))?'อัพเดท':'ส่งถึงพนักงาน'}</button>
+      <!-- footer actions -->
+      <div class="row-btns" style="padding:0 14px 12px;gap:6px;">
+        ${approved?`<button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดอีกครั้ง':'✓ ซ่อมเสร็จแล้ว'}</button>`:'<div style="flex:1;"></div>'}
+        <button class="btn btn-red btn-sm" style="width:40px;padding:0;" onclick="doDelRepair('${r.id}')">🗑️</button>
       </div>
-    </div>
-    <div class="row-btns">
-      ${approved?`<button class="btn ${done?'btn-gray':'btn-green'} btn-sm" style="flex:1;" onclick="toggleRepairStatus('${r.id}')">${done?'↺ เปิดอีกครั้ง':'✓ ทำเครื่องหมายว่าซ่อมเสร็จ'}</button>`:''}
-      <button class="btn btn-red btn-sm" onclick="doDelRepair('${r.id}')">🗑️</button>
+      <div style="padding:0 14px 10px;text-align:right;">
+        <span style="color:#ccc;font-size:10px;">${fmt(r.createdAt)}</span>
+      </div>
     </div>
   </div>`;
+}
+
+// toggle accordion panel ของ repair card
+function toggleRepairPanel(id){
+  const panel=document.getElementById('rpanel_'+id);
+  const arrow=document.getElementById('rpanel_arrow_'+id);
+  if(!panel)return;
+  const open=panel.style.display==='none'||panel.style.display==='';
+  panel.style.display=open?'block':'none';
+  if(arrow)arrow.style.transform=open?'rotate(90deg)':'rotate(0deg)';
 }
 
 let _repairStatusFilter='all';
