@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="สถานะรถ SKE">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#FFFFFF">
-<link rel="manifest" id="manifestLink">
+<meta name="apple-mobile-web-app-title" content="SKE TRUCK">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1E90D6">
+<link rel="manifest" href="manifest.json">
 <title>SKE TRUCK</title>
 <!-- Firebase SDK -->
 <script type="module">
@@ -1428,47 +1429,6 @@ function showInstallBar(){
 function doInstall(){
   if(deferredPrompt){deferredPrompt.prompt();deferredPrompt.userChoice.then(()=>{deferredPrompt=null;document.getElementById('installBar').classList.add('hidden');});}
 }
-
-(function(){
-  // สร้าง PNG icon สำหรับ PWA manifest (Android ต้องการ PNG จริง ไม่ใช่ SVG)
-  function _genPwaIcon(size){
-    const c=document.createElement('canvas');c.width=size;c.height=size;
-    const ctx=c.getContext('2d');
-    // พื้นหลัง gradient
-    const g=ctx.createLinearGradient(0,0,size,size);
-    g.addColorStop(0,'#F47920');g.addColorStop(0.5,'#1E90D6');g.addColorStop(1,'#7B2FBE');
-    ctx.fillStyle=g;
-    // rounded corners
-    const r=size*0.22;
-    ctx.beginPath();ctx.moveTo(r,0);ctx.lineTo(size-r,0);ctx.quadraticCurveTo(size,0,size,r);
-    ctx.lineTo(size,size-r);ctx.quadraticCurveTo(size,size,size-r,size);
-    ctx.lineTo(r,size);ctx.quadraticCurveTo(0,size,0,size-r);
-    ctx.lineTo(0,r);ctx.quadraticCurveTo(0,0,r,0);ctx.closePath();ctx.fill();
-    // ข้อความ SKE
-    ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.font=`900 ${size*0.36}px Arial,sans-serif`;
-    ctx.fillText('SKE',size/2,size*0.42);
-    // ข้อความ TRUCK ตัวเล็ก
-    ctx.font=`700 ${size*0.16}px Arial,sans-serif`;
-    ctx.fillStyle='rgba(255,255,255,0.85)';
-    ctx.fillText('TRUCK',size/2,size*0.68);
-    return c.toDataURL('image/png');
-  }
-  const _icon192=_genPwaIcon(192);
-  const _icon512=_genPwaIcon(512);
-  const m={
-    name:"SKE TRUCK",short_name:"SKE TRUCK",
-    start_url:"./",display:"standalone",
-    background_color:"#1E90D6",theme_color:"#1E90D6",
-    orientation:"portrait",
-    icons:[
-      {src:_icon192,sizes:"192x192",type:"image/png",purpose:"any maskable"},
-      {src:_icon512,sizes:"512x512",type:"image/png",purpose:"any maskable"}
-    ]
-  };
-  const b=new Blob([JSON.stringify(m)],{type:'application/json'});
-  document.getElementById('manifestLink').href=URL.createObjectURL(b);
-})();
 
 // ── Service Worker — แจ้งเตือนเด้งขึ้นถาดระบบ + สั่น แม้แอพอยู่เบื้องหลัง ──
 // หมายเหตุ: Service Worker ทำงานได้เฉพาะบน HTTPS จริง (หรือ localhost) เท่านั้น
