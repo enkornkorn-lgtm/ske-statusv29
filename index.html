@@ -297,6 +297,10 @@
     } else if (!_firstSync.runLogs && runLogs.length > 0) {
       set(ref(db, 'runLogs'), runLogs);
     }
+    if (!_firstSync.runLogs) {
+      // sync ครั้งแรก → กู้เที่ยวที่ตกหล่นก่อนอัพเดทระบบนี้ (รอให้ employees โหลดเสร็จก่อน)
+      setTimeout(() => { if (typeof backfillMissedRunLogs === 'function') backfillMissedRunLogs(); }, 2500);
+    }
     _firstSync.runLogs = true;
   });
 
@@ -4071,6 +4075,37 @@ function recordRunLogIfNeeded(prevEmp,newStatus,newNote,empId,plate,name){
   const cutoff=Date.now()-60*24*3600*1000;
   runLogs=runLogs.filter(r=>!r.createdAt||new Date(r.createdAt).getTime()>=cutoff);
   saveRunLogs();
+}
+// ── กู้เที่ยวที่ตกหล่น ──
+// เผื่อกรณีพนักงานเปลี่ยนเป็น "ออกเดินทาง" + หมายเหตุ 6W ไปแล้วตั้งแต่ก่อนอัพเดทระบบนี้ขึ้นเว็บจริง
+// ทำงานครั้งเดียวตอนแอปโหลดเสร็จ — สแกนหมายเหตุปัจจุบันของพนักงานทุกคน (ไม่สนสถานะปัจจุบัน)
+// ถ้ามีข้อความ 6W ที่ยังไม่เคยถูกบันทึกไว้เลย (เทียบจากข้อความ) จะเก็บเข้าประวัติให้อัตโนมัติ
+function backfillMissedRunLogs(){
+  if(!Array.isArray(employees)||!employees.length)return;
+  const now=new Date().toISOString();
+  let added=false;
+  employees.forEach(e=>{
+    const note=String(e?.note||'').trim();
+    if(!note||!/6W/i.test(note))return;
+    const existing=new Set((runLogs||[]).filter(r=>r.empId===e.id).map(r=>r.detail));
+    const lines=note.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+    const toCheck=lines.length?lines:[note];
+    toCheck.filter(l=>/6W/i.test(l)&&!existing.has(l)).forEach(line=>{
+      runLogs.unshift({
+        id:'rl_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+        empId:e.id,name:e.name||'',plate:e.plate||'',
+        detail:line,
+        trips:countSixWTrips(line)||1,
+        createdAt:e.updatedAt||now
+      });
+      added=true;
+    });
+  });
+  if(added){
+    const cutoff=Date.now()-60*24*3600*1000;
+    runLogs=runLogs.filter(r=>!r.createdAt||new Date(r.createdAt).getTime()>=cutoff);
+    saveRunLogs();
+  }
 }
 function getRunLogEntriesForEmployee(e){
   if(!e)return[];
