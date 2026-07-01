@@ -5120,6 +5120,8 @@ function renderLeaveHistory(){
   }
 
   const MONTH_TH=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  // เฉพาะผู้ดูแล (super) เท่านั้นที่ลบประวัติการลาได้ — แอดมิน (viewer) ดูได้อย่างเดียว
+  const canDel=adminRole!=='viewer';
 
   // ── สรุปรายคน (เพื่อประเมินงาน) ──
   const byEmp={};
@@ -5184,6 +5186,7 @@ function renderLeaveHistory(){
           <div style="text-align:right;flex-shrink:0;">
             <div style="font-size:14px;font-weight:900;color:#6C3FE8;">${l.days||1}<span style="font-size:10px;font-weight:400;color:#888;"> วัน</span></div>
             <div style="font-size:9.5px;color:#aaa;margin-top:2px;">✅ ${l.approvedAt?new Date(l.approvedAt).toLocaleDateString('th-TH',{day:'numeric',month:'short'}):'-'}</div>
+            ${canDel?`<button class="btn btn-red btn-sm" style="margin-top:8px;padding:5px 10px;font-size:10.5px;white-space:nowrap;" onclick="deleteLeaveLog('${esc(l.id)}')">🗑️ ลบ</button>`:''}
           </div>
         </div>
       </div>`).join('')}
@@ -5191,6 +5194,19 @@ function renderLeaveHistory(){
   }).join('')}`;
 
   el.innerHTML=html;
+}
+
+// ── ลบประวัติการลา 1 รายการ (เฉพาะผู้ดูแล/super เท่านั้น) ──────────────────────
+function deleteLeaveLog(id){
+  // กันสิทธิ์: แอดมิน (viewer) ห้ามลบ
+  if(adminRole==='viewer'){alert('เฉพาะผู้ดูแลเท่านั้นที่ลบประวัติการลาได้');return;}
+  const log=(leaveLogs||[]).find(l=>l.id===id);
+  if(!log)return;
+  const range=log.leaveFrom+(log.leaveTo&&log.leaveTo!==log.leaveFrom?' → '+log.leaveTo:'');
+  if(!confirm('ลบประวัติการลานี้?\n\n'+(log.empName||'')+'\n📅 '+range))return;
+  leaveLogs=leaveLogs.filter(l=>l.id!==id);
+  saveLeaveLogs();
+  renderLeaveHistory();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
