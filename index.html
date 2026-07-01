@@ -99,7 +99,7 @@
   // ติดตามว่าแต่ละชุดข้อมูล sync ครั้งแรกเสร็จหรือยัง — ใช้กันบั๊ก "ข้อมูลที่ลบไปแล้วฟื้นคืนชีพ"
   // (เดิม: พอลบรายการจนหมด ข้อมูลเป็น null → listener เข้าใจผิดว่า Firebase ว่าง แล้วอัพโหลดข้อมูลเก่าในเครื่องกลับขึ้นไป)
   // หลักการใหม่: อัพโหลดข้อมูลเครื่องขึ้น Firebase ได้ "เฉพาะครั้งแรกสุด" เท่านั้น หลังจากนั้น null = ว่างจริง ให้เคารพค่าว่าง
-  const _firstSync = { employees:false, repairs:false, fluidLogs:false, cashRequests:false, leaveLogs:false };
+  const _firstSync = { employees:false, repairs:false, fluidLogs:false, cashRequests:false, leaveLogs:false, runLogs:false };
 
 
   // บันทึกข้อมูลพนักงานทั้งหมดขึ้น Firebase
@@ -153,6 +153,11 @@
   // บันทึกประวัติการลาขึ้น Firebase
   window.fbSaveLeaveLogs = function(list) {
     set(ref(db, 'leaveLogs'), list).catch(e => console.error('fbSaveLeaveLogs error', e));
+  };
+
+  // บันทึกประวัติเที่ยววิ่งงาน (บันทึกถาวร ไม่ขึ้นกับสถานะปัจจุบันของพนักงาน) ขึ้น Firebase
+  window.fbSaveRunLogs = function(list) {
+    set(ref(db, 'runLogs'), list).catch(e => console.error('fbSaveRunLogs error', e));
   };
 
   // ดึงข้อมูลล่าสุดจาก Firebase ทันที (สำหรับปุ่มรีเฟรชของผู้ดูแล)
@@ -277,6 +282,22 @@
       set(ref(db, 'leaveLogs'), leaveLogs);
     }
     _firstSync.leaveLogs = true;
+  });
+
+  // ฟัง realtime — ประวัติเที่ยววิ่งงาน (บันทึกถาวร)
+  onValue(ref(db, 'runLogs'), (snapshot) => {
+    const data = normalizeList(snapshot.val());
+    if (data) {
+      runLogs = data;
+      localStorage.setItem('ske_runlogs', JSON.stringify(runLogs));
+      const rm = document.getElementById('employeeRunLogModal');
+      if (rm && typeof openEmployeeRunLogModal === 'function') openEmployeeRunLogModal();
+      const dash = document.getElementById('dashboard');
+      if (dash && !dash.classList.contains('hidden') && currentUser && typeof renderDashboard === 'function') renderDashboard();
+    } else if (!_firstSync.runLogs && runLogs.length > 0) {
+      set(ref(db, 'runLogs'), runLogs);
+    }
+    _firstSync.runLogs = true;
   });
 
   // ── เฝ้าระวังสถานะการเชื่อมต่อ — ดึงข้อมูลล่าสุดทันทีทุกครั้งที่กลับมาออนไลน์ ──
@@ -1821,6 +1842,8 @@ let repairs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_repairs')||'[
 let fluidLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_fluid')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let cashRequests=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_cash')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let leaveLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_leaveLogs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
+// ประวัติเที่ยววิ่งงาน — บันทึกถาวรทุกครั้งที่มีเที่ยวใหม่ (ไม่ขึ้นกับสถานะปัจจุบันของพนักงานอีกต่อไป)
+let runLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_runlogs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let monthlyDocs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_monthly_docs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let _repUrgency='normal';
 let _repNewPhotos=[]; // รูปที่พนักงานเลือกไว้ก่อนกดส่งแจ้งซ่อม (ย่อแล้ว)
@@ -1856,6 +1879,10 @@ function saveCash(){
 function saveLeaveLogs(){
   localStorage.setItem('ske_leaveLogs',JSON.stringify(leaveLogs));
   if(window.fbSaveLeaveLogs) window.fbSaveLeaveLogs(leaveLogs);
+}
+function saveRunLogs(){
+  localStorage.setItem('ske_runlogs',JSON.stringify(runLogs));
+  if(window.fbSaveRunLogs) window.fbSaveRunLogs(runLogs);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -4010,30 +4037,56 @@ function handleMonthlyDocPhoto(ev){
 
 
 // ── บันทึกวิ่งงานของพนักงาน ──
-// นับเที่ยววิ่งเฉพาะเมื่อพนักงานอยู่สถานะ "ออกเดินทาง" (status id = traveling)
-// และหมายเหตุมีคำว่า 6W เพื่อกันงานที่ถูกยกเลิก/ยังไม่ออกเดินทางไม่ให้ถูกนับ
-function isRunLogEligible(e){
-  return !!e && String(e.status||'')==='traveling';
-}
+// บันทึกถาวรลง runLogs ทุกครั้งที่พนักงานเปลี่ยนสถานะเป็น "ออกเดินทาง" (traveling)
+// พร้อมหมายเหตุที่มีคำว่า 6W (บรรทัดใหม่ที่ยังไม่เคยถูกนับ) — เก็บไว้ถาวร ไม่หายแม้สถานะจะเปลี่ยนไปแล้วในภายหลัง
 function countSixWTrips(text){
   const m=String(text||'').match(/6W/gi);
   return m?m.length:0;
 }
+// เรียกตอนบันทึกสถานะ (ทั้งพนักงานเองและแอดมินแก้แทน) — บันทึกเฉพาะ "บรรทัดใหม่" ที่ยังไม่เคยถูกนับ
+// เพื่อกันนับซ้ำเวลากดบันทึกซ้ำโดยหมายเหตุไม่เปลี่ยน
+function recordRunLogIfNeeded(prevEmp,newStatus,newNote,empId,plate,name){
+  if(newStatus!=='traveling')return;
+  const note=String(newNote||'').trim();
+  if(!note||!/6W/i.test(note))return;
+  // ถือว่า "บรรทัดเดิม" มีความหมายเฉพาะตอนที่สถานะก่อนหน้าเป็นออกเดินทางอยู่แล้วเท่านั้น
+  // (ถ้าเพิ่งเปลี่ยนมาเป็นออกเดินทางใหม่ ให้นับทุกบรรทัดเป็นเที่ยวใหม่ทั้งหมด แม้ข้อความจะซ้ำกับเที่ยวเก่าในอดีตก็ตาม)
+  const prevNote=(prevEmp&&prevEmp.status==='traveling')?String(prevEmp.note||'').trim():'';
+  const prevLines=new Set(prevNote.split(/\n+/).map(x=>x.trim()).filter(Boolean));
+  const newLines=note.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  const linesToCheck=newLines.length?newLines:[note];
+  const newlyAdded=linesToCheck.filter(line=>/6W/i.test(line)&&!prevLines.has(line));
+  if(!newlyAdded.length)return;
+  const now=new Date().toISOString();
+  newlyAdded.forEach(line=>{
+    runLogs.unshift({
+      id:'rl_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+      empId,name:name||'',plate:plate||'',
+      detail:line,
+      trips:countSixWTrips(line)||1,
+      createdAt:now
+    });
+  });
+  // เก็บย้อนหลังแค่ 2 เดือน — ไว้ให้พนักงานตรวจเที่ยววิ่งของตัวเองเฉยๆ ไม่ต้องเก็บนาน
+  const cutoff=Date.now()-60*24*3600*1000;
+  runLogs=runLogs.filter(r=>!r.createdAt||new Date(r.createdAt).getTime()>=cutoff);
+  saveRunLogs();
+}
 function getRunLogEntriesForEmployee(e){
-  if(!e||!isRunLogEligible(e))return[];
-  const note=String(e.note||'').trim();
-  if(!note||!/6W/i.test(note))return[];
-  const lines=note.split(/\n+/).map(x=>x.trim()).filter(Boolean);
-  const matched=(lines.length?lines:[note]).filter(x=>/6W/i.test(x));
-  return matched.map((line,idx)=>({
-    no:idx+1,
-    detail:line,
-    trips:countSixWTrips(line)||1,
-    updatedAt:e.updatedAt||Date.now(),
-    status:e.status,
-    plate:e.plate||'',
-    name:e.name||''
-  }));
+  if(!e)return[];
+  const cutoff=Date.now()-60*24*3600*1000; // แสดงเฉพาะย้อนหลัง 2 เดือน
+  return (runLogs||[])
+    .filter(r=>r.empId===e.id&&(!r.createdAt||new Date(r.createdAt).getTime()>=cutoff))
+    .sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
+    .map((r,idx)=>({
+      no:idx+1,
+      detail:r.detail,
+      trips:r.trips,
+      updatedAt:r.createdAt,
+      status:'traveling',
+      plate:r.plate||e.plate||'',
+      name:r.name||e.name||''
+    }));
 }
 function renderEmployeeRunLogCard(me){
   const entries=getRunLogEntriesForEmployee(me);
@@ -4630,6 +4683,7 @@ function doSave(){
   const prev=employees.find(e=>e.id===currentUser.id);
   const standbyAt=(_selStatus==='standby'&&prev?.status!=='standby')?now:(prev?.standbyAt||null);
   const patch={status:_selStatus,province:prov,note,updatedAt:now,standbyAt:_selStatus==='standby'?standbyAt:null};
+  recordRunLogIfNeeded(prev,_selStatus,note,currentUser.id,prev?.plate||currentUser.plate,prev?.name||currentUser.name);
   employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
   currentUser={...currentUser,...patch};
   saveU();editOpen=false;closeStatusModal(false);renderDashboard();
@@ -5280,6 +5334,7 @@ function doSaveAEdit(id){
       if(!prev.onLeave)updated.leaveApproval='pending';
     }
     if(newPin.length===4&&/^\d{4}$/.test(newPin))updated.pin=newPin;
+    recordRunLogIfNeeded(prev,status,note,id,plate,name);
     return updated;
   });
   if(currentUser?.id===id){currentUser={...currentUser,name,plate,phone,note,status,province:prov};saveU();}
