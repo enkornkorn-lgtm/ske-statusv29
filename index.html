@@ -31,7 +31,7 @@
 
   // ══ Firebase Cloud Messaging (FCM) — แจ้งเตือนเข้าโทรศัพท์แม้ปิดแอป ══
   // ⚠️ ต้องใส่ VAPID key จาก Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
-  const VAPID_KEY = "BNxlKeiYjYs8WoTZhSGP8oJkn7aF9aSNKj1tl2nylt1GHHuQFuXmgB0mF5DHZTIeufYSPSXAgLKc70mcy7K04qE";
+  const VAPID_KEY = "PASTE_YOUR_VAPID_KEY_HERE";
   let _messaging = null;
 
   // ขอ permission + ลงทะเบียน FCM token ของเครื่องนี้ขึ้น Firebase
@@ -2376,16 +2376,19 @@ function _saveStaleAlerted(){try{localStorage.setItem('ske_stale_alerted',JSON.s
 // ══════════════════════════════════════════════════════════════════════════
 let _availToastTimer=null;
 let _statusChangeToastTimer=null;
+// เฉพาะ 4 สถานะนี้เท่านั้นที่จะแจ้งเตือนผู้ดูแล (เสียง+ข้อความ) — สถานะอื่นเปลี่ยนแล้วจะไม่แจ้งเตือน
+const NOTIFY_STATUSES=['done','standby','loading','unloading'];
 function notifyNewlyAvailable(oldList,newList){
   if(!adminMode)return;
   const adminScreen=document.getElementById('admin');
   if(!adminScreen||adminScreen.classList.contains('hidden'))return;
   const oldMap={};
   (oldList||[]).forEach(e=>{oldMap[e.id]=e.status;});
-  // เฉพาะพนักงานที่มีข้อมูลอยู่ก่อนแล้ว (ไม่ใช่เพิ่งถูกเพิ่มใหม่) และสถานะเปลี่ยนไปจากเดิมจริงๆ
+  // เฉพาะพนักงานที่มีข้อมูลอยู่ก่อนแล้ว (ไม่ใช่เพิ่งถูกเพิ่มใหม่), สถานะเปลี่ยนไปจากเดิมจริงๆ,
+  // และสถานะใหม่ต้องอยู่ในกลุ่มที่ต้องการแจ้งเตือนเท่านั้น
   const changed=(newList||[]).filter(e=>{
     const prevStatus=oldMap[e.id];
-    return prevStatus!==undefined&&prevStatus!==e.status;
+    return prevStatus!==undefined&&prevStatus!==e.status&&NOTIFY_STATUSES.includes(e.status);
   });
   if(!changed.length)return;
 
