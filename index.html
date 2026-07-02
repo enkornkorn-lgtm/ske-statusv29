@@ -4080,13 +4080,14 @@ function recordRunLogIfNeeded(prevEmp,newStatus,newNote,empId,plate,name){
 }
 // ── กู้เที่ยวที่ตกหล่น ──
 // เผื่อกรณีพนักงานเปลี่ยนเป็น "ออกเดินทาง" + หมายเหตุ 6W ไปแล้วตั้งแต่ก่อนอัพเดทระบบนี้ขึ้นเว็บจริง
-// ทำงานครั้งเดียวตอนแอปโหลดเสร็จ — สแกนหมายเหตุปัจจุบันของพนักงานทุกคน (ไม่สนสถานะปัจจุบัน)
+// ทำงานครั้งเดียวตอนแอปโหลดเสร็จ — สแกนเฉพาะพนักงานที่ "สถานะปัจจุบันเป็นออกเดินทาง" เท่านั้น (เดิมสแกนทุกคนไม่สนสถานะ ทำให้บันทึกผิดตอนรถยังไม่ออก)
 // ถ้าหมายเหตุมี 6W และยังไม่เคยถูกบันทึกไว้เลย (เทียบข้อความทั้งหมด) จะเก็บเข้าประวัติให้อัตโนมัติ
 function backfillMissedRunLogs(){
   if(!Array.isArray(employees)||!employees.length)return;
   const now=new Date().toISOString();
   let added=false;
   employees.forEach(e=>{
+    if(e?.status!=='traveling')return; // ต้องเป็นสถานะออกเดินทางเท่านั้น
     const note=String(e?.note||'').trim();
     if(!note||!/6W/i.test(note))return;
     const existing=new Set((runLogs||[]).filter(r=>r.empId===e.id).map(r=>r.detail));
