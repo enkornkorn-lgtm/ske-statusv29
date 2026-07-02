@@ -3247,6 +3247,14 @@ function nextCashDateLabel(){
   if(now.getDate()>=15){m+=1;if(m>11){m=0;y+=1;}}
   return new Date(y,m,15).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
 }
+// ── แจ้งลาพนักงาน — เปิดให้กรอกวันลาได้เฉพาะวันที่ 20-30 ของทุกเดือน ──
+function isLeaveDayOpen(){const d=new Date().getDate();return d>=20&&d<=30;}
+function nextLeaveDateLabel(){
+  const now=new Date();
+  let y=now.getFullYear(),m=now.getMonth();
+  if(now.getDate()>30){m+=1;if(m>11){m=0;y+=1;}}
+  return new Date(y,m,20).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
+}
 function fmtBaht(n){const num=Number(n)||0;return num.toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:2});}
 function openCashModal(){
   if(!currentUser)return;
@@ -4249,6 +4257,8 @@ function renderDashboard(){
         </div>`:''}
       `:`
         ${renderApprovedLeaveNoticeForEmployees(me.id)}
+        ${isLeaveDayOpen()?`
+        <div style="background:#ECFDF5;border:1.5px solid #6EE7B7;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:12px;color:#065F46;">✅ วันนี้เปิดให้กรอกวันลา</div>
         <button class="btn btn-gray btn-full" style="font-size:13px;margin-top:10px;" onclick="toggleLeaveForm()">${leaveFormOpen?'✕ ยกเลิก':skeIcon('leave')+' แจ้งลา'}</button>
         <div id="leaveFormWrap" class="${leaveFormOpen?'':'hidden'}" style="margin-top:10px;">
           <div class="province-box">
@@ -4261,6 +4271,10 @@ function renderDashboard(){
           </div>
           <button class="btn btn-blue btn-full" style="margin-top:10px;" onclick="doRequestLeave()">✓ ส่งคำขอลา</button>
         </div>
+        `:`
+        <div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:12px;color:#92400E;">🔒 เปิดให้กรอกวันลาได้เฉพาะวันที่ 20-30 ของทุกเดือนเท่านั้น<br>รอบถัดไป: <b>${nextLeaveDateLabel()}</b></div>
+        <button class="btn btn-gray btn-full" style="font-size:13px;margin-top:10px;opacity:.5;pointer-events:none;" disabled>${skeIcon('leave')} แจ้งลา</button>
+        `}
       `}
     </div>`;
 
@@ -4359,11 +4373,13 @@ function adminClearLeaveToNormal(id){
 }
 
 function toggleLeaveForm(){
+  if(!isLeaveDayOpen())return;
   leaveFormOpen=!leaveFormOpen;
   renderDashboard();
 }
 function doRequestLeave(){
   if(!currentUser)return;
+  if(!isLeaveDayOpen()){alert('เปิดให้กรอกวันลาได้เฉพาะวันที่ 20-30 ของทุกเดือนเท่านั้น');return;}
   const fromEl=document.getElementById('leaveFromInp');
   const toEl=document.getElementById('leaveToInp');
   const noteEl=document.getElementById('leaveNoteInp2');
