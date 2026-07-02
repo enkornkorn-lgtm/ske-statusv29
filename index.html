@@ -2051,7 +2051,7 @@ window.onload=function(){
         adminRole=localStorage.getItem('ske_adminRole')||'super';
         show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();
         if(window.fbRegisterPushToken)window.fbRegisterPushToken(adminRole==='viewer'?'viewer':'super');
-        if(adminRole!=='viewer')startAdminAlertTimer();
+        startAdminAlertTimer();
       }
       else if(currentUser){show('dashboard');renderDashboard();startAlertTimer();}
       else{show('login');renderEmpList();}
@@ -2248,7 +2248,7 @@ function doAdminLogin(){
     requestNotifPermission();
     // ลงทะเบียน FCM push token — รับแจ้งเตือนแม้ปิดแอป (super/viewer ลงทะเบียนได้ทั้งคู่)
     if(window.fbRegisterPushToken)window.fbRegisterPushToken(wantViewer?'viewer':'super');
-    if(!wantViewer)startAdminAlertTimer(); // viewer ไม่ต้องเด้งแจ้งเตือนผู้ดูแล
+    startAdminAlertTimer(); // แอดมินและผู้ดูแลได้รับแจ้งเตือนสถานะค้างเหมือนกัน
   }
   else{m.textContent=`❌ รหัสผ่านไม่ถูกต้อง  (รหัสเริ่มต้น: ${defHint})`;m.classList.remove('hidden');}
 }
@@ -4763,13 +4763,13 @@ function doSave(){
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
-function goAdmin(){show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();if(adminRole!=='viewer')startAdminAlertTimer();}
+function goAdmin(){show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();startAdminAlertTimer();}
 function goBack(){
   // ปุ่ม "กลับ" ต้องไม่ทำให้ออกจากระบบเด็ดขาด
   // ถ้ามีพนักงาน login อยู่ → กลับไปหน้าหลักของพนักงานคนนั้น
   if(currentUser){stopAdminAlertTimer();show('dashboard');renderDashboard();return;}
   // ถ้าเข้ามาแบบผู้ดูแลอย่างเดียว (ไม่มี currentUser) → อยู่ในแผงผู้ดูแลต่อ ไม่เด้งไปหน้า login
-  if(adminMode){show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();if(adminRole!=='viewer')startAdminAlertTimer();return;}
+  if(adminMode){show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();startAdminAlertTimer();return;}
   // กรณีอื่นๆ (ไม่ได้ login เลยจริงๆ) ค่อยกลับไปหน้าเลือกชื่อ
   stopAdminAlertTimer();
   show('login');renderEmpList();showMode('select');
