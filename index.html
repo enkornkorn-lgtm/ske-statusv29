@@ -1380,19 +1380,13 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div id="adminSummaryContent"></div>
     </div>
 
-    <!-- maintenance panel: รายการแจ้งซ่อม + เปลี่ยนถ่ายของเหลว ของพนักงานทุกคน -->
+    <!-- maintenance panel: รายการแจ้งซ่อม (มีสถานะรออนุมัติ/กำลังซ่อม) -->
+    <!-- หมายเหตุ: รายการเปลี่ยนถ่ายของเหลวเป็นเหตุการณ์ที่เกิดขึ้นแล้วเสมอ ไม่มีสถานะ "ค้าง/รอดำเนินการ" แบบแจ้งซ่อม
+         จึงไม่แสดงเป็นแท็บคู่ที่นี่อีกต่อไป — ดูได้ที่ "ประวัติการเปลี่ยนถ่าย" ในเมนูเพิ่มเติมแทน -->
     <div id="adminMaintPanel" class="hidden">
-      <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <button class="admin-tab-btn active" id="amTabRepair" onclick="switchAdminMaintTab('repair')" style="flex:1;"><span class="ic" data-ic="wrench"></span> แจ้งซ่อม</button>
-        <button class="admin-tab-btn" id="amTabFluid" onclick="switchAdminMaintTab('fluid')" style="flex:1;"><span class="ic" data-ic="oil"></span> เปลี่ยนถ่าย</button>
-      </div>
       <div id="adminRepairView">
         <div id="adminRepairStats"></div>
         <div id="adminRepairGroups"></div>
-      </div>
-      <div id="adminFluidView" class="hidden">
-        <div id="adminFluidStats"></div>
-        <div id="adminFluidGroups"></div>
       </div>
     </div>
 
@@ -3216,25 +3210,20 @@ function renderFluidList(){
       ${(f.photos&&f.photos.length)?`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
         ${f.photos.map((p,i)=>`<img src="${p}" onclick="viewFluidPhoto('${f.id}',${i})" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
       </div>`:''}
-      <div class="row-btns" style="margin-top:10px;">
-        <button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelFluid('${f.id}')">🗑️ ลบรายการ</button>
+      <div style="display:flex;align-items:center;justify-content:flex-end;margin-top:10px;">
+        <span style="color:#16A34A;font-size:11px;font-weight:700;">✅ บันทึกแล้ว — เปลี่ยนถ่ายเรียบร้อย</span>
       </div>
     </div>`;
   }).join('');
   updateMaintBadges();
-}
-function doDelFluid(id){
-  if(!confirm('ลบบันทึกการเปลี่ยนถ่ายนี้?'))return;
-  fluidLogs=fluidLogs.filter(f=>f.id!==id);
-  saveFluid();refreshFluidViews();
 }
 // รีเฟรชทุกหน้าที่อาจกำลังแสดงรายการเปลี่ยนถ่ายของเหลวอยู่ (หน้าพนักงาน + แผงผู้ดูแล)
 function refreshFluidViews(){
   const empModal=document.getElementById('fluidModal');
   if(empModal && !empModal.classList.contains('hidden'))renderFluidList();
   else updateMaintBadges();
-  const adminPanel=document.getElementById('adminMaintPanel');
-  if(adminPanel && !adminPanel.classList.contains('hidden'))renderAdminFluidList();
+  const fluidHistPanel=document.getElementById('adminFluidHistoryPanel');
+  if(fluidHistPanel && !fluidHistPanel.classList.contains('hidden'))renderAdminFluidHistory();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -3442,18 +3431,8 @@ function _empLookup(empId,fallbackName,fallbackPlate){
   return{name:e?e.name:(fallbackName||'(พนักงานที่ถูกลบ)'),plate:e?e.plate:(fallbackPlate||'')};
 }
 
-function switchAdminMaintTab(t){
-  _adminMaintTab=t;
-  document.getElementById('amTabRepair')?.classList.toggle('active',t==='repair');
-  document.getElementById('amTabFluid')?.classList.toggle('active',t==='fluid');
-  document.getElementById('adminRepairView')?.classList.toggle('hidden',t!=='repair');
-  document.getElementById('adminFluidView')?.classList.toggle('hidden',t!=='fluid');
-  if(t==='repair')renderAdminRepairList();else renderAdminFluidList();
-}
-
 function renderAdminMaint(){
   renderAdminRepairList();
-  renderAdminFluidList();
   updateAdminMaintBadge();
 }
 
@@ -3776,63 +3755,16 @@ function renderAdminFluidHistory(){
         </div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px;">
           <span style="color:#aaa;font-size:10.5px;">บันทึกเมื่อ ${fmt(f.createdAt)}</span>
-          <button class="btn btn-red btn-sm" style="padding:4px 10px;font-size:11px;" onclick="doDelFluidHistory('${f.id}')">🗑️</button>
+          <span style="color:#16A34A;font-size:10.5px;font-weight:700;white-space:nowrap;">✅ เปลี่ยนถ่ายแล้ว</span>
         </div>
       </div>`;
     }).join('')}
   </div>`).join('');
 }
-function doDelFluidHistory(id){
-  if(!confirm('ลบบันทึกการเปลี่ยนถ่ายนี้?'))return;
-  fluidLogs=fluidLogs.filter(f=>f.id!==id);
-  saveFluid();
-  renderAdminFluidHistory();
-  refreshFluidViews();
-}
 
-function renderAdminFluidList(){
-  const statsEl=document.getElementById('adminFluidStats');
-  const groupsEl=document.getElementById('adminFluidGroups');
-  if(!statsEl||!groupsEl)return;
-  statsEl.innerHTML=`<div style="color:#7B2FBE;font-size:12px;font-weight:700;margin-bottom:12px;">🛢️ บันทึกทั้งหมด ${fluidLogs.length} รายการ</div>`;
-  if(!fluidLogs.length){groupsEl.innerHTML='<div class="empty-state"><div class="empty-icon">'+skeIcon('oil')+'</div><div class="empty-text">ยังไม่มีบันทึกการเปลี่ยนถ่าย</div></div>';return;}
-
-  const byEmp={};
-  fluidLogs.forEach(f=>{(byEmp[f.empId]=byEmp[f.empId]||[]).push(f);});
-  const groupArr=Object.entries(byEmp).map(([empId,items])=>{
-    const info=_empLookup(empId,items[0].empName,items[0].plate);
-    items.sort((a,b)=>new Date(b.changedAt)-new Date(a.changedAt));
-    return{empId,name:info.name,plate:info.plate,items,last:items[0]};
-  }).sort((a,b)=>a.name.localeCompare(b.name,'th'));
-
-  groupsEl.innerHTML=groupArr.map(g=>`<div class="card" style="margin-bottom:12px;padding:14px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-        <div class="avatar" style="width:36px;height:36px;font-size:15px;">${esc(g.name.charAt(0))}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;color:#1a1a2e;font-size:13.5px;">${esc(g.name)}</div>
-          <div style="color:#888;font-size:11px;">🚛 ${esc(g.plate||'-')}</div>
-        </div>
-        <span style="color:#7B2FBE;font-size:11px;font-weight:700;white-space:nowrap;">ล่าสุด ${fmtDate(g.last.changedAt)}</span>
-      </div>
-      ${g.items.map(f=>{
-        const ft=FLUID_TYPES[f.fluidType]||FLUID_TYPES.other;
-        return`<div class="maint-card" style="margin-bottom:8px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <div style="color:#1a1a2e;font-size:13px;font-weight:700;">${ft.emoji} ${esc(ft.label)}</div>
-            <span style="color:#7B2FBE;font-size:11px;font-weight:700;">📅 ${fmtDate(f.changedAt)}</span>
-          </div>
-          ${f.odometer?`<div style="color:#888;font-size:11.5px;margin-top:5px;">🧭 เลขไมล์: ${esc(f.odometer)} กม.</div>`:''}
-          ${f.note?`<div style="color:#666;font-size:11.5px;margin-top:3px;">${skeIcon('note')} ${esc(f.note)}</div>`:''}
-          ${(f.photos&&f.photos.length)?`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-            ${f.photos.map((p,i)=>`<img src="${p}" onclick="viewFluidPhoto('${f.id}',${i})" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
-          </div>`:''}
-          <div class="row-btns" style="margin-top:8px;">
-            <button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelFluid('${f.id}')">🗑️ ลบรายการ</button>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`).join('');
-}
+// หมายเหตุ: renderAdminFluidList() (แท็บ "เปลี่ยนถ่าย" คู่กับแจ้งซ่อม) ถูกลบออกแล้ว
+// รายการเปลี่ยนถ่ายของเหลวดูได้ที่เดียวคือ "ประวัติการเปลี่ยนถ่าย" (renderAdminFluidHistory) เท่านั้น
+// เพราะเป็นเหตุการณ์ที่เกิดขึ้นแล้วเสมอ ไม่มีสถานะค้าง/รอดำเนินการแบบแจ้งซ่อม
 
 // ══════════════════════════════════════════════════════════════════════════
 // ── แผงผู้ดูแล: รายการเบิกเงินพนักงานทุกคน ────────────────────────────────────
