@@ -3247,13 +3247,13 @@ function nextCashDateLabel(){
   if(now.getDate()>=15){m+=1;if(m>11){m=0;y+=1;}}
   return new Date(y,m,15).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
 }
-// ── แจ้งลาพนักงาน — เปิดให้กรอกวันลาได้เฉพาะวันที่ 20-30 ของทุกเดือน ──
-function isLeaveDayOpen(){const d=new Date().getDate();return d>=20&&d<=30;}
+// ── แจ้งลาพนักงาน — เปิดให้กรอกวันลาได้เฉพาะวันที่ 16-25 ของทุกเดือน ──
+function isLeaveDayOpen(){const d=new Date().getDate();return d>=16&&d<=25;}
 function nextLeaveDateLabel(){
   const now=new Date();
   let y=now.getFullYear(),m=now.getMonth();
-  if(now.getDate()>30){m+=1;if(m>11){m=0;y+=1;}}
-  return new Date(y,m,20).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
+  if(now.getDate()>25){m+=1;if(m>11){m=0;y+=1;}}
+  return new Date(y,m,16).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
 }
 function fmtBaht(n){const num=Number(n)||0;return num.toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:2});}
 function openCashModal(){
@@ -4272,7 +4272,7 @@ function renderDashboard(){
           <button class="btn btn-blue btn-full" style="margin-top:10px;" onclick="doRequestLeave()">✓ ส่งคำขอลา</button>
         </div>
         `:`
-        <div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:12px;color:#92400E;">🔒 เปิดให้กรอกวันลาได้เฉพาะวันที่ 20-30 ของทุกเดือนเท่านั้น<br>รอบถัดไป: <b>${nextLeaveDateLabel()}</b></div>
+        <div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:12px;color:#92400E;">🔒 เปิดให้กรอกวันลาได้เฉพาะวันที่ 16-25 ของทุกเดือนเท่านั้น<br>รอบถัดไป: <b>${nextLeaveDateLabel()}</b></div>
         <button class="btn btn-gray btn-full" style="font-size:13px;margin-top:10px;opacity:.5;pointer-events:none;" disabled>${skeIcon('leave')} แจ้งลา</button>
         `}
       `}
@@ -4379,7 +4379,7 @@ function toggleLeaveForm(){
 }
 function doRequestLeave(){
   if(!currentUser)return;
-  if(!isLeaveDayOpen()){alert('เปิดให้กรอกวันลาได้เฉพาะวันที่ 20-30 ของทุกเดือนเท่านั้น');return;}
+  if(!isLeaveDayOpen()){alert('เปิดให้กรอกวันลาได้เฉพาะวันที่ 16-25 ของทุกเดือนเท่านั้น');return;}
   const fromEl=document.getElementById('leaveFromInp');
   const toEl=document.getElementById('leaveToInp');
   const noteEl=document.getElementById('leaveNoteInp2');
