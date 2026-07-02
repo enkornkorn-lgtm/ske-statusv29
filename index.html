@@ -4055,29 +4055,23 @@ function countSixWTrips(text){
   const m=String(text||'').match(/6W/gi);
   return m?m.length:0;
 }
-// เรียกตอนบันทึกสถานะ (ทั้งพนักงานเองและแอดมินแก้แทน) — บันทึกเฉพาะ "บรรทัดใหม่" ที่ยังไม่เคยถูกนับ
-// เพื่อกันนับซ้ำเวลากดบันทึกซ้ำโดยหมายเหตุไม่เปลี่ยน
+// เรียกตอนบันทึกสถานะ (ทั้งพนักงานเองและแอดมินแก้แทน) — ถ้าหมายเหตุมีคำว่า 6W ให้ถือว่าทั้งหมายเหตุคือ 1 บันทึกวิ่งงาน
+// เก็บข้อความทั้งหมดในหมายเหตุ (ไม่ตัดเฉพาะบรรทัดที่มี 6W) กันบันทึกซ้ำเมื่อหมายเหตุไม่เปลี่ยน
 function recordRunLogIfNeeded(prevEmp,newStatus,newNote,empId,plate,name){
   if(newStatus!=='traveling')return;
   const note=String(newNote||'').trim();
   if(!note||!/6W/i.test(note))return;
-  // ถือว่า "บรรทัดเดิม" มีความหมายเฉพาะตอนที่สถานะก่อนหน้าเป็นออกเดินทางอยู่แล้วเท่านั้น
-  // (ถ้าเพิ่งเปลี่ยนมาเป็นออกเดินทางใหม่ ให้นับทุกบรรทัดเป็นเที่ยวใหม่ทั้งหมด แม้ข้อความจะซ้ำกับเที่ยวเก่าในอดีตก็ตาม)
+  // ถือว่า "หมายเหตุเดิม" มีความหมายเฉพาะตอนที่สถานะก่อนหน้าเป็นออกเดินทางอยู่แล้วเท่านั้น
+  // (ถ้าเพิ่งเปลี่ยนมาเป็นออกเดินทางใหม่ ให้บันทึกทันที แม้ข้อความจะซ้ำกับเที่ยวเก่าในอดีตก็ตาม)
   const prevNote=(prevEmp&&prevEmp.status==='traveling')?String(prevEmp.note||'').trim():'';
-  const prevLines=new Set(prevNote.split(/\n+/).map(x=>x.trim()).filter(Boolean));
-  const newLines=note.split(/\n+/).map(x=>x.trim()).filter(Boolean);
-  const linesToCheck=newLines.length?newLines:[note];
-  const newlyAdded=linesToCheck.filter(line=>/6W/i.test(line)&&!prevLines.has(line));
-  if(!newlyAdded.length)return;
+  if(note===prevNote)return; // หมายเหตุไม่เปลี่ยน ไม่บันทึกซ้ำ
   const now=new Date().toISOString();
-  newlyAdded.forEach(line=>{
-    runLogs.unshift({
-      id:'rl_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
-      empId,name:name||'',plate:plate||'',
-      detail:line,
-      trips:countSixWTrips(line)||1,
-      createdAt:now
-    });
+  runLogs.unshift({
+    id:'rl_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+    empId,name:name||'',plate:plate||'',
+    detail:note,
+    trips:countSixWTrips(note)||1,
+    createdAt:now
   });
   // เก็บย้อนหลังแค่ 2 เดือน — ไว้ให้พนักงานตรวจเที่ยววิ่งของตัวเองเฉยๆ ไม่ต้องเก็บนาน
   const cutoff=Date.now()-60*24*3600*1000;
@@ -4087,7 +4081,7 @@ function recordRunLogIfNeeded(prevEmp,newStatus,newNote,empId,plate,name){
 // ── กู้เที่ยวที่ตกหล่น ──
 // เผื่อกรณีพนักงานเปลี่ยนเป็น "ออกเดินทาง" + หมายเหตุ 6W ไปแล้วตั้งแต่ก่อนอัพเดทระบบนี้ขึ้นเว็บจริง
 // ทำงานครั้งเดียวตอนแอปโหลดเสร็จ — สแกนหมายเหตุปัจจุบันของพนักงานทุกคน (ไม่สนสถานะปัจจุบัน)
-// ถ้ามีข้อความ 6W ที่ยังไม่เคยถูกบันทึกไว้เลย (เทียบจากข้อความ) จะเก็บเข้าประวัติให้อัตโนมัติ
+// ถ้าหมายเหตุมี 6W และยังไม่เคยถูกบันทึกไว้เลย (เทียบข้อความทั้งหมด) จะเก็บเข้าประวัติให้อัตโนมัติ
 function backfillMissedRunLogs(){
   if(!Array.isArray(employees)||!employees.length)return;
   const now=new Date().toISOString();
@@ -4096,18 +4090,15 @@ function backfillMissedRunLogs(){
     const note=String(e?.note||'').trim();
     if(!note||!/6W/i.test(note))return;
     const existing=new Set((runLogs||[]).filter(r=>r.empId===e.id).map(r=>r.detail));
-    const lines=note.split(/\n+/).map(x=>x.trim()).filter(Boolean);
-    const toCheck=lines.length?lines:[note];
-    toCheck.filter(l=>/6W/i.test(l)&&!existing.has(l)).forEach(line=>{
-      runLogs.unshift({
-        id:'rl_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
-        empId:e.id,name:e.name||'',plate:e.plate||'',
-        detail:line,
-        trips:countSixWTrips(line)||1,
-        createdAt:e.updatedAt||now
-      });
-      added=true;
+    if(existing.has(note))return;
+    runLogs.unshift({
+      id:'rl_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+      empId:e.id,name:e.name||'',plate:e.plate||'',
+      detail:note,
+      trips:countSixWTrips(note)||1,
+      createdAt:e.updatedAt||now
     });
+    added=true;
   });
   if(added){
     const cutoff=Date.now()-60*24*3600*1000;
@@ -4123,6 +4114,7 @@ function getRunLogEntriesForEmployee(e){
     .sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
     .map((r,idx)=>({
       no:idx+1,
+      id:r.id,
       detail:r.detail,
       trips:r.trips,
       updatedAt:r.createdAt,
@@ -4137,10 +4129,13 @@ function renderEmployeeRunLogCard(me){
   const latest=entries.slice(0,3).map(x=>`<div style="display:flex;gap:8px;align-items:flex-start;background:#fff;border:1px solid #BBF7D0;border-radius:12px;padding:9px 10px;margin-top:8px;">
     <span style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:#DCFCE7;color:#047857;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;">${x.no}</span>
     <div style="flex:1;min-width:0;">
-      <div style="font-size:13px;font-weight:900;color:#064E3B;word-break:break-word;line-height:1.45;">${esc(x.detail)}</div>
+      <div style="font-size:13px;font-weight:900;color:#064E3B;word-break:break-word;line-height:1.45;white-space:pre-wrap;">${esc(x.detail)}</div>
       <div style="font-size:10.8px;color:#64748B;margin-top:3px;">${skeIcon('note')} รายละเอียดงานจากหมายเหตุ · 🕐 ${fmt(x.updatedAt)}</div>
     </div>
-    <div style="font-size:12px;font-weight:900;color:#047857;white-space:nowrap;">${x.trips} เที่ยว</div>
+    <div style="text-align:right;flex-shrink:0;">
+      <div style="font-size:12px;font-weight:900;color:#047857;white-space:nowrap;">${x.trips} เที่ยว</div>
+      <button onclick="doDeleteRunLogEntry('${esc(x.id)}')" title="ลบรายการนี้" style="margin-top:6px;width:24px;height:24px;border-radius:50%;background:#FEF2F2;color:#DC2626;font-size:12px;border:1px solid #FECACA;">🗑️</button>
+    </div>
   </div>`).join('');
   return `<div style="margin-top:10px;background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:16px;padding:12px 14px;box-shadow:0 6px 18px rgba(34,197,94,.10);">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
@@ -4168,10 +4163,13 @@ function openEmployeeRunLogModal(){
   modal.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;';
   const list=entries.length?entries.map(x=>`<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:12px;margin-top:10px;">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
-      <div style="font-size:14px;font-weight:900;color:#0F172A;line-height:1.45;word-break:break-word;">${esc(x.detail)}</div>
+      <div style="font-size:14px;font-weight:900;color:#0F172A;line-height:1.45;word-break:break-word;white-space:pre-wrap;">${esc(x.detail)}</div>
       <div style="color:#047857;font-size:13px;font-weight:900;white-space:nowrap;">${x.trips} เที่ยว</div>
     </div>
-    <div style="font-size:11px;color:#64748B;margin-top:6px;line-height:1.5;">🚛 ${esc(x.plate||'-')} · สถานะ: ออกเดินทาง · 🕐 ${fmt(x.updatedAt)}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;">
+      <div style="font-size:11px;color:#64748B;line-height:1.5;">🚛 ${esc(x.plate||'-')} · สถานะ: ออกเดินทาง · 🕐 ${fmt(x.updatedAt)}</div>
+      <button class="btn btn-red btn-sm" style="flex-shrink:0;padding:5px 10px;font-size:10.5px;white-space:nowrap;" onclick="doDeleteRunLogEntry('${esc(x.id)}')">🗑️ ลบ</button>
+    </div>
   </div>`).join(''):`<div style="text-align:center;color:#64748B;font-size:13px;padding:24px 10px;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:14px;margin-top:12px;">ยังไม่มีบันทึกเที่ยววิ่ง<br>ระบบจะนับเมื่อสถานะเป็น <b>ออกเดินทาง</b> และหมายเหตุมีคำว่า <b>6W</b></div>`;
   modal.innerHTML=`<div style="width:min(560px,100%);max-height:82vh;overflow:auto;background:#fff;border-radius:24px 24px 0 0;padding:16px;box-shadow:0 -18px 50px rgba(15,23,42,.22);">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
@@ -4186,6 +4184,16 @@ function openEmployeeRunLogModal(){
   document.body.appendChild(modal);
 }
 function closeEmployeeRunLogModal(){document.getElementById('employeeRunLogModal')?.remove();}
+// ── ลบเที่ยววิ่งที่บันทึกไว้ 1 รายการ (พนักงานลบของตัวเองได้) ──
+function doDeleteRunLogEntry(id){
+  const log=(runLogs||[]).find(r=>r.id===id);
+  if(!log)return;
+  if(!confirm('ลบเที่ยววิ่งนี้?\n\n'+(log.detail||'')))return;
+  runLogs=runLogs.filter(r=>r.id!==id);
+  saveRunLogs();
+  renderDashboard();
+  if(document.getElementById('employeeRunLogModal'))openEmployeeRunLogModal();
+}
 
 function renderDashboard(){
   // sync currentUser จาก employees (กันกรณี localStorage เก่า)
