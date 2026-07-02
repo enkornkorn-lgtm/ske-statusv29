@@ -3004,6 +3004,20 @@ function viewRepairPhoto(id,idx,field){
   ov.style.display='flex';
 }
 function closePhotoViewer(){const ov=document.getElementById('photoViewer');if(ov)ov.style.display='none';}
+// ── ดูรูปเดี่ยวแบบง่าย (ใช้กับรูปหลักฐานเอกสารส่วนกลาง ที่ไม่ได้เก็บเป็นอาเรย์รูป) ──
+function openPhotoViewer(src){
+  if(!src)return;
+  let ov=document.getElementById('photoViewer');
+  if(!ov){
+    ov=document.createElement('div');ov.id='photoViewer';
+    ov.style.cssText='position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:20px;';
+    ov.onclick=ev=>{if(ev.target===ov)closePhotoViewer();};
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML=`<img src="${src}" style="max-width:100%;max-height:82vh;border-radius:12px;object-fit:contain;">
+    <button class="btn btn-gray btn-sm" onclick="closePhotoViewer()">✕ ปิด</button>`;
+  ov.style.display='flex';
+}
 
 // ── รูปแนบในบันทึกเปลี่ยนถ่ายของเหลว ──
 function viewFluidPhoto(id,idx){
@@ -3923,11 +3937,8 @@ function renderMonthlyDocAlert(me){
   const pill=_docStatusPill(status);
   const img=rec?.photo?`<div style="margin-top:8px;"><img src="${rec.photo}" alt="รูปหลักฐานการส่งเอกสาร" style="max-width:100%;max-height:190px;border-radius:10px;border:1px solid ${pill.bd};object-fit:cover;"></div>`:'';
   if(status==='approved'){
-    return `<div style="margin-top:10px;padding:10px 12px;border-radius:12px;background:${pill.bg};border:1.5px solid ${pill.bd};color:${pill.color};">
-      <div style="font-weight:900;font-size:13px;">${pill.text} (${esc(monthTH)})</div>
-      <div style="font-size:12px;margin-top:3px;color:#047857;">ส่งเมื่อ: ${fmt(rec.submittedAt||rec.at||Date.now())}${rec.reviewedAt?` · อนุมัติเมื่อ: ${fmt(rec.reviewedAt)}`:''}</div>
-      ${img}
-    </div>`;
+    // อนุมัติแล้ว — ไม่ต้องเตือน/โชว์การ์ดซ้ำอีก ให้หายไปจากหน้าพนักงานเลย
+    return '';
   }
   if(status==='pending'){
     return `<div style="margin-top:10px;padding:10px 12px;border-radius:12px;background:${pill.bg};border:1.5px solid ${pill.bd};color:${pill.color};">
@@ -4783,6 +4794,17 @@ function renderAdminDocPanel(){
   listEl.innerHTML=docs.map(d=>{
     const emp=employees.find(e=>e.id===d.empId)||{};
     const st=_docStatusPill(d.status||'pending');
+    if(d.status==='approved'){
+      // อนุมัติแล้ว — ย่อเหลือแถวเดียวเพื่อให้เห็นครบทุกคนในหน้าเดียวโดยไม่ต้องเลื่อนเยอะ
+      return `<div class="card" style="margin-bottom:8px;padding:9px 12px;border:1.5px solid ${st.bd};display:flex;align-items:center;gap:8px;">
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:13px;font-weight:900;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(d.empName||emp.name||'-')}</div>
+          <div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🚛 ${esc(d.plate||emp.plate||'-')}</div>
+        </div>
+        <span style="font-size:10.5px;font-weight:900;padding:3px 9px;border-radius:999px;background:${st.bg};color:${st.color};border:1px solid ${st.bd};white-space:nowrap;flex-shrink:0;">✅ อนุมัติแล้ว</span>
+        ${d.photo?`<button class="btn btn-gray btn-sm" style="flex-shrink:0;padding:5px 8px;font-size:11px;" onclick="openPhotoViewer('${d.photo}')">🖼️</button>`:''}
+      </div>`;
+    }
     return `<div class="card" style="margin-bottom:10px;border:1.5px solid ${st.bd};">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
         <div style="min-width:0;flex:1;"><div style="font-size:14px;font-weight:900;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(d.empName||emp.name||'-')}</div>
