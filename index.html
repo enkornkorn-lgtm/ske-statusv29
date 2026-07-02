@@ -1527,7 +1527,10 @@ select.inp option{background:#fff;color:#1a1a2e;}
         <button class="topbar-back" onclick="hideEmpManage()">←</button>
         <div class="section-label" style="margin:0;">👥 จัดการพนักงาน</div>
       </div>
-      <button class="btn btn-orange btn-full" style="margin-bottom:12px;" onclick="toggleAddEmp()">+ เพิ่มพนักงาน</button>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="btn btn-orange" style="flex:1;" onclick="toggleAddEmp()">+ เพิ่มพนักงาน</button>
+        <button class="btn btn-purple" style="flex:1;" onclick="openSwitchDriverModal()">🔄 สลับคนขับ</button>
+      </div>
       <div id="addEmpForm" class="card hidden" style="margin-bottom:12px;display:flex;flex-direction:column;gap:12px;">
         <div style="color:#F47920;font-weight:700;font-size:15px;">เพิ่มพนักงานใหม่</div>
         <div><div class="inp-label">ชื่อ-นามสกุล *</div><input class="inp" id="addName" placeholder="ชื่อ-นามสกุล"></div>
@@ -5277,6 +5280,240 @@ function doAddEmp(){
   employees.push({id:Date.now()+'',name,plate,phone,status:'standby',province:'',note:'',updatedAt:new Date().toISOString()});
   saveE();['addName','addPlate','addPhone'].forEach(x=>document.getElementById(x).value='');
   document.getElementById('addEmpForm').classList.add('hidden');renderAdminEmpList();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── สลับคนขับ (Switch Driver) ──
+// ใช้เวลาเจ้าของรถ/พนักงานคนอื่นต้องขับแทนคันที่ไม่ใช่คันประจำของตัวเอง (เช่น พนักงานลา)
+// โดยไม่ต้องไปสร้างพนักงานใหม่หรือแก้ฟอร์มทีละคน — แค่เปลี่ยนทะเบียนรถ (plate) ที่ผูกกับพนักงานคนนั้น
+// ประวัติเก่าทั้งหมด (ลา/ซ่อม/เที่ยววิ่ง/เอกสาร ฯลฯ) ผูกกับ empId อยู่แล้ว จึงไม่ถูกกระทบ
+// ══════════════════════════════════════════════════════════════════════════
+let _sd={step:1,plate:'',driverMode:'',driverId:'',newName:'',newPhone:'',ownerPickOpen:false,ownerPickMarkNew:false,q:''};
+function _swDistinctPlates(){
+  const map=new Map();
+  employees.forEach(e=>{
+    const p=(e.plate||'').trim();
+    if(!p)return;
+    if(!map.has(p))map.set(p,[]);
+    map.get(p).push(e);
+  });
+  return [...map.entries()].map(([plate,emps])=>({plate,emps})).sort((a,b)=>a.plate.localeCompare(b.plate));
+}
+function _swOwnerEmp(){return employees.find(e=>e.isOwner)||null;}
+function openSwitchDriverModal(){
+  _sd={step:1,plate:'',driverMode:'',driverId:'',newName:'',newPhone:'',ownerPickOpen:false,ownerPickMarkNew:false,q:''};
+  let ov=document.getElementById('switchDriverModal');
+  if(!ov){
+    ov=document.createElement('div');ov.id='switchDriverModal';
+    ov.style.cssText='position:fixed;inset:0;z-index:10002;background:rgba(15,23,42,.55);display:flex;align-items:flex-end;justify-content:center;';
+    ov.onclick=ev=>{if(ev.target===ov)closeSwitchDriverModal();};
+    document.body.appendChild(ov);
+  }
+  ov.style.display='flex';
+  renderSwitchDriverModal();
+}
+function closeSwitchDriverModal(){const ov=document.getElementById('switchDriverModal');if(ov)ov.style.display='none';}
+function _sdDots(){
+  return `<div style="display:flex;gap:6px;padding:2px 0 12px;">
+    ${[1,2,3].map(n=>`<div style="height:7px;border-radius:4px;background:${_sd.step>=n?'#7B2FBE':'#E2E8F0'};width:${_sd.step===n?'22px':'7px'};transition:.2s;"></div>`).join('')}
+  </div>`;
+}
+function renderSwitchDriverModal(){
+  const ov=document.getElementById('switchDriverModal');if(!ov)return;
+  let body='';
+  if(_sd.step===1)body=_sdStep1Html();
+  else if(_sd.step===2)body=_sdStep2Html();
+  else if(_sd.step===3)body=_sdStep3Html();
+  else if(_sd.step===4)body=_sdDoneHtml();
+  ov.innerHTML=`<div style="width:100%;max-width:480px;background:#fff;border-radius:20px 20px 0 0;padding:18px 18px 22px;max-height:88vh;overflow:auto;box-shadow:0 -10px 40px rgba(0,0,0,.25);" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+      <div style="font-size:16px;font-weight:900;color:#1a1a2e;flex:1;">🔄 สลับคนขับ</div>
+      <button onclick="closeSwitchDriverModal()" style="width:30px;height:30px;border-radius:50%;background:#F5F6FF;color:#555;border:none;font-size:14px;">✕</button>
+    </div>
+    ${_sd.step<4?_sdDots():''}
+    ${body}
+  </div>`;
+}
+function _sdStep1Html(){
+  const groups=_swDistinctPlates();
+  return `<div style="font-size:11px;font-weight:800;color:#7B2FBE;text-transform:uppercase;letter-spacing:.03em;">ขั้นตอนที่ 1 / 3</div>
+    <div style="font-size:16px;font-weight:900;color:#1a1a2e;margin:2px 0 12px;">เลือกรถที่จะสลับคนขับ</div>
+    <input class="inp" placeholder="หรือพิมพ์ทะเบียนรถ..." value="${esc(_sd.plate)}" oninput="_sd.plate=this.value.toUpperCase();document.getElementById('sdNext1').disabled=!_sd.plate.trim();" style="margin-bottom:12px;text-transform:uppercase;">
+    <div style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow:auto;">
+      ${groups.map(g=>{
+        const sel=_sd.plate===g.plate;
+        const names=g.emps.map(e=>e.name).join(', ');
+        const anyLeave=g.emps.some(e=>isLeaveActiveToday(e));
+        return `<div onclick="_sd.plate='${esc(g.plate)}';document.getElementById('sdNext1').disabled=false;renderSwitchDriverModal();" style="display:flex;align-items:center;gap:10px;border:1.5px solid ${sel?'#7B2FBE':'#E8EAF0'};background:${sel?'#F5F0FF':'#fff'};border-radius:14px;padding:11px 13px;cursor:pointer;">
+          <div style="width:38px;height:38px;border-radius:10px;background:#EEF2FF;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🚛</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:900;color:#1a1a2e;">${esc(g.plate)}</div>
+            <div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">คนขับปัจจุบัน: ${esc(names)}</div>
+          </div>
+          ${anyLeave?'<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;background:#FFF7ED;color:#C2410C;border:1px solid #FDBA74;white-space:nowrap;">🌴 ลาอยู่</span>':''}
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn btn-gray" style="flex:1;" onclick="closeSwitchDriverModal()">ยกเลิก</button>
+      <button class="btn btn-purple" id="sdNext1" style="flex:1;" ${_sd.plate.trim()?'':'disabled'} onclick="_sd.step=2;renderSwitchDriverModal();">ถัดไป →</button>
+    </div>`;
+}
+function _sdEmpListHtml(){
+  const q=_sd.q.toLowerCase().trim();
+  const list=employees.filter(e=>!q||(e.name||'').toLowerCase().includes(q)||(e.plate||'').toLowerCase().includes(q));
+  return list.map(e=>{
+        const sel=_sd.driverMode==='existing'&&_sd.driverId===e.id;
+        return `<div onclick="_sd.driverMode='existing';_sd.driverId='${e.id}';renderSwitchDriverModal();" style="display:flex;align-items:center;gap:10px;border:1.5px solid ${sel?'#7B2FBE':'#E8EAF0'};background:${sel?'#F5F0FF':'#fff'};border-radius:14px;padding:11px 13px;cursor:pointer;">
+          <div class="avatar" style="width:38px;height:38px;font-size:14px;">${avatarImg(e,38)||esc((e.name||'?').charAt(0))}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13.5px;font-weight:900;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}${e.isOwner?' 👑':''}</div>
+            <div style="font-size:11px;color:#888;">ปัจจุบันขับ ${esc(e.plate||'-')}${e.plate===_sd.plate?' เช่นกัน':''}</div>
+          </div>
+        </div>`;
+      }).join('')||'<div style="text-align:center;color:#94A3B8;font-size:12.5px;padding:16px;">ไม่พบพนักงาน</div>';
+}
+function sdOnSearchInput(val){
+  _sd.q=val;
+  const el=document.getElementById('sdEmpListContainer');
+  if(el)el.innerHTML=_sdEmpListHtml();
+}
+function _sdStep2Html(){
+  const owner=_swOwnerEmp();
+  const chosen=_sd.driverMode==='existing'||_sd.driverMode==='owner'||_sd.driverMode==='new';
+  return `<div style="font-size:11px;font-weight:800;color:#7B2FBE;text-transform:uppercase;letter-spacing:.03em;">ขั้นตอนที่ 2 / 3</div>
+    <div style="font-size:16px;font-weight:900;color:#1a1a2e;margin:2px 0 12px;">วันนี้ใครขับ <span style="color:#7B2FBE;">${esc(_sd.plate)}</span></div>
+    ${_sd.ownerPickOpen?`
+      <div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:12px;padding:11px;margin-bottom:12px;">
+        <div style="font-size:12.5px;font-weight:800;color:#92400E;margin-bottom:8px;">ยังไม่เคยตั้งค่าว่าใครคือเจ้าของ เลือกเลยครับ</div>
+        <select id="sdOwnerPick" class="inp" style="margin-bottom:8px;">
+          ${employees.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}
+          <option value="__new__">— ยังไม่มีในระบบ (สร้างโปรไฟล์ใหม่) —</option>
+        </select>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-gray btn-sm" style="flex:1;" onclick="_sd.ownerPickOpen=false;renderSwitchDriverModal();">ยกเลิก</button>
+          <button class="btn btn-orange btn-sm" style="flex:1;" onclick="sdConfirmOwnerPick()">✓ ยืนยันว่านี่คือฉัน</button>
+        </div>
+      </div>
+    `:''}
+    ${_sd.driverMode==='newForm'?`
+      <div style="background:#F5F0FF;border:1.5px solid #DDD6FE;border-radius:12px;padding:11px;margin-bottom:12px;">
+        <div style="font-size:12.5px;font-weight:800;color:#5B21B6;margin-bottom:8px;">${_sd.ownerPickMarkNew?'สร้างโปรไฟล์เจ้าของใหม่':'เพิ่มคนขับใหม่'}</div>
+        <input class="inp" id="sdNewName" placeholder="ชื่อ-นามสกุล" value="${esc(_sd.newName)}" style="margin-bottom:8px;">
+        <input class="inp" id="sdNewPhone" placeholder="เบอร์โทรศัพท์" value="${esc(_sd.newPhone)}" style="margin-bottom:8px;">
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-gray btn-sm" style="flex:1;" onclick="_sd.driverMode='';renderSwitchDriverModal();">ยกเลิก</button>
+          <button class="btn btn-purple btn-sm" style="flex:1;" onclick="sdConfirmNewDriver()">✓ ยืนยันคนขับใหม่</button>
+        </div>
+      </div>
+    `:''}
+    <input class="inp" placeholder="🔍 ค้นหาชื่อพนักงาน..." value="${esc(_sd.q)}" oninput="sdOnSearchInput(this.value)" style="margin-bottom:10px;">
+    <div style="font-size:10.5px;color:#94A3B8;font-weight:800;margin-bottom:6px;text-transform:uppercase;">ตัวเลือกด่วน</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+      <div onclick="sdClickOwner()" style="display:flex;align-items:center;gap:10px;border:1.5px solid ${_sd.driverMode==='owner'?'#7B2FBE':'#E8EAF0'};background:${_sd.driverMode==='owner'?'#F5F0FF':'#fff'};border-radius:14px;padding:11px 13px;cursor:pointer;">
+        <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#FBBF24,#F59E0B);display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;flex-shrink:0;">👑</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13.5px;font-weight:900;color:#1a1a2e;">ฉันขับเอง (เจ้าของ)</div>
+          <div style="font-size:11px;color:#888;">${owner?esc(owner.name):'ยังไม่ได้ตั้งค่า — กดเพื่อเลือก'}</div>
+        </div>
+      </div>
+      <div onclick="_sd.driverMode='newForm';_sd.ownerPickMarkNew=false;_sd.newName='';_sd.newPhone='';renderSwitchDriverModal();" style="display:flex;align-items:center;gap:10px;border:1.5px solid ${_sd.driverMode==='new'?'#7B2FBE':'#E8EAF0'};background:${_sd.driverMode==='new'?'#F5F0FF':'#fff'};border-radius:14px;padding:11px 13px;cursor:pointer;">
+        <div style="width:38px;height:38px;border-radius:50%;background:#F1F5F9;border:1.5px dashed #CBD5E1;display:flex;align-items:center;justify-content:center;font-size:18px;color:#94A3B8;flex-shrink:0;">＋</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13.5px;font-weight:900;color:#1a1a2e;">${_sd.driverMode==='new'?esc(_sd.newName):'เพิ่มคนขับใหม่'}</div>
+          <div style="font-size:11px;color:#888;">ตั้งชื่อ + เบอร์ครั้งแรกครั้งเดียว</div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:10.5px;color:#94A3B8;font-weight:800;margin-bottom:6px;text-transform:uppercase;">พนักงานทั้งหมด</div>
+    <div id="sdEmpListContainer" style="display:flex;flex-direction:column;gap:8px;max-height:220px;overflow:auto;">
+      ${_sdEmpListHtml()}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn btn-gray" style="flex:1;" onclick="_sd.step=1;renderSwitchDriverModal();">ย้อนกลับ</button>
+      <button class="btn btn-purple" style="flex:1;" ${chosen?'':'disabled'} onclick="_sd.step=3;renderSwitchDriverModal();">ถัดไป →</button>
+    </div>`;
+}
+function sdClickOwner(){
+  const owner=_swOwnerEmp();
+  if(owner){_sd.driverMode='owner';_sd.driverId=owner.id;renderSwitchDriverModal();return;}
+  _sd.ownerPickOpen=true;renderSwitchDriverModal();
+}
+function sdConfirmOwnerPick(){
+  const val=document.getElementById('sdOwnerPick')?.value;
+  if(!val)return;
+  _sd.ownerPickOpen=false;
+  if(val==='__new__'){_sd.driverMode='newForm';_sd.ownerPickMarkNew=true;_sd.newName='';_sd.newPhone='';renderSwitchDriverModal();return;}
+  employees=employees.map(e=>e.id===val?{...e,isOwner:true}:e);
+  saveE();
+  if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(val,{isOwner:true}).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+  _sd.driverMode='owner';_sd.driverId=val;
+  renderSwitchDriverModal();
+}
+function sdConfirmNewDriver(){
+  const name=(document.getElementById('sdNewName')?.value||'').trim();
+  const phone=(document.getElementById('sdNewPhone')?.value||'').trim();
+  if(!name){alert('กรุณากรอกชื่อคนขับใหม่');return;}
+  _sd.newName=name;_sd.newPhone=phone;
+  _sd.driverMode='new';
+  renderSwitchDriverModal();
+}
+function _sdStep3Html(){
+  let driverName='',driverAvatar='👤';
+  if(_sd.driverMode==='existing'){const e=employees.find(x=>x.id===_sd.driverId);driverName=e?e.name:'-';}
+  else if(_sd.driverMode==='owner'){const e=employees.find(x=>x.id===_sd.driverId);driverName=(e?e.name:'เจ้าของ')+' (เจ้าของ)';driverAvatar='👑';}
+  else if(_sd.driverMode==='new'){driverName=_sd.newName+' (คนขับใหม่)';driverAvatar='＋';}
+  const currentDrivers=employees.filter(e=>e.plate===_sd.plate&&!((_sd.driverMode==='existing'||_sd.driverMode==='owner')&&e.id===_sd.driverId));
+  return `<div style="font-size:11px;font-weight:800;color:#7B2FBE;text-transform:uppercase;letter-spacing:.03em;">ขั้นตอนที่ 3 / 3</div>
+    <div style="font-size:16px;font-weight:900;color:#1a1a2e;margin:2px 0 12px;">ยืนยันการสลับคนขับ</div>
+    <div style="background:#F5F0FF;border:1.5px solid #DDD6FE;border-radius:16px;padding:18px;text-align:center;margin-bottom:14px;">
+      <div style="font-size:20px;font-weight:900;color:#7B2FBE;letter-spacing:.02em;">${esc(_sd.plate)}</div>
+      <div style="font-size:20px;color:#7B2FBE;margin:6px 0;">⬇</div>
+      <div style="font-size:16px;font-weight:900;color:#1a1a2e;">${driverAvatar} ${esc(driverName)}</div>
+    </div>
+    ${currentDrivers.length?`<div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:12px;padding:10px 12px;font-size:11.5px;color:#92400E;line-height:1.6;margin-bottom:8px;">
+      ⚠️ ประวัติเก่าของ <b>${esc(currentDrivers.map(e=>e.name).join(', '))}</b> (ลา/ซ่อม/เที่ยววิ่งที่บันทึกไว้) จะยังอยู่ครบ ไม่ถูกลบหรือแก้ไข — แค่จะไม่ใช่คนขับปัจจุบันของคันนี้อีกต่อไปเท่านั้น
+    </div>`:''}
+    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px;font-size:11px;color:#64748B;line-height:1.6;">
+      📌 หลังยืนยัน ทุกหน้าจอ (ภาพรวม/ซ่อมบำรุง/การเงิน) จะอัปเดตชื่อคนขับของ ${esc(_sd.plate)} ให้ทันที
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn btn-gray" style="flex:1;" onclick="_sd.step=2;renderSwitchDriverModal();">ย้อนกลับ</button>
+      <button class="btn btn-green" style="flex:1;" onclick="sdConfirmSwitch()">✅ ยืนยันสลับคนขับ</button>
+    </div>`;
+}
+function sdConfirmSwitch(){
+  const plate=_sd.plate;
+  let finalId=null,finalName='';
+  if(_sd.driverMode==='existing'||_sd.driverMode==='owner'){
+    finalId=_sd.driverId;
+    const patch={plate};
+    employees=employees.map(e=>e.id===finalId?{...e,...patch}:e);
+    saveE();
+    if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(finalId,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+    const e=employees.find(x=>x.id===finalId);finalName=e?e.name:'';
+  }else if(_sd.driverMode==='new'){
+    finalId=Date.now()+'';
+    const rec={id:finalId,name:_sd.newName,plate,phone:_sd.newPhone,status:'standby',province:'',note:'',updatedAt:new Date().toISOString()};
+    if(_sd.ownerPickMarkNew)rec.isOwner=true;
+    employees.push(rec);
+    saveE();
+    if(window.fbSaveEmployees)window.fbSaveEmployees(employees);
+    finalName=_sd.newName;
+  }
+  _sd.step=4;_sd.doneName=finalName;
+  renderSwitchDriverModal();
+  renderAdminEmpList();
+  const summaryEl=document.getElementById('adminSummaryContent');
+  if(summaryEl)summaryEl.innerHTML=buildSummaryHTML();
+}
+function _sdDoneHtml(){
+  return `<div style="text-align:center;padding:26px 10px 6px;">
+    <div style="width:64px;height:64px;border-radius:50%;background:#ECFDF5;border:2px solid #6EE7B7;display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 16px;">✅</div>
+    <div style="font-size:16px;font-weight:900;color:#1a1a2e;margin-bottom:6px;">สลับคนขับเรียบร้อย</div>
+    <div style="font-size:12.5px;color:#64748B;line-height:1.6;">${esc(_sd.plate)} ตอนนี้คนขับคือ<br><b style="color:#1a1a2e;">${esc(_sd.doneName||'-')}</b></div>
+    <button class="btn btn-purple btn-full" style="margin-top:20px;" onclick="closeSwitchDriverModal()">เสร็จสิ้น</button>
+  </div>`;
 }
 
 let _aSel={};
