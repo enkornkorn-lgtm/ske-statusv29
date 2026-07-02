@@ -4290,7 +4290,9 @@ function _dateInLeaveRange(fromVal,toVal){
 // บน leaveLogs ที่ซิงก์ผ่าน Firebase แทนแล้ว (ดู adminClearLeaveToNormal และ activeApprovedLeaveLogForEmployee)
 function activeApprovedLeaveLogForEmployee(e){
   if(!e)return null;
-  const sameEmp=l=>String(l.empId||'')===String(e.id||'') || ((l.plate||'')&&e.plate&&String(l.plate).trim()===String(e.plate).trim()) || ((l.empName||'')&&e.name&&String(l.empName).trim()===String(e.name).trim());
+  // จับคู่ด้วย empId ก่อนเป็นหลักเสมอถ้าบันทึกนั้นมี empId อยู่แล้ว (สร้างตอนอนุมัติลาจะมี empId ติดมาด้วยทุกครั้ง)
+  // ใช้ทะเบียนรถ/ชื่อ เป็นตัวสำรองเฉพาะบันทึกเก่าที่ไม่มี empId เท่านั้น — ป้องกันจับผิดคนตอนพนักงาน 2 คนใช้รถทะเบียนเดียวกัน (ผลัดกันขับ)
+  const sameEmp=l=>l.empId?(String(l.empId)===String(e.id||'')):(((l.plate||'')&&e.plate&&String(l.plate).trim()===String(e.plate).trim()) || ((l.empName||'')&&e.name&&String(l.empName).trim()===String(e.name).trim()));
   return (leaveLogs||[]).find(l=>sameEmp(l)&&_dateInLeaveRange(l.leaveFrom,l.leaveTo)&&!l.cleared)||null;
 }
 function isLeaveActiveToday(e){
@@ -4304,7 +4306,10 @@ function getApprovedLeaveListForEmployees(){
   const map=new Map();
   const add=(item)=>{
     if(!item||!item.leaveFrom)return;
-    const emp=employees.find(e=>String(e.id||'')===String(item.empId||'') || (item.plate&&e.plate&&String(item.plate).trim()===String(e.plate).trim()) || (item.empName&&e.name&&String(item.empName).trim()===String(e.name).trim()));
+    // จับคู่ด้วย empId ก่อนเป็นหลักเสมอ ใช้ทะเบียนรถ/ชื่อเป็นตัวสำรองเฉพาะกรณีไม่มี empId (บันทึกเก่า)
+    // ป้องกันจับผิดคนตอนพนักงาน 2 คนใช้รถทะเบียนเดียวกัน
+    let emp=item.empId?employees.find(e=>String(e.id)===String(item.empId)):null;
+    if(!emp)emp=employees.find(e=>(item.plate&&e.plate&&String(item.plate).trim()===String(e.plate).trim()) || (item.empName&&e.name&&String(item.empName).trim()===String(e.name).trim()));
     const id=emp?.id||item.empId||item.plate||item.empName;
     const from=String(item.leaveFrom).slice(0,10), to=String(item.leaveTo||item.leaveFrom).slice(0,10);
     if(item.cleared)return;
