@@ -1878,6 +1878,10 @@ function saveLeaveLogs(){
   localStorage.setItem('ske_leaveLogs',JSON.stringify(leaveLogs));
   if(window.fbSaveLeaveLogs) window.fbSaveLeaveLogs(leaveLogs);
 }
+function saveMonthlyDocs(){
+  localStorage.setItem('ske_monthly_docs',JSON.stringify(monthlyDocs));
+  if(window.fbSaveMonthlyDocs) window.fbSaveMonthlyDocs(monthlyDocs);
+}
 function saveRunLogs(){
   localStorage.setItem('ske_runlogs',JSON.stringify(runLogs));
   if(window.fbSaveRunLogs) window.fbSaveRunLogs(runLogs);
