@@ -4274,20 +4274,19 @@ function _dateInLeaveRange(fromVal,toVal){
   const to=new Date(String(toVal||fromVal).slice(0,10)+'T00:00:00');
   return today>=from && today<=to;
 }
-function _leaveClearKey(id,fromVal,toVal){return String(id||'')+'_'+String(fromVal||'').slice(0,10)+'_'+String(toVal||fromVal||'').slice(0,10);}
-function _loadClearedLeaveKeys(){try{return new Set(JSON.parse(localStorage.getItem('ske_cleared_leave_keys')||'[]'));}catch(e){return new Set();}}
-function _saveClearedLeaveKeys(set){localStorage.setItem('ske_cleared_leave_keys',JSON.stringify([...set]));}
-function _isLeaveCleared(id,fromVal,toVal){return _loadClearedLeaveKeys().has(_leaveClearKey(id,fromVal,toVal));}
-function _markLeaveCleared(id,fromVal,toVal){const set=_loadClearedLeaveKeys();set.add(_leaveClearKey(id,fromVal,toVal));_saveClearedLeaveKeys(set);}
+// หมายเหตุ: เดิมมีฟังก์ชัน _isLeaveCleared/_markLeaveCleared เก็บสถานะ "เคลียร์ลาแล้ว" ไว้ใน localStorage
+// ของเครื่องเดียว ทำให้อุปกรณ์อื่นมองไม่เห็นว่าเคลียร์แล้ว (สถานะลาเด้งกลับมา) — ถูกแทนที่ด้วยฟิลด์ cleared
+// บน leaveLogs ที่ซิงก์ผ่าน Firebase แทนแล้ว (ดู adminClearLeaveToNormal และ activeApprovedLeaveLogForEmployee)
 function activeApprovedLeaveLogForEmployee(e){
   if(!e)return null;
   const sameEmp=l=>String(l.empId||'')===String(e.id||'') || ((l.plate||'')&&e.plate&&String(l.plate).trim()===String(e.plate).trim()) || ((l.empName||'')&&e.name&&String(l.empName).trim()===String(e.name).trim());
-  return (leaveLogs||[]).find(l=>sameEmp(l)&&_dateInLeaveRange(l.leaveFrom,l.leaveTo)&&!_isLeaveCleared(e.id,l.leaveFrom,l.leaveTo))||null;
+  return (leaveLogs||[]).find(l=>sameEmp(l)&&_dateInLeaveRange(l.leaveFrom,l.leaveTo)&&!l.cleared)||null;
 }
 function isLeaveActiveToday(e){
-  // แสดงสถานะลาเฉพาะที่อนุมัติแล้วเท่านั้น และถ้าผู้ดูแลกด “ทำงานปกติ” แล้วจะไม่แสดงซ้ำจากประวัติ
+  // แสดงสถานะลาเฉพาะที่อนุมัติแล้วเท่านั้น (onLeave/leaveApproval ถูกซิงก์ผ่าน Firebase อยู่แล้ว
+  // เมื่อผู้ดูแลกด "ทำงานปกติ" ค่าจะถูกล้างที่นี่โดยตรง จึงไม่ต้องพึ่ง localStorage ซึ่งไม่ซิงก์ข้ามอุปกรณ์)
   if(!e)return false;
-  if(e.onLeave&&e.leaveApproval==='approved'&&_dateInLeaveRange(e.leaveFrom,e.leaveTo)&&!_isLeaveCleared(e.id,e.leaveFrom,e.leaveTo))return true;
+  if(e.onLeave&&e.leaveApproval==='approved'&&_dateInLeaveRange(e.leaveFrom,e.leaveTo))return true;
   return !!activeApprovedLeaveLogForEmployee(e);
 }
 function getApprovedLeaveListForEmployees(){
@@ -4297,7 +4296,7 @@ function getApprovedLeaveListForEmployees(){
     const emp=employees.find(e=>String(e.id||'')===String(item.empId||'') || (item.plate&&e.plate&&String(item.plate).trim()===String(e.plate).trim()) || (item.empName&&e.name&&String(item.empName).trim()===String(e.name).trim()));
     const id=emp?.id||item.empId||item.plate||item.empName;
     const from=String(item.leaveFrom).slice(0,10), to=String(item.leaveTo||item.leaveFrom).slice(0,10);
-    if(_isLeaveCleared(id,from,to))return;
+    if(item.cleared)return;
     const end=new Date(to+'T23:59:59');
     if(end < new Date(todayStr()+'T00:00:00'))return;
     const key=String(id)+'_'+from+'_'+to;
@@ -4337,7 +4336,12 @@ function adminClearLeaveToNormal(id){
   if(!emp)return;
   if(!confirm('เปลี่ยนจากลาอยู่ เป็นทำงานปกติ?'))return;
   const activeLog=activeApprovedLeaveLogForEmployee(emp);
-  _markLeaveCleared(id, activeLog?.leaveFrom||emp.leaveFrom, activeLog?.leaveTo||emp.leaveTo||emp.leaveFrom);
+  // ทำเครื่องหมาย "เคลียร์แล้ว" บนบันทึกประวัติการลาโดยตรง แล้วซิงก์ขึ้น Firebase
+  // (เดิมเก็บไว้ใน localStorage ของเครื่องเดียว ทำให้อุปกรณ์/เบราว์เซอร์อื่นมองไม่เห็นว่าเคลียร์แล้ว สถานะลาจึงเด้งกลับมา)
+  if(activeLog){
+    leaveLogs=leaveLogs.map(l=>l.id===activeLog.id?{...l,cleared:true}:l);
+    saveLeaveLogs();
+  }
   const patch={onLeave:false,leaveFrom:null,leaveTo:null,leaveNote:null,leaveApproval:null,leaveReply:null,leaveReplyAt:null};
   employees=employees.map(e=>e.id===id?{...e,...patch}:e);
   localStorage.setItem('ske_emp',JSON.stringify(employees));
