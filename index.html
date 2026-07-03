@@ -125,14 +125,19 @@
     });
   };
 
-  // บันทึก admin password (รหัสผู้ดูแล — สิทธิ์เต็ม)
-  window.fbSaveAdminPw = function(pw) {
-    set(ref(db, 'adminPw'), pw).catch(e => console.error('fbSavePw error', e));
+  // บันทึก admin password (รหัสผู้ดูแล — สิทธิ์เต็ม) — เก็บเป็น SHA-256 hash เท่านั้น ไม่ส่ง/เก็บ plain text ขึ้น Firebase อีกต่อไป
+  window.fbSaveAdminPwHash = function(hash) {
+    set(ref(db, 'adminPwHash'), hash).catch(e => console.error('fbSavePw error', e));
   };
 
-  // บันทึก viewer password (รหัสแอดมิน — ดูเฉพาะแผนผังงาน)
-  window.fbSaveViewerPw = function(pw) {
-    set(ref(db, 'viewerPw'), pw).catch(e => console.error('fbSaveViewerPw error', e));
+  // บันทึก viewer password (รหัสแอดมิน — ดูเฉพาะแผนผังงาน) — เก็บเป็น hash เท่านั้น
+  window.fbSaveViewerPwHash = function(hash) {
+    set(ref(db, 'viewerPwHash'), hash).catch(e => console.error('fbSaveViewerPw error', e));
+  };
+
+  // บันทึก PIN ชั้นที่ 2 (รหัสยืนยันเพิ่มเติมตอนล็อกอินหลังบ้าน) — เก็บเป็น hash เท่านั้น
+  window.fbSaveAdminPin2Hash = function(hash) {
+    set(ref(db, 'adminPin2Hash'), hash).catch(e => console.error('fbSavePin2 error', e));
   };
 
   // บันทึกรายการแจ้งซ่อมขึ้น Firebase
@@ -205,14 +210,19 @@
     window._fbReady = true;
   });
 
-  onValue(ref(db, 'adminPw'), (snapshot) => {
-    const pw = snapshot.val();
-    if (pw) { adminPw = pw; localStorage.setItem('ske_pw', pw); }
+  onValue(ref(db, 'adminPwHash'), (snapshot) => {
+    const h = snapshot.val();
+    if (h) { adminPwHash = h; localStorage.setItem('ske_pwHash', h); }
   });
 
-  onValue(ref(db, 'viewerPw'), (snapshot) => {
-    const pw = snapshot.val();
-    if (pw) { viewerPw = pw; localStorage.setItem('ske_viewerPw', pw); }
+  onValue(ref(db, 'viewerPwHash'), (snapshot) => {
+    const h = snapshot.val();
+    if (h) { viewerPwHash = h; localStorage.setItem('ske_viewerPwHash', h); }
+  });
+
+  onValue(ref(db, 'adminPin2Hash'), (snapshot) => {
+    const h = snapshot.val();
+    if (h) { adminPin2Hash = h; localStorage.setItem('ske_pin2Hash', h); }
   });
 
   // ฟัง realtime — รายการแจ้งซ่อม
@@ -342,16 +352,22 @@
     window._fbReady = true;
   }).catch(e => { window._fbReady = true; console.error('fbGet error', e); });
 
-  get(ref(db, 'adminPw')).then(snapshot => {
-    const pw = snapshot.val();
-    if (pw) { adminPw = pw; localStorage.setItem('ske_pw', pw); }
-    else if (adminPw !== 'admin1234') window.fbSaveAdminPw(adminPw);
+  get(ref(db, 'adminPwHash')).then(async snapshot => {
+    const h = snapshot.val();
+    if (h) { adminPwHash = h; localStorage.setItem('ske_pwHash', h); }
+    else { if(!adminPwHash) adminPwHash = await sha256Hex(SKE_DEFAULT_ADMIN_PW); window.fbSaveAdminPwHash(adminPwHash); }
   });
 
-  get(ref(db, 'viewerPw')).then(snapshot => {
-    const pw = snapshot.val();
-    if (pw) { viewerPw = pw; localStorage.setItem('ske_viewerPw', pw); }
-    else window.fbSaveViewerPw(viewerPw);
+  get(ref(db, 'viewerPwHash')).then(async snapshot => {
+    const h = snapshot.val();
+    if (h) { viewerPwHash = h; localStorage.setItem('ske_viewerPwHash', h); }
+    else { if(!viewerPwHash) viewerPwHash = await sha256Hex(SKE_DEFAULT_VIEWER_PW); window.fbSaveViewerPwHash(viewerPwHash); }
+  });
+
+  get(ref(db, 'adminPin2Hash')).then(async snapshot => {
+    const h = snapshot.val();
+    if (h) { adminPin2Hash = h; localStorage.setItem('ske_pin2Hash', h); }
+    else { if(!adminPin2Hash) adminPin2Hash = await sha256Hex(SKE_DEFAULT_PIN2); window.fbSaveAdminPin2Hash(adminPin2Hash); }
   });
 
   get(ref(db, 'repairs')).then(snapshot => {
@@ -1118,15 +1134,19 @@ select.inp option{background:#fff;color:#1a1a2e;}
           </div>
         </div>
         <div id="adminPwHint" style="background:#F5F3FF;border:1px solid #D8B4FE;border-radius:10px;padding:10px 12px;font-size:12px;color:#6D28D9;">
-          🔑 รหัสผ่านเริ่มต้น: <b>admin1234</b><br>
+          🔑 รหัสผ่านเริ่มต้น: <b>admin1234</b> • PIN ชั้น 2 เริ่มต้น: <b>135790</b><br>
           <span style="color:#888;font-size:11px;">(เปลี่ยนได้ในหน้าตั้งค่าหลังเข้าระบบ)</span>
         </div>
         <div>
           <div class="inp-label">รหัสผ่าน</div>
           <div style="position:relative;">
-            <input class="inp" id="adminPwInput" type="password" placeholder="กรอกรหัสผ่าน" style="padding-right:44px;" onkeydown="if(event.key==='Enter')doAdminLogin()">
+            <input class="inp" id="adminPwInput" type="password" placeholder="กรอกรหัสผ่าน" style="padding-right:44px;" onkeydown="if(event.key==='Enter')document.getElementById('adminPin2Input').focus()">
             <button onclick="togglePwVis()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;cursor:pointer;color:#888;" id="pwEyeBtn">👁️</button>
           </div>
+        </div>
+        <div>
+          <div class="inp-label">🔒 รหัสชั้นที่ 2 (PIN ยืนยันเพิ่มเติม)</div>
+          <input class="inp" id="adminPin2Input" type="password" inputmode="numeric" maxlength="10" placeholder="กรอก PIN ชั้นที่ 2" onkeydown="if(event.key==='Enter')doAdminLogin()">
         </div>
         <div id="adminPwMsg" class="msg-err hidden"></div>
         <button class="btn btn-purple btn-full" onclick="doAdminLogin()">🔐 เข้าสู่ระบบ</button>
@@ -1136,7 +1156,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <!-- Emergency Reset Panel -->
       <div id="resetPwPanel" class="card hidden" style="margin-top:12px;display:flex;flex-direction:column;gap:12px;">
         <div style="color:#EF4444;font-weight:700;"><span class="ic" data-ic="alert"></span> รีเซ็ตรหัสผ่านฉุกเฉิน</div>
-        <div style="font-size:12px;color:#666;">กรอก Emergency Code เพื่อรีเซ็ตรหัสผ่านกลับเป็นค่าเริ่มต้น (ผู้ดูแล=<b>admin1234</b>, แอดมิน=<b>view1234</b>)</div>
+        <div style="font-size:12px;color:#666;">กรอก Emergency Code เพื่อรีเซ็ตรหัสผ่าน+PIN ชั้น 2 กลับเป็นค่าเริ่มต้น (ผู้ดูแล=<b>admin1234</b>, แอดมิน=<b>view1234</b>, PIN ชั้น 2=<b>135790</b>)</div>
         <div><div class="inp-label">Emergency Code</div><input class="inp" id="emergencyCode" placeholder="SKE-RESET-2025"></div>
         <div id="resetMsg" class="msg-err hidden"></div>
         <button class="btn btn-red btn-full" onclick="doEmergencyReset()">รีเซ็ตรหัสผ่าน</button>
@@ -1500,6 +1520,14 @@ select.inp option{background:#fff;color:#1a1a2e;}
           <input class="inp" id="newViewerPwInput" type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 4 ตัว)">
           <div id="viewerPwMsg" class="msg-ok hidden" style="margin-top:6px;"></div>
           <button class="btn btn-full" style="margin-top:10px;background:#0E7490;color:#fff;" onclick="doChangeViewerPw()">บันทึกรหัสผ่านแอดมิน</button>
+
+          <div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;padding:8px 11px;font-size:11.5px;color:#B91C1C;margin:18px 0 8px;line-height:1.5;">
+            🔒 <b>PIN ชั้นที่ 2</b> — ต้องกรอกคู่กับรหัสผ่านทุกครั้งที่ล็อกอินหลังบ้าน (ใช้ร่วมกันทั้งผู้ดูแลและแอดมิน) เพิ่มชั้นป้องกันไม่ให้คนที่บังเอิญรู้แค่รหัสผ่านเข้าได้
+          </div>
+          <div class="inp-label" style="margin-bottom:8px;">🔒 PIN ชั้นที่ 2</div>
+          <input class="inp" id="newPin2Input" type="password" inputmode="numeric" maxlength="10" placeholder="PIN ใหม่ (อย่างน้อย 4 หลัก)">
+          <div id="pin2Msg" class="msg-ok hidden" style="margin-top:6px;"></div>
+          <button class="btn btn-full" style="margin-top:10px;background:#B91C1C;color:#fff;" onclick="doChangeAdminPin2()">บันทึก PIN ชั้นที่ 2</button>
         </div>
       </div>
 
@@ -1844,8 +1872,21 @@ let employees=(()=>{
   return stored;
 })();
 let currentUser=JSON.parse(localStorage.getItem('ske_user')||'null');
-let adminPw=localStorage.getItem('ske_pw')||'admin1234';
-let viewerPw=localStorage.getItem('ske_viewerPw')||'view1234';
+// ── ระบบรหัสผ่านหลังบ้าน (เข้ารหัส SHA-256 ก่อนเก็บ/ส่งขึ้น Firebase เสมอ ไม่เก็บ/ส่ง plain text อีกต่อไป) ──
+const SKE_DEFAULT_ADMIN_PW='admin1234', SKE_DEFAULT_VIEWER_PW='view1234', SKE_DEFAULT_PIN2='135790';
+async function sha256Hex(str){
+  const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(str)));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+let adminPwHash=localStorage.getItem('ske_pwHash')||null;
+let viewerPwHash=localStorage.getItem('ske_viewerPwHash')||null;
+let adminPin2Hash=localStorage.getItem('ske_pin2Hash')||null;
+// ถ้าเครื่องนี้ยังไม่เคยมี hash เลย (ติดตั้งใหม่/ยังไม่เคยล็อกอิน) ให้คำนวณ hash ของค่าเริ่มต้นไว้ก่อน เผื่อใช้เทียบตอน login ครั้งแรก
+(async()=>{
+  if(!adminPwHash)adminPwHash=await sha256Hex(SKE_DEFAULT_ADMIN_PW);
+  if(!viewerPwHash)viewerPwHash=await sha256Hex(SKE_DEFAULT_VIEWER_PW);
+  if(!adminPin2Hash)adminPin2Hash=await sha256Hex(SKE_DEFAULT_PIN2);
+})();
 let adminMode=false,editOpen=false,leaveFormOpen=false;
 // บทบาทผู้เข้าระบบฝั่งหลังบ้าน: 'super' = ผู้ดูแล (สิทธิ์เต็ม), 'viewer' = แอดมิน (ดูเฉพาะแผนผังงาน)
 let adminRole=localStorage.getItem('ske_adminRole')||null;
@@ -1868,13 +1909,21 @@ function saveE(){
   if(window.fbSaveEmployees) window.fbSaveEmployees(employees);
 }
 function saveU(){localStorage.setItem('ske_user',JSON.stringify(currentUser));}
-function saveP(){
-  localStorage.setItem('ske_pw',adminPw);
-  if(window.fbSaveAdminPw) window.fbSaveAdminPw(adminPw);
+// ตั้งรหัสผ่าน/PIN ใหม่ — รับค่าที่พิมพ์เข้ามาแบบข้อความปกติ แล้วเข้ารหัสก่อนเก็บ/ส่งขึ้น Firebase เสมอ (ไม่มีการเก็บ/ส่ง plain text อีกต่อไป)
+async function setAdminPw(plainPw){
+  adminPwHash=await sha256Hex(plainPw);
+  localStorage.setItem('ske_pwHash',adminPwHash);
+  if(window.fbSaveAdminPwHash) window.fbSaveAdminPwHash(adminPwHash);
 }
-function saveViewerPw(){
-  localStorage.setItem('ske_viewerPw',viewerPw);
-  if(window.fbSaveViewerPw) window.fbSaveViewerPw(viewerPw);
+async function setViewerPw(plainPw){
+  viewerPwHash=await sha256Hex(plainPw);
+  localStorage.setItem('ske_viewerPwHash',viewerPwHash);
+  if(window.fbSaveViewerPwHash) window.fbSaveViewerPwHash(viewerPwHash);
+}
+async function setAdminPin2(plainPin){
+  adminPin2Hash=await sha256Hex(plainPin);
+  localStorage.setItem('ske_pin2Hash',adminPin2Hash);
+  if(window.fbSaveAdminPin2Hash) window.fbSaveAdminPin2Hash(adminPin2Hash);
 }
 function saveA(){localStorage.setItem('ske_admin',adminMode?'1':'0');}
 function saveAR(){if(adminRole)localStorage.setItem('ske_adminRole',adminRole);else localStorage.removeItem('ske_adminRole');}
@@ -2097,7 +2146,7 @@ document.addEventListener('visibilitychange',()=>{
 
 // ── Nav helpers ───────────────────────────────────────────────────────────────
 function show(id){['splash','login','dashboard','admin'].forEach(s=>document.getElementById(s).classList.add('hidden'));document.getElementById(id).classList.remove('hidden');}
-function showMode(m){['mode-select','mode-register','mode-adminPw','mode-pin'].forEach(x=>document.getElementById(x).classList.add('hidden'));document.getElementById('mode-'+m).classList.remove('hidden');['loginMsg','regMsg','adminPwMsg','pinMsg'].forEach(x=>{const el=document.getElementById(x);if(el)el.classList.add('hidden');});if(m==='adminPw'){const i=document.getElementById('adminPwInput');if(i)i.value='';if(typeof selLoginRole==='function')selLoginRole('super');}}
+function showMode(m){['mode-select','mode-register','mode-adminPw','mode-pin'].forEach(x=>document.getElementById(x).classList.add('hidden'));document.getElementById('mode-'+m).classList.remove('hidden');['loginMsg','regMsg','adminPwMsg','pinMsg'].forEach(x=>{const el=document.getElementById(x);if(el)el.classList.add('hidden');});if(m==='adminPw'){const i=document.getElementById('adminPwInput');if(i)i.value='';const p2=document.getElementById('adminPin2Input');if(p2)p2.value='';if(typeof selLoginRole==='function')selLoginRole('super');}}
 
 function highlightNav(btn){document.querySelectorAll('#dashboard .nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
 function highlightAdminNav(btn){document.querySelectorAll('#admin .bottom-nav .nav-btn').forEach(b=>{if(b!==document.querySelector('#admin .nav-btn-orange'))b.classList.remove('active')});btn.classList.add('active');}
@@ -2247,16 +2296,20 @@ function applyAdminRoleUI(){
   if(isViewer)switchAdminTab('summary');
 }
 
-function doAdminLogin(){
+async function doAdminLogin(){
   const pw=document.getElementById('adminPwInput').value;
+  const pin2=document.getElementById('adminPin2Input').value;
   const m=document.getElementById('adminPwMsg');
   const wantViewer=_loginRole==='viewer';
-  const expect=wantViewer?viewerPw:adminPw;
+  const expectHash=wantViewer?viewerPwHash:adminPwHash;
   const defHint=wantViewer?'view1234':'admin1234';
-  if(pw===expect){
+  if(!pin2){m.textContent='❌ กรุณากรอกรหัสชั้นที่ 2 (PIN) ด้วย';m.classList.remove('hidden');return;}
+  const [pwHash,pin2Hash]=await Promise.all([sha256Hex(pw),sha256Hex(pin2)]);
+  if(pwHash===expectHash && pin2Hash===adminPin2Hash){
     adminMode=true;adminRole=wantViewer?'viewer':'super';
     saveA();saveAR();
     document.getElementById('adminPwInput').value='';
+    document.getElementById('adminPin2Input').value='';
     _unlockAudio(); // unlock AudioContext ทันทีที่ login (user gesture)
     show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();
     requestNotifPermission();
@@ -2264,7 +2317,8 @@ function doAdminLogin(){
     if(window.fbRegisterPushToken)window.fbRegisterPushToken(wantViewer?'viewer':'super');
     startAdminAlertTimer(); // แอดมินและผู้ดูแลได้รับแจ้งเตือนสถานะค้างเหมือนกัน
   }
-  else{m.textContent=`❌ รหัสผ่านไม่ถูกต้อง  (รหัสเริ่มต้น: ${defHint})`;m.classList.remove('hidden');}
+  else if(pwHash!==expectHash){m.textContent=`❌ รหัสผ่านไม่ถูกต้อง  (รหัสเริ่มต้น: ${defHint})`;m.classList.remove('hidden');}
+  else{m.textContent='❌ รหัสชั้นที่ 2 (PIN) ไม่ถูกต้อง';m.classList.remove('hidden');}
 }
 
 function togglePwVis(){
@@ -2276,14 +2330,16 @@ function togglePwVis(){
 
 function showResetPw(){document.getElementById('resetPwPanel').classList.remove('hidden');}
 
-function doEmergencyReset(){
+async function doEmergencyReset(){
   const code=document.getElementById('emergencyCode').value.trim();
   const m=document.getElementById('resetMsg');
   if(code==='SKE-RESET-2025'){
-    adminPw='admin1234';saveP();
-    viewerPw='view1234';saveViewerPw();
-    m.textContent='✅ รีเซ็ตสำเร็จ! ผู้ดูแล=admin1234, แอดมิน=view1234';m.style.color='#10B981';m.classList.remove('hidden');
+    await setAdminPw('admin1234');
+    await setViewerPw('view1234');
+    await setAdminPin2('135790');
+    m.textContent='✅ รีเซ็ตสำเร็จ! ผู้ดูแล=admin1234, แอดมิน=view1234, PIN ชั้น 2=135790';m.style.color='#10B981';m.classList.remove('hidden');
     document.getElementById('adminPwInput').value=(_loginRole==='viewer')?'view1234':'admin1234';
+    document.getElementById('adminPin2Input').value='135790';
     setTimeout(()=>{document.getElementById('resetPwPanel').classList.add('hidden');m.classList.add('hidden');},2500);
   }else{m.textContent='❌ Emergency Code ไม่ถูกต้อง';m.style.color='#EF4444';m.classList.remove('hidden');}
 }
@@ -5741,21 +5797,29 @@ function doDelEmp(id){
   saveE();renderAdminEmpList();
   renderSysInfo();
 }
-function doChangePw(){
+async function doChangePw(){
   const v=document.getElementById('newPwInput').value;
   const m=document.getElementById('pwMsg');
   if(v.length<4){m.textContent='ต้องมีอย่างน้อย 4 ตัวอักษร';m.style.color='#EF4444';m.classList.remove('hidden');return;}
-  adminPw=v;saveP();document.getElementById('newPwInput').value='';
+  await setAdminPw(v);document.getElementById('newPwInput').value='';
   m.textContent='✅ เปลี่ยนรหัสผ่านผู้ดูแลสำเร็จ!';m.style.color='#10B981';m.classList.remove('hidden');
   setTimeout(()=>m.classList.add('hidden'),2500);
 }
-function doChangeViewerPw(){
+async function doChangeViewerPw(){
   const v=document.getElementById('newViewerPwInput').value;
   const m=document.getElementById('viewerPwMsg');
   if(v.length<4){m.textContent='ต้องมีอย่างน้อย 4 ตัวอักษร';m.style.color='#EF4444';m.classList.remove('hidden');return;}
-  if(v===adminPw){m.textContent='⚠️ ห้ามตั้งซ้ำกับรหัสผู้ดูแล';m.style.color='#EF4444';m.classList.remove('hidden');return;}
-  viewerPw=v;saveViewerPw();document.getElementById('newViewerPwInput').value='';
+  if(await sha256Hex(v)===adminPwHash){m.textContent='⚠️ ห้ามตั้งซ้ำกับรหัสผู้ดูแล';m.style.color='#EF4444';m.classList.remove('hidden');return;}
+  await setViewerPw(v);document.getElementById('newViewerPwInput').value='';
   m.textContent='✅ เปลี่ยนรหัสผ่านแอดมินสำเร็จ!';m.style.color='#10B981';m.classList.remove('hidden');
+  setTimeout(()=>m.classList.add('hidden'),2500);
+}
+async function doChangeAdminPin2(){
+  const v=document.getElementById('newPin2Input').value.trim();
+  const m=document.getElementById('pin2Msg');
+  if(v.length<4){m.textContent='ต้องมีอย่างน้อย 4 หลัก';m.style.color='#EF4444';m.classList.remove('hidden');return;}
+  await setAdminPin2(v);document.getElementById('newPin2Input').value='';
+  m.textContent='✅ เปลี่ยน PIN ชั้นที่ 2 สำเร็จ!';m.style.color='#10B981';m.classList.remove('hidden');
   setTimeout(()=>m.classList.add('hidden'),2500);
 }
 
