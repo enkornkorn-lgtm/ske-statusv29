@@ -750,8 +750,9 @@ select.inp option{background:#fff;color:#1a1a2e;}
   gap:12px!important;
 }
 #login .logo-lg{
-  width:210px!important;
-  height:118px!important;
+  width:min(210px, 46vw)!important;
+  height:auto!important;
+  aspect-ratio:210/118;
   overflow:visible!important;
   margin:0 auto 2px!important;
   padding:0!important;
@@ -1002,6 +1003,20 @@ select.inp option{background:#fff;color:#1a1a2e;}
   .quick-card-sub{font-size:9px!important;}
 }
 
+/* ── รองรับจอเตี้ย/แนวนอน เช่น พับจอมือถือ หรือหมุนแนวนอน ── */
+@media (orientation:landscape) and (max-height:520px){
+  #login::after{margin:-40px auto 12px!important;padding:6px 12px!important;font-size:10.5px!important;}
+  #login .login-inner{padding-top:14px!important;padding-bottom:40px!important;}
+  #login .login-logo-wrap{margin-bottom:12px!important;gap:6px!important;padding-top:0!important;}
+  #login .logo-lg{width:min(120px, 22vw)!important;}
+  #login .login-logo-wrap > div:last-child div:first-child{font-size:19px!important;}
+  #login .login-logo-wrap > div:last-child div:last-child{font-size:11.5px!important;}
+  #login .emp-btn{padding:10px 12px!important;min-height:auto!important;gap:10px!important;}
+  #login .emp-btn .avatar{width:42px!important;height:42px!important;font-size:16px!important;}
+  #login .login-status-pill{min-width:0!important;max-width:112px!important;padding:7px 9px!important;font-size:10.5px!important;}
+  #login .login-emp-name{font-size:14px!important;}
+  #login .login-emp-plate{font-size:11px!important;margin-top:2px!important;}
+}
 </style>
 </head>
 <body>
