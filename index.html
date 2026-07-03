@@ -4463,7 +4463,8 @@ function buildSummaryHTML(){
   </div>`;
 
   // รายชื่อพนักงานที่ยังไม่อัพเดทเกิน 24 ชม. (ทุกสถานะ — แจ้งเตือนผู้ดูแลแบบภาพรวม)
-  const stale24List=employees.filter(e=>!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS);
+  // ไม่รวมคนที่ลาอยู่ (ลาที่อนุมัติแล้วและอยู่ในช่วงวันลา) เพราะไม่ควรต้องอัพเดทสถานะระหว่างลา
+  const stale24List=employees.filter(e=>!isLeaveActiveToday(e)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS));
   if(stale24List.length){
     stale24List.sort((a,b)=>{const av=a.updatedAt?new Date(a.updatedAt).getTime():0,bv=b.updatedAt?new Date(b.updatedAt).getTime():0;return av-bv;});
     html+=`<div style="background:#FEF2F2;border:2px solid #F87171;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
@@ -4485,25 +4486,34 @@ function buildSummaryHTML(){
   }
 
   // รายชื่อพนักงานที่ยังไม่อัพเดท (เฉพาะ 4 สถานะกำลังทำงานที่จุดขึ้น-ลงสินค้า)
-  const staleList=employees.filter(e=>ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS));
-  if(staleList.length){
-    staleList.sort((a,b)=>{const av=a.updatedAt?new Date(a.updatedAt).getTime():0,bv=b.updatedAt?new Date(b.updatedAt).getTime():0;return av-bv;});
-    html+=`<div style="background:#FFF5F5;border:1.5px solid #FCA5A5;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
-      <div style="color:#DC2626;font-weight:700;font-size:13px;margin-bottom:8px;">${skeIcon('alert')} ยังไม่อัพเดทเกิน ${ALERT_HOURS} ชม. — เฉพาะกำลังทำงานที่จุดขึ้น-ลงสินค้า (${staleList.length} คน)</div>
+  // แยกกลุ่ม "ขึ้นสินค้า" กับ "ลงสินค้า" ออกจากกัน ไม่ให้ปนกันจนงง
+  const LOAD_ALERT_STATUSES=['loading_bay','loading'];     // เข้าช่องขึ้นงานแล้ว + กำลังขึ้นงาน
+  const UNLOAD_ALERT_STATUSES=['unload_bay','unloading'];  // ถึงแล้วรอลงงาน + กำลังลงงาน
+  const staleLoadList=employees.filter(e=>LOAD_ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS));
+  const staleUnloadList=employees.filter(e=>UNLOAD_ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS));
+  const renderStaleGroup=(title,list,accentColor,borderColor,bgColor)=>{
+    if(!list.length)return'';
+    list.sort((a,b)=>{const av=a.updatedAt?new Date(a.updatedAt).getTime():0,bv=b.updatedAt?new Date(b.updatedAt).getTime():0;return av-bv;});
+    let h=`<div style="background:${bgColor};border:1.5px solid ${borderColor};border-radius:14px;padding:12px 14px;margin-bottom:14px;">
+      <div style="color:${accentColor};font-weight:700;font-size:13px;margin-bottom:8px;">${skeIcon('alert')} ยังไม่อัพเดทเกิน ${ALERT_HOURS} ชม. — ${title} (${list.length} คน)</div>
       <div style="display:flex;flex-direction:column;gap:6px;">`;
-    staleList.forEach(e=>{
-      const never=!e.updatedAt;
-      html+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid #FECACA;">
+    list.forEach(e=>{
+      const s=getS(e.status);const never=!e.updatedAt;
+      h+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid ${borderColor};">
         <span style="font-size:15px;">🚛</span>
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
           <div style="font-size:11px;color:#888;">${esc(e.plate||'-')}${phoneLink(e.phone)}${lineLink(e.lineId)}</div>
+          <span class="pill" style="background:${s.bg};color:${s.color};border:1px solid ${s.border};font-size:9.5px;margin-top:3px;display:inline-block;">${skeIcon(s.ic)} ${esc(s.label)}</span>
         </div>
-        <span style="font-size:10px;color:#DC2626;font-weight:700;white-space:nowrap;text-align:right;">${never?'ยังไม่เคยอัพเดท':'ล่าสุด<br>'+fmt(e.updatedAt)}</span>
+        <span style="font-size:10px;color:${accentColor};font-weight:700;white-space:nowrap;text-align:right;">${never?'ยังไม่เคยอัพเดท':'ล่าสุด<br>'+fmt(e.updatedAt)}</span>
       </div>`;
     });
-    html+='</div></div>';
-  }
+    h+='</div></div>';
+    return h;
+  };
+  html+=renderStaleGroup('กำลังขึ้นสินค้า',staleLoadList,'#92400E','#FCD34D','#FFFBEB');
+  html+=renderStaleGroup('กำลังลงสินค้า',staleUnloadList,'#C2410C','#FCA5A5','#FFF7ED');
 
   // สถานะแต่ละประเภท
   html+=`<div style="color:#999;font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px;">สรุปสถานะรถ</div>`;
@@ -4891,7 +4901,7 @@ function renderAdmin(){
 function updateStaleBadge(){
   const badge=document.getElementById('staleTabBadge');
   const navBadge=document.getElementById('navStaleNavBadge');
-  const n=employees.filter(e=>!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS).length;
+  const n=employees.filter(e=>!isLeaveActiveToday(e)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS)).length;
   [badge,navBadge].forEach(b=>{if(!b)return;if(n>0){b.textContent=n;b.classList.remove('hidden');}else b.classList.add('hidden');});
 }
 
