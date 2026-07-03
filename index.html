@@ -3885,36 +3885,34 @@ function refreshAdmin(){
 
 // ── Province HTML ─────────────────────────────────────────────────────────────
 function provHTML(sid,curProv){
-  if(sid==='standby'){
-    return`<div class="province-box"><div class="province-title">${skeIcon('pin')} จังหวัดที่สแตนบาย</div>
-      <select class="province-sel inp" id="provSel" onchange="_selProv=this.value">
-        <option value="">-- เลือกจังหวัด --</option>
-        ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
-      </select></div>`;
-  }
-  if(sid==='traveling'){
-    return`<div class="province-box"><div class="province-title">🏁 จังหวัดปลายทาง</div>
-      <select class="province-sel inp" id="provSel" onchange="_selProv=this.value">
-        <option value="">-- เลือกปลายทาง --</option>
-        ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
-      </select></div>`;
-  }
-  if(sid==='returning'){
-    return`<div class="province-box"><div class="province-title">🔁 จังหวัดที่กำลังไหลกลับผ่าน/ปลายทางขากลับ</div>
-      <select class="province-sel inp" id="provSel" onchange="_selProv=this.value">
-        <option value="">-- เลือกจังหวัด --</option>
-        ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
-      </select></div>`;
-  }
-  if(sid==='done'){
-    return`<div class="province-box"><div class="province-title">${skeIcon('pin')} จังหวัดที่ว่างงาน</div>
-      <select class="province-sel inp" id="provSel" onchange="_selProv=this.value">
-        <option value="">-- เลือกจังหวัด --</option>
-        ${PROVINCES.map(p=>`<option value="${p}" ${curProv===p?'selected':''}>${p}</option>`).join('')}
-      </select></div>`;
-  }
-  return'';
+  const titles={
+    standby:`${skeIcon('pin')} จังหวัดที่สแตนบาย`,
+    traveling:`🏁 จังหวัดปลายทาง`,
+    returning:`🔁 จังหวัดที่กำลังไหลกลับผ่าน/ปลายทางขากลับ`,
+    done:`${skeIcon('pin')} จังหวัดที่ว่างงาน`
+  };
+  const phs={
+    standby:'พิมพ์ค้นหาจังหวัด...',
+    traveling:'พิมพ์ค้นหาปลายทาง...',
+    returning:'พิมพ์ค้นหาจังหวัด...',
+    done:'พิมพ์ค้นหาจังหวัด...'
+  };
+  if(!titles[sid])return'';
+  // ใช้ input+datalist แทน select เดิม เพื่อให้พิมพ์ค้นหาจังหวัดได้ (native select ธรรมดาเลื่อนหาอย่างเดียว)
+  return`<div class="province-box"><div class="province-title">${titles[sid]}</div>
+    <input class="province-sel inp" id="provSel" list="provinceDatalist" autocomplete="off"
+      value="${esc(curProv||'')}" placeholder="${phs[sid]}"
+      oninput="_selProv=this.value" onchange="_selProv=this.value"></div>`;
 }
+// สร้าง <datalist> รายชื่อจังหวัดทั้งหมดไว้ใช้ร่วมกันครั้งเดียว (ไม่ต้องสร้างซ้ำทุกครั้งที่เปิดฟอร์ม)
+(function ensureProvinceDatalist(){
+  if(document.getElementById('provinceDatalist'))return;
+  const dl=document.createElement('datalist');
+  dl.id='provinceDatalist';
+  dl.innerHTML=PROVINCES.map(p=>`<option value="${p}"></option>`).join('');
+  (document.body||document.documentElement).appendChild(dl);
+})();
+function isValidProvince(v){return PROVINCES.includes(String(v||'').trim());}
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
@@ -4746,6 +4744,11 @@ function doSave(){
   const prov=needProv?(provSel?provSel.value:_selProv)||'':'';
   if(needProv&&!prov){
     alert('⚠️ กรุณาเลือกจังหวัดก่อนบันทึกสถานะ');
+    if(provSel){provSel.focus();provSel.style.borderColor='#DC2626';provSel.style.boxShadow='0 0 0 2px #FCA5A5';}
+    return;
+  }
+  if(needProv&&!isValidProvince(prov)){
+    alert('⚠️ ไม่พบจังหวัดนี้ในรายชื่อ กรุณาเลือกจากรายการที่พิมพ์ขึ้นมา (พิมพ์แล้วแตะเลือกจากลิสต์)');
     if(provSel){provSel.focus();provSel.style.borderColor='#DC2626';provSel.style.boxShadow='0 0 0 2px #FCA5A5';}
     return;
   }
@@ -5663,7 +5666,7 @@ function toggleAEditLeave(id){
 function aSelStat(eid,sid){
   // อ่านค่าจังหวัดจาก dropdown ปัจจุบันก่อน re-render
   const wrap=document.getElementById('aprv_'+eid);
-  const curSel=wrap?wrap.querySelector('select'):null;
+  const curSel=wrap?wrap.querySelector('.province-sel'):null;
   const needProv=sid==='standby'||sid==='traveling'||sid==='returning'||sid==='done';
   const emp=employees.find(e=>e.id===eid);
   const curProv=curSel?curSel.value:(needProv?(emp?.province||''):'');
@@ -5681,10 +5684,16 @@ function doSaveAEdit(id){
   const status=_aSel[id]||'standby';
   const needProv=status==='standby'||status==='traveling'||status==='returning'||status==='done';
   const wrap=document.getElementById('aprv_'+id);
-  const prov=needProv?(wrap?.querySelector('select')?.value||''):'';
+  const prov=needProv?(wrap?.querySelector('.province-sel')?.value||''):'';
   if(needProv&&!prov){
     alert('⚠️ กรุณาเลือกจังหวัดก่อนบันทึก');
-    const sel=wrap?.querySelector('select');
+    const sel=wrap?.querySelector('.province-sel');
+    if(sel){sel.focus();sel.style.borderColor='#DC2626';sel.style.boxShadow='0 0 0 2px #FCA5A5';}
+    return;
+  }
+  if(needProv&&!isValidProvince(prov)){
+    alert('⚠️ ไม่พบจังหวัดนี้ในรายชื่อ กรุณาเลือกจากรายการที่พิมพ์ขึ้นมา (พิมพ์แล้วแตะเลือกจากลิสต์)');
+    const sel=wrap?.querySelector('.province-sel');
     if(sel){sel.focus();sel.style.borderColor='#DC2626';sel.style.boxShadow='0 0 0 2px #FCA5A5';}
     return;
   }
