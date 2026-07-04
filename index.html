@@ -473,6 +473,25 @@ textarea{resize:none;}
 .dot:nth-child(3){background:#7B2FBE;animation-delay:.4s;}
 @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
 
+/* ══ Premium video intro splash by ChatGPT ═════════════════════════════ */
+#splash.ske-intro-screen{
+  position:fixed;inset:0;z-index:99999;background:#000;overflow:hidden;
+  display:flex!important;align-items:center;justify-content:center;color:#fff;
+}
+.ske-intro-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;filter:saturate(1.08) contrast(1.04);}
+.ske-intro-vignette{position:absolute;inset:0;background:radial-gradient(circle at 50% 45%,rgba(255,255,255,.05),rgba(0,0,0,.12) 32%,rgba(0,0,0,.68) 100%);pointer-events:none;}
+.ske-intro-brand{position:absolute;left:50%;bottom:max(72px,calc(46px + env(safe-area-inset-bottom,0px)));transform:translateX(-50%) translateY(12px);width:min(78vw,360px);text-align:center;opacity:0;animation:skeBrandIn 1.05s ease-out 4.75s forwards;}
+.ske-intro-brand img{width:min(58vw,240px);height:auto;object-fit:contain;display:block;margin:0 auto 12px;filter:drop-shadow(0 0 18px rgba(30,144,214,.32)) drop-shadow(0 0 26px rgba(123,47,190,.24));}
+.ske-intro-title{font-size:clamp(22px,7vw,34px);font-weight:900;letter-spacing:-.4px;text-shadow:0 6px 28px rgba(0,0,0,.55);}
+.ske-intro-sub{margin-top:4px;font-size:clamp(11px,3.2vw,15px);font-weight:800;letter-spacing:2.4px;color:rgba(255,255,255,.82);}
+.ske-intro-skip{position:absolute;right:14px;top:max(14px,env(safe-area-inset-top,0px));z-index:2;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:9px 14px;font-size:12px;font-weight:900;backdrop-filter:blur(12px);}
+.ske-intro-sound{position:absolute;left:50%;bottom:max(18px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:2;display:none;background:rgba(255,255,255,.92);color:#111827;border-radius:999px;padding:10px 16px;font-size:13px;font-weight:900;box-shadow:0 12px 28px rgba(0,0,0,.28);}
+#splash.ske-intro-fadeout{animation:skeIntroOut .55s ease-in forwards;}
+@keyframes skeBrandIn{to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes skeIntroOut{to{opacity:0;visibility:hidden}}
+@media (orientation:landscape){.ske-intro-brand{bottom:28px;width:min(48vw,320px)}.ske-intro-brand img{width:min(34vw,190px)}}
+
+
 /* ── Topbar ── */
 .topbar{background:#fff;border-bottom:1px solid #E8EAF0;padding:0 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;height:56px;position:sticky;top:0;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.06);}
 .topbar-logo{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#F47920,#1E90D6,#7B2FBE);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -1059,18 +1078,19 @@ select.inp option{background:#fff;color:#1a1a2e;}
 <body>
 
 <!-- ══ SPLASH ══ -->
-<div id="splash" class="screen" style="display:flex;">
-  <div class="splash-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-  <div style="text-align:center;">
-    <div class="splash-title">สถานะรถ SKE</div>
-    <div class="splash-sub">SK EVO LOGISTICS</div>
+<div id="splash" class="screen ske-intro-screen" style="display:flex;">
+  <video id="skeIntroVideo" class="ske-intro-video" preload="auto" playsinline webkit-playsinline autoplay>
+    <source src="20407.mp4" type="video/mp4">
+  </video>
+  <div class="ske-intro-vignette"></div>
+  <button id="skeIntroSkip" class="ske-intro-skip" type="button">ข้าม</button>
+  <button id="skeIntroSound" class="ske-intro-sound" type="button">🔊 แตะเพื่อเปิดเสียง</button>
+  <div class="ske-intro-brand">
+    <img src="ske-logo.png" alt="SKE LOGISTICS">
+    <div class="ske-intro-title">สถานะรถ SKE</div>
+    <div class="ske-intro-sub">SK EVO LOGISTICS</div>
   </div>
-  <div id="splashInstallBtn" style="display:none;margin-top:24px;">
-    <button onclick="doInstall()" style="background:#F47920;color:#fff;border:none;border-radius:16px;padding:14px 32px;font-size:16px;font-weight:800;box-shadow:0 4px 16px rgba(244,121,32,.4);cursor:pointer;">
-      📲 ติดตั้งแอป
-    </button>
-  </div>
-  <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  <div id="splashInstallBtn" style="display:none;margin-top:24px;"></div>
 </div>
 
 <!-- ══ LOGIN ══ -->
@@ -2144,8 +2164,47 @@ function showSystemNotification(title, options){
 })();
 window.addEventListener('beforeunload',e=>{e.preventDefault();e.returnValue='';});
 
+
+// ── Premium video intro controller ───────────────────────────────────────────
+window.SKEIntro={
+  play:function(done){
+    const splash=document.getElementById('splash');
+    const v=document.getElementById('skeIntroVideo');
+    const skip=document.getElementById('skeIntroSkip');
+    const sound=document.getElementById('skeIntroSound');
+    let finished=false;
+    function finish(){
+      if(finished)return; finished=true;
+      if(v){try{v.pause();}catch(e){}}
+      if(splash){
+        splash.classList.add('ske-intro-fadeout');
+        setTimeout(()=>{ splash.classList.add('hidden'); splash.classList.remove('ske-intro-screen'); if(typeof done==='function')done(); },520);
+      } else if(typeof done==='function') done();
+    }
+    if(!splash||!v){ if(typeof done==='function')done(); return; }
+    splash.classList.remove('hidden');
+    v.currentTime=0;
+    v.muted=false;
+    v.volume=1;
+    const fallback=setTimeout(finish,9500);
+    v.addEventListener('ended',()=>{clearTimeout(fallback);finish();},{once:true});
+    v.addEventListener('error',()=>{clearTimeout(fallback);finish();},{once:true});
+    if(skip)skip.onclick=()=>{clearTimeout(fallback);finish();};
+    if(sound)sound.onclick=()=>{v.muted=false;v.volume=1;v.play().catch(()=>{});sound.style.display='none';};
+    const promise=v.play();
+    if(promise&&promise.catch){
+      promise.catch(()=>{
+        v.muted=true;
+        v.play().catch(()=>{});
+        if(sound)sound.style.display='block';
+      });
+    }
+  }
+};
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 window.onload=function(){
+  const startApp=function(){
   const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent);
   const sa=window.navigator.standalone||window.matchMedia('(display-mode:standalone)').matches;
   if(!sa&&ios) setTimeout(showInstallBar,600);
@@ -2171,6 +2230,9 @@ window.onload=function(){
     }
   }
   tryStart();
+  };
+  if(window.SKEIntro&&typeof window.SKEIntro.play==='function') window.SKEIntro.play(startApp);
+  else startApp();
 };
 
 // ── เข้าแอพใหม่ทุกครั้ง (กลับมาจากแบ็คกราวด์/สลับแอพ) → ดึงสถานะล่าสุดจาก Firebase ทันที ──
