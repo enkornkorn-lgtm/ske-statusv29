@@ -479,7 +479,7 @@ textarea{resize:none;}
   display:flex!important;align-items:center;justify-content:center;color:#fff;
 }
 .ske-intro-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;filter:saturate(1.08) contrast(1.04);}
-.ske-intro-vignette{position:absolute;inset:0;background:radial-gradient(circle at 50% 45%,rgba(255,255,255,.05),rgba(0,0,0,.12) 32%,rgba(0,0,0,.68) 100%);pointer-events:none;}
+.ske-intro-vignette{position:absolute;inset:0;background:transparent;pointer-events:none;}
 .ske-intro-brand{position:absolute;left:50%;bottom:max(72px,calc(46px + env(safe-area-inset-bottom,0px)));transform:translateX(-50%) translateY(12px);width:min(78vw,360px);text-align:center;opacity:0;animation:skeBrandIn 1.05s ease-out 4.75s forwards;}
 .ske-intro-brand img{width:min(58vw,240px);height:auto;object-fit:contain;display:block;margin:0 auto 12px;filter:drop-shadow(0 0 18px rgba(30,144,214,.32)) drop-shadow(0 0 26px rgba(123,47,190,.24));}
 .ske-intro-title{font-size:clamp(22px,7vw,34px);font-weight:900;letter-spacing:-.4px;text-shadow:0 6px 28px rgba(0,0,0,.55);}
@@ -490,6 +490,7 @@ textarea{resize:none;}
 @keyframes skeBrandIn{to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @keyframes skeIntroOut{to{opacity:0;visibility:hidden}}
 @media (orientation:landscape){.ske-intro-brand{bottom:28px;width:min(48vw,320px)}.ske-intro-brand img{width:min(34vw,190px)}}
+.ske-intro-brand,.ske-intro-title,.ske-intro-sub,.ske-intro-sound{display:none!important;}
 
 
 /* ── Topbar ── */
@@ -1080,16 +1081,11 @@ select.inp option{background:#fff;color:#1a1a2e;}
 <!-- ══ SPLASH ══ -->
 <div id="splash" class="screen ske-intro-screen" style="display:flex;">
   <video id="skeIntroVideo" class="ske-intro-video" preload="auto" playsinline webkit-playsinline autoplay>
-    <source src="20407.mp4" type="video/mp4">
+    <source src="20399.mp4" type="video/mp4">
   </video>
   <div class="ske-intro-vignette"></div>
   
-  <button id="skeIntroSound" class="ske-intro-sound" type="button">🔊 แตะเพื่อเปิดเสียง</button>
-  <div class="ske-intro-brand">
-    <img src="ske-logo.png" alt="SKE LOGISTICS">
-    <div class="ske-intro-title">สถานะรถ SKE</div>
-    <div class="ske-intro-sub">SK EVO LOGISTICS</div>
-  </div>
+  <!-- No fallback logo/text overlay: video only intro -->
   <div id="splashInstallBtn" style="display:none;margin-top:24px;"></div>
 </div>
 
@@ -2170,8 +2166,6 @@ window.SKEIntro={
   play:function(done){
     const splash=document.getElementById('splash');
     const v=document.getElementById('skeIntroVideo');
-    const skip=document.getElementById('skeIntroSkip');
-    const sound=document.getElementById('skeIntroSound');
     let finished=false;
     function finish(){
       if(finished)return; finished=true;
@@ -2189,14 +2183,11 @@ window.SKEIntro={
     const fallback=setTimeout(finish,9500);
     v.addEventListener('ended',()=>{clearTimeout(fallback);finish();},{once:true});
     v.addEventListener('error',()=>{clearTimeout(fallback);finish();},{once:true});
-    if(skip)skip.onclick=()=>{clearTimeout(fallback);finish();};
-    if(sound)sound.onclick=()=>{v.muted=false;v.volume=1;v.play().catch(()=>{});sound.style.display='none';};
     const promise=v.play();
     if(promise&&promise.catch){
       promise.catch(()=>{
         v.muted=true;
         v.play().catch(()=>{});
-        if(sound)sound.style.display='block';
       });
     }
   }
