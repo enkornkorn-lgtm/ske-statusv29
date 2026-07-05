@@ -604,7 +604,7 @@
     const serverList = normalizeList(snap.val()) || [];
     const next = serverList.filter(x => x && x.id !== rec.id).concat([rec]);
     await _withTimeout(set(ref(db, 'monthlyDocs'), next), 20000, 'บันทึกไม่สำเร็จเพราะเน็ตช้า/หลุดระหว่างส่ง กรุณาลองส่งใหม่อีกครั้ง (รูปยังไม่ถูกบันทึก)');
-    window.monthlyDocs = next;
+    monthlyDocs = next;
     localStorage.setItem('ske_monthly_docs', JSON.stringify(next));
     return next;
   };
@@ -617,7 +617,7 @@
   onValue(ref(db, 'monthlyDocs'), (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (data) {
-      window.monthlyDocs = data;
+      monthlyDocs = data;
       localStorage.setItem('ske_monthly_docs', JSON.stringify(data));
       const dash = document.getElementById('dashboard');
       const admin = document.getElementById('admin');
@@ -628,11 +628,11 @@
       const cache = (()=>{try{return JSON.parse(localStorage.getItem('ske_monthly_docs')||'[]');}catch(e){return [];}})();
       if (Array.isArray(cache) && cache.length) set(ref(db, 'monthlyDocs'), cache).catch(e=>console.error('fb seed monthlyDocs error', e));
       else {
-        window.monthlyDocs = [];
+        monthlyDocs = [];
         localStorage.setItem('ske_monthly_docs', '[]');
       }
     } else {
-      window.monthlyDocs = [];
+      monthlyDocs = [];
       localStorage.setItem('ske_monthly_docs', '[]');
       const dash = document.getElementById('dashboard');
       const admin = document.getElementById('admin');
@@ -644,7 +644,7 @@
   get(ref(db, 'monthlyDocs')).then(snapshot => {
     const data = normalizeList(snapshot.val());
     if (data) {
-      window.monthlyDocs = data;
+      monthlyDocs = data;
       localStorage.setItem('ske_monthly_docs', JSON.stringify(data));
     }
     _firstSync.monthlyDocs = true;
