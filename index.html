@@ -127,7 +127,7 @@
       new Promise((_, reject) => setTimeout(() => reject(new Error(msg || 'timeout')), ms))
     ]);
   }
-  const SKE_WRITE_TIMEOUT_MS = 15000;
+  const SKE_WRITE_TIMEOUT_MS = 25000;
   // ส่งข้อมูลค้าง (ถ้ามี) ของทุกชุดซ้ำอีกครั้ง — เรียกตอนเน็ตกลับมา หรือทุก 8 วิ
   function _obFlushAll() {
     const ob = _obLoad();
@@ -140,6 +140,7 @@
       else if (key === 'fluidLogs' && window.fbSaveFluidLogs) window.fbSaveFluidLogs(entry.payload);
       else if (key === 'cashRequests' && window.fbSaveCashRequests) window.fbSaveCashRequests(entry.payload);
       else if (key === 'leaveLogs' && window.fbSaveLeaveLogs) window.fbSaveLeaveLogs(entry.payload);
+      else if (key === 'monthlyDocs' && window.fbSaveMonthlyDocs) window.fbSaveMonthlyDocs(entry.payload);
     });
   }
   setInterval(() => { if (Object.keys(_obLoad()).length > 0) _obFlushAll(); }, 8000);
@@ -189,8 +190,10 @@
   // ป้องกันปัญหาเขียนทับทั้งรายชื่อแล้วทำสถานะของพนักงานคนอื่นที่เพิ่งอัพเดทไปหายโดยไม่ได้ตั้งใจ
   // ครอบด้วย timeout กันเคสเน็ตช้า/หลุดกลางทางแล้วค้างรอไม่มีกำหนด (จุดที่ .catch fallback ของทุกจุดเรียกจะยังทำงานได้)
   window.fbUpdateEmployeeFields = function(empId, patch) {
-    return _withTimeout(get(ref(db, 'employees')), SKE_WRITE_TIMEOUT_MS, 'timeout:employees-get').then(snapshot => {
-      const data = normalizeEmployees(snapshot.val());
+    // ใช้ข้อมูลในเครื่องก่อนถ้าเจอพนักงานคนนี้อยู่แล้ว (sync สดหรือ cache เก่าก็ได้) — ลดการรอโหลดใหม่ทั้งก้อนเวลาเน็ตแย่
+    const localIdx = Array.isArray(employees) ? employees.findIndex(e => e && e.id === empId) : -1;
+    const dataP = localIdx !== -1 ? Promise.resolve(employees) : _withTimeout(get(ref(db, 'employees')), SKE_WRITE_TIMEOUT_MS, 'timeout:employees-get').then(s => normalizeEmployees(s.val()));
+    return dataP.then(data => {
       if (!data || !data.length) return Promise.reject(new Error('no employees data'));
       const idx = data.findIndex(e => e && e.id === empId);
       if (idx === -1) return Promise.reject(new Error('employee not found'));
@@ -215,8 +218,9 @@
 
   // อัพเดทเฉพาะ "รถคันเดียว" (ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์มาก่อนแล้วแก้เฉพาะฟิลด์ที่เปลี่ยน)
   window.fbUpdateVehicleFields = function(vehId, patch) {
-    return _withTimeout(get(ref(db, 'vehicles')), SKE_WRITE_TIMEOUT_MS, 'timeout:vehicles-get').then(snapshot => {
-      const data = normalizeList(snapshot.val());
+    const localIdx = Array.isArray(vehicles) ? vehicles.findIndex(v => v && v.id === vehId) : -1;
+    const dataP = localIdx !== -1 ? Promise.resolve(vehicles) : _withTimeout(get(ref(db, 'vehicles')), SKE_WRITE_TIMEOUT_MS, 'timeout:vehicles-get').then(s => normalizeList(s.val()));
+    return dataP.then(data => {
       if (!data || !data.length) return Promise.reject(new Error('no vehicles data'));
       const idx = data.findIndex(v => v && v.id === vehId);
       if (idx === -1) return Promise.reject(new Error('vehicle not found'));
@@ -263,8 +267,9 @@
   // แก้ปัญหาเดิม: repairs เก็บรูปแนบสะสมไว้ 12 เดือน พอมีคนเดียวเปลี่ยน 1 รายการ (เช่นแนบรูปเพิ่ม)
   // ระบบเดิมจะอัพโหลด "ประวัติทั้งหมดของทุกคน" ซ้ำทุกครั้ง ทำให้ช้ามากบนเน็ตมือถือ และเสี่ยง timeout จนบันทึกไม่สำเร็จแบบเงียบๆ
   window.fbUpdateRepairFields = function(repairId, patch) {
-    return _withTimeout(get(ref(db, 'repairs')), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs-get').then(snapshot => {
-      const data = normalizeList(snapshot.val());
+    const localIdx = Array.isArray(repairs) ? repairs.findIndex(r => r && r.id === repairId) : -1;
+    const dataP = localIdx !== -1 ? Promise.resolve(repairs) : _withTimeout(get(ref(db, 'repairs')), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs-get').then(s => normalizeList(s.val()));
+    return dataP.then(data => {
       if (!data || !data.length) return Promise.reject(new Error('no repairs data'));
       const idx = data.findIndex(r => r && r.id === repairId);
       if (idx === -1) return Promise.reject(new Error('repair not found'));
@@ -289,8 +294,9 @@
 
   // อัพเดทเฉพาะ "รายการเปลี่ยนถ่ายของเหลวรายการเดียว" — เหตุผลเดียวกับ fbUpdateRepairFields ด้านบน
   window.fbUpdateFluidFields = function(fluidId, patch) {
-    return _withTimeout(get(ref(db, 'fluidLogs')), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs-get').then(snapshot => {
-      const data = normalizeList(snapshot.val());
+    const localIdx = Array.isArray(fluidLogs) ? fluidLogs.findIndex(f => f && f.id === fluidId) : -1;
+    const dataP = localIdx !== -1 ? Promise.resolve(fluidLogs) : _withTimeout(get(ref(db, 'fluidLogs')), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs-get').then(s => normalizeList(s.val()));
+    return dataP.then(data => {
       if (!data || !data.length) return Promise.reject(new Error('no fluidLogs data'));
       const idx = data.findIndex(f => f && f.id === fluidId);
       if (idx === -1) return Promise.reject(new Error('fluid log not found'));
@@ -624,27 +630,59 @@
   // คืนค่า Promise เสมอ เพื่อให้ฝั่งอัปโหลดรอจน Firebase บันทึกสำเร็จจริงก่อนแจ้งผล
   window.fbSaveMonthlyDocs = function(list) {
     const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object') : [];
-    return set(ref(db, 'monthlyDocs'), clean).catch(e => {
-      console.error('fbSaveMonthlyDocs error', e);
-      throw e;
-    });
+    _obMark('monthlyDocs', clean);
+    return _withTimeout(set(ref(db, 'monthlyDocs'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:monthlyDocs')
+      .then(() => { _obClear('monthlyDocs'); })
+      .catch(e => { console.error('fbSaveMonthlyDocs error', e); throw e; });
   };
 
-  // อัปเดตเอกสารรายคนแบบปลอดภัย: ดึงข้อมูลล่าสุดจาก Firebase ก่อน แล้วแทนเฉพาะรายการของคน/เดือนนั้น
-  // ป้องกันข้อมูลหายเวลาเครื่องอื่นเพิ่งส่ง/อนุมัติพร้อมกัน และป้องกัน localStorage เก่าเขียนทับข้อมูลใหม่
-  // ครอบด้วย timeout กันเคสเน็ตช้า/หลุดกลางทาง แล้ว get()/set() ค้างรอเฉยๆไม่มีกำหนด (ใช้ _withTimeout ตัวกลางร่วมกับฟังก์ชันอื่นๆ)
-  // (ถ้าไม่ครอบ ผู้ใช้จะเห็นสปินเนอร์ค้างตลอดไป แล้วมักปิดแอพทิ้งเอง ทำให้ข้อมูลที่พึ่งส่งหายไปจริงๆ
-  //  เพราะยังไม่ทันบันทึกถึง Firebase — พอเปิดแอพใหม่เลยเห็นสถานะเก่าเหมือนไม่เคยส่ง)
+  // อัปเดตเอกสารรายคนแบบปลอดภัย — ใช้ข้อมูลที่ sync แบบเรียลไทม์ไว้ในเครื่องอยู่แล้วก่อนเสมอ (ไม่ต้องดึงทั้งก้อนใหม่ทุกครั้ง)
+  // แก้ปัญหาเดิม: ก่อนหน้านี้ทุกครั้งที่ส่งเอกสาร ต้อง get() รูปเอกสารของพนักงาน "ทุกคน" ในเดือนนั้นก่อน แล้วค่อย set() ทั้งก้อนกลับ
+  // บนเน็ตมือถือที่สัญญาณอ่อน ก้อนข้อมูลนี้ (รวมรูปของทุกคน) มักโหลดไม่ทันภายใน timeout ทำให้ "ดึงข้อมูลไม่สำเร็จ" บ่อยๆ
+  // ตอนนี้ถ้าเครื่องเคย sync ข้อมูลชุดนี้มาแล้วอย่างน้อย 1 ครั้ง (มี realtime listener คอยอัพเดทอยู่แล้ว) จะใช้ข้อมูลในเครื่องเลย
+  // แล้วเขียนขึ้น Firebase "เฉพาะรายการของตัวเอง" เท่านั้น ไม่แตะรูปของคนอื่น — เร็วขึ้นมากบนสัญญาณอ่อน
   window.fbUpsertMonthlyDoc = async function(rec) {
     if (!rec || !rec.id) throw new Error('invalid monthly doc record');
     if (window._fbConnected === false) throw new Error('การเชื่อมต่ออินเทอร์เน็ตหลุดอยู่ กรุณาเช็คสัญญาณแล้วลองใหม่');
-    const snap = await _withTimeout(get(ref(db, 'monthlyDocs')), 15000, 'เชื่อมต่อ Firebase ช้าเกินไป (ดึงข้อมูลไม่สำเร็จ) กรุณาลองใหม่เมื่อสัญญาณเน็ตดีขึ้น');
-    const serverList = normalizeList(snap.val()) || [];
-    const next = serverList.filter(x => x && x.id !== rec.id).concat([rec]);
-    await _withTimeout(set(ref(db, 'monthlyDocs'), next), 20000, 'บันทึกไม่สำเร็จเพราะเน็ตช้า/หลุดระหว่างส่ง กรุณาลองส่งใหม่อีกครั้ง (รูปยังไม่ถูกบันทึก)');
+    // ถ้าเจอรายการของตัวเอง (เดือนนี้) อยู่ในเครื่องแล้ว แปลว่าเป็นการ "ส่งซ้ำ/แก้ไขของเดิม" — ใช้ index เดิมได้เลยไม่ต้องรอโหลดใหม่
+    // แต่ถ้ายังไม่เคยมี (ส่งครั้งแรกของเดือน) ต้องเช็คกับเซิร์ฟเวอร์ก่อนเสมอ กันชนกับพนักงานคนอื่นที่ส่งพร้อมกันพอดี
+    const localIdx = Array.isArray(monthlyDocs) ? monthlyDocs.findIndex(x => x && x.id === rec.id) : -1;
+    let serverList, idx;
+    if (localIdx !== -1) {
+      serverList = monthlyDocs;
+      idx = localIdx;
+    } else {
+      const snap = await _withTimeout(get(ref(db, 'monthlyDocs')), 25000, 'เชื่อมต่อ Firebase ช้าเกินไป (ดึงข้อมูลไม่สำเร็จ) กรุณาลองใหม่เมื่อสัญญาณเน็ตดีขึ้น');
+      serverList = normalizeList(snap.val()) || [];
+      idx = serverList.findIndex(x => x && x.id === rec.id);
+    }
+    const targetIdx = idx === -1 ? serverList.length : idx;
+    await _withTimeout(update(ref(db), { [`monthlyDocs/${targetIdx}`]: rec }), 30000, 'บันทึกไม่สำเร็จเพราะเน็ตช้า/หลุดระหว่างส่ง กรุณาลองส่งใหม่อีกครั้ง (รูปยังไม่ถูกบันทึก)');
+    const next = idx === -1 ? serverList.concat([rec]) : serverList.map((x, i) => i === idx ? rec : x);
     monthlyDocs = next;
     localStorage.setItem('ske_monthly_docs', JSON.stringify(next));
     return next;
+  };
+
+
+  // อัพเดทเฉพาะฟิลด์ของเอกสารรายการเดียว (เช่น อนุมัติ/ไม่อนุมัติ) — ใช้ข้อมูลในเครื่องที่ sync ไว้แล้วเป็นหลัก ไม่ต้องดึงทั้งก้อนใหม่
+  window.fbUpdateMonthlyDocFields = function(docId, patch) {
+    // ใช้ข้อมูลในเครื่องก่อนเสมอถ้าเจอรายการนี้อยู่แล้ว (ไม่ว่าจะมาจาก realtime sync หรือ cache เก่าใน localStorage ตอนเปิดแอป)
+    // เพราะแค่แพตช์ไม่กี่ฟิลด์ ไม่จำเป็นต้องรอซิงก์สดทั้งชุดก่อนเสมอไป — ช่วยเคสเน็ตแย่มากจนยังไม่เคยซิงก์สำเร็จเลยในเซสชันนี้
+    const localIdx = Array.isArray(monthlyDocs) ? monthlyDocs.findIndex(d => d && d.id === docId) : -1;
+    const dataP = localIdx !== -1 ? Promise.resolve(monthlyDocs) : _withTimeout(get(ref(db, 'monthlyDocs')), SKE_WRITE_TIMEOUT_MS, 'timeout:monthlyDocs-get').then(s => normalizeList(s.val()));
+    return dataP.then(data => {
+      if (!data || !data.length) return Promise.reject(new Error('no monthlyDocs data'));
+      const idx = data.findIndex(d => d && d.id === docId);
+      if (idx === -1) return Promise.reject(new Error('monthly doc not found'));
+      const updates = {};
+      Object.keys(patch).forEach(k => { updates[`monthlyDocs/${idx}/${k}`] = patch[k]; });
+      return _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:monthlyDocs-update').then(() => {
+        const merged = data.map((d, i) => i === idx ? { ...d, ...patch } : d);
+        monthlyDocs = merged;
+        localStorage.setItem('ske_monthly_docs', JSON.stringify(monthlyDocs));
+      });
+    });
   };
 
   window.fbGetMonthlyDocs = async function() {
@@ -4650,16 +4688,6 @@ async function handleMonthlyDocPhoto(ev){
       await saveMonthlyDocs();
     }
 
-    // ตรวจซ้ำหลังบันทึกว่ารายการนี้ยังอยู่จริง และมีรูปจริง ก่อนแจ้งสำเร็จ
-    updateDocUploadPopup('กำลังตรวจสอบข้อมูล','ตรวจว่ารูปถูกบันทึกแล้วและรีเฟรชจะไม่หาย');
-    if(window.fbGetMonthlyDocs){
-      const latest=await window.fbGetMonthlyDocs();
-      const found=latest.find(x=>x&&x.id===id&&x.photo);
-      if(!found) throw new Error('บันทึกแล้วแต่ตรวจไม่พบรูปใน Firebase');
-      monthlyDocs=latest;
-      localStorage.setItem('ske_monthly_docs', JSON.stringify(monthlyDocs));
-    }
-
     hideDocUploadPopup();
     showDocUploadToast('✅ อัปโหลดสำเร็จ รอส่วนกลางตรวจสอบ', true);
     renderDashboard();
@@ -5589,9 +5617,18 @@ async function approveMonthlyDoc(id){
   const r=(monthlyDocs||[]).find(x=>x&&x.id===id);
   if(!r){alert('ไม่พบรายการเอกสาร');return;}
   if(!confirm('ยืนยันอนุมัติเอกสารนี้?'))return;
+  const patch={status:'approved',reviewedAt:Date.now(),reviewedBy:'admin',rejectReason:''};
   try{
-    monthlyDocs=monthlyDocs.map(x=>x&&x.id===id?{...x,status:'approved',reviewedAt:Date.now(),reviewedBy:'admin',rejectReason:''}:x);
-    await saveMonthlyDocs();renderAdminDocPanel();updateAdminDocBadge();
+    if(window.fbUpdateMonthlyDocFields){
+      await window.fbUpdateMonthlyDocFields(id,patch).catch(async()=>{
+        monthlyDocs=monthlyDocs.map(x=>x&&x.id===id?{...x,...patch}:x);
+        await saveMonthlyDocs();
+      });
+    }else{
+      monthlyDocs=monthlyDocs.map(x=>x&&x.id===id?{...x,...patch}:x);
+      await saveMonthlyDocs();
+    }
+    renderAdminDocPanel();updateAdminDocBadge();
     if(currentUser&&r.empId===currentUser.id)renderDashboard();
     alert('✅ อนุมัติเอกสารเรียบร้อยแล้ว');
   }catch(e){console.error(e);alert('❌ บันทึกอนุมัติไม่สำเร็จ กรุณาลองใหม่');}
@@ -5600,9 +5637,18 @@ async function rejectMonthlyDoc(id){
   const r=(monthlyDocs||[]).find(x=>x&&x.id===id);
   if(!r){alert('ไม่พบรายการเอกสาร');return;}
   const reason=prompt('ระบุเหตุผลที่ไม่อนุมัติ (เช่น รูปไม่ชัด / เอกสารไม่ครบ)')||'';
+  const patch={status:'rejected',reviewedAt:Date.now(),reviewedBy:'admin',rejectReason:reason};
   try{
-    monthlyDocs=monthlyDocs.map(x=>x&&x.id===id?{...x,status:'rejected',reviewedAt:Date.now(),reviewedBy:'admin',rejectReason:reason}:x);
-    await saveMonthlyDocs();renderAdminDocPanel();updateAdminDocBadge();
+    if(window.fbUpdateMonthlyDocFields){
+      await window.fbUpdateMonthlyDocFields(id,patch).catch(async()=>{
+        monthlyDocs=monthlyDocs.map(x=>x&&x.id===id?{...x,...patch}:x);
+        await saveMonthlyDocs();
+      });
+    }else{
+      monthlyDocs=monthlyDocs.map(x=>x&&x.id===id?{...x,...patch}:x);
+      await saveMonthlyDocs();
+    }
+    renderAdminDocPanel();updateAdminDocBadge();
     if(currentUser&&r.empId===currentUser.id)renderDashboard();
     alert('❌ บันทึกไม่อนุมัติแล้ว พนักงานต้องแนบรูปใหม่');
   }catch(e){console.error(e);alert('❌ บันทึกไม่อนุมัติไม่สำเร็จ กรุณาลองใหม่');}
