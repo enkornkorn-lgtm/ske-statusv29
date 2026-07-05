@@ -256,7 +256,27 @@
     _obMark('repairs', list);
     return _withTimeout(set(ref(db, 'repairs'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs')
       .then(() => { _obClear('repairs'); })
-      .catch(e => console.error('fbSaveRepairs error', e));
+      .catch(e => { console.error('fbSaveRepairs error', e); throw e; });
+  };
+
+  // อัพเดทเฉพาะ "รายการแจ้งซ่อมรายการเดียว" (ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์มาก่อนแล้วแก้เฉพาะฟิลด์ที่เปลี่ยน)
+  // แก้ปัญหาเดิม: repairs เก็บรูปแนบสะสมไว้ 12 เดือน พอมีคนเดียวเปลี่ยน 1 รายการ (เช่นแนบรูปเพิ่ม)
+  // ระบบเดิมจะอัพโหลด "ประวัติทั้งหมดของทุกคน" ซ้ำทุกครั้ง ทำให้ช้ามากบนเน็ตมือถือ และเสี่ยง timeout จนบันทึกไม่สำเร็จแบบเงียบๆ
+  window.fbUpdateRepairFields = function(repairId, patch) {
+    return _withTimeout(get(ref(db, 'repairs')), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs-get').then(snapshot => {
+      const data = normalizeList(snapshot.val());
+      if (!data || !data.length) return Promise.reject(new Error('no repairs data'));
+      const idx = data.findIndex(r => r && r.id === repairId);
+      if (idx === -1) return Promise.reject(new Error('repair not found'));
+      const updates = {};
+      Object.keys(patch).forEach(k => { updates[`repairs/${idx}/${k}`] = patch[k]; });
+      return _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs-update').then(() => {
+        const merged = data.map((r, i) => i === idx ? { ...r, ...patch } : r);
+        repairs = merged;
+        localStorage.setItem('ske_repairs', JSON.stringify(repairs));
+        _obClear('repairs');
+      });
+    });
   };
 
   // บันทึกรายการเปลี่ยนถ่ายของเหลวขึ้น Firebase
@@ -264,7 +284,25 @@
     _obMark('fluidLogs', list);
     return _withTimeout(set(ref(db, 'fluidLogs'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs')
       .then(() => { _obClear('fluidLogs'); })
-      .catch(e => console.error('fbSaveFluidLogs error', e));
+      .catch(e => { console.error('fbSaveFluidLogs error', e); throw e; });
+  };
+
+  // อัพเดทเฉพาะ "รายการเปลี่ยนถ่ายของเหลวรายการเดียว" — เหตุผลเดียวกับ fbUpdateRepairFields ด้านบน
+  window.fbUpdateFluidFields = function(fluidId, patch) {
+    return _withTimeout(get(ref(db, 'fluidLogs')), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs-get').then(snapshot => {
+      const data = normalizeList(snapshot.val());
+      if (!data || !data.length) return Promise.reject(new Error('no fluidLogs data'));
+      const idx = data.findIndex(f => f && f.id === fluidId);
+      if (idx === -1) return Promise.reject(new Error('fluid log not found'));
+      const updates = {};
+      Object.keys(patch).forEach(k => { updates[`fluidLogs/${idx}/${k}`] = patch[k]; });
+      return _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs-update').then(() => {
+        const merged = data.map((f, i) => i === idx ? { ...f, ...patch } : f);
+        fluidLogs = merged;
+        localStorage.setItem('ske_fluid', JSON.stringify(fluidLogs));
+        _obClear('fluidLogs');
+      });
+    });
   };
 
   // บันทึกรายการเบิกเงินพนักงานขึ้น Firebase
@@ -2281,11 +2319,31 @@ function saveA(){localStorage.setItem('ske_admin',adminMode?'1':'0');}
 function saveAR(){if(adminRole)localStorage.setItem('ske_adminRole',adminRole);else localStorage.removeItem('ske_adminRole');}
 function saveRepairs(){
   localStorage.setItem('ske_repairs',JSON.stringify(repairs));
-  if(window.fbSaveRepairs) window.fbSaveRepairs(repairs);
+  if(window.fbSaveRepairs) return window.fbSaveRepairs(repairs);
+  return Promise.resolve();
 }
 function saveFluid(){
   localStorage.setItem('ske_fluid',JSON.stringify(fluidLogs));
-  if(window.fbSaveFluidLogs) window.fbSaveFluidLogs(fluidLogs);
+  if(window.fbSaveFluidLogs) return window.fbSaveFluidLogs(fluidLogs);
+  return Promise.resolve();
+}
+// แพตช์เฉพาะรายการแจ้งซ่อม/ของเหลว 1 รายการ (ไม่อัพโหลดประวัติทั้งหมดซ้ำ) — ถ้าแพตช์ล้มเหลวค่อย fallback เป็นอัพโหลดทั้งก้อน (มี outbox กันข้อมูลหายอยู่แล้ว)
+// หมายเหตุ: ต้องอัพเดทตัวแปร repairs/fluidLogs ในเครื่องให้เสร็จก่อนเรียกฟังก์ชันนี้ เผื่อต้อง fallback
+function _patchRepair(id,patch){
+  if(window.fbUpdateRepairFields){
+    return window.fbUpdateRepairFields(id,patch).catch(()=>{ if(window.fbSaveRepairs) return window.fbSaveRepairs(repairs).catch(()=>{}); });
+  } else if(window.fbSaveRepairs){
+    return window.fbSaveRepairs(repairs).catch(()=>{});
+  }
+  return Promise.resolve();
+}
+function _patchFluid(id,patch){
+  if(window.fbUpdateFluidFields){
+    return window.fbUpdateFluidFields(id,patch).catch(()=>{ if(window.fbSaveFluidLogs) return window.fbSaveFluidLogs(fluidLogs).catch(()=>{}); });
+  } else if(window.fbSaveFluidLogs){
+    return window.fbSaveFluidLogs(fluidLogs).catch(()=>{});
+  }
+  return Promise.resolve();
 }
 function saveCash(){
   localStorage.setItem('ske_cash',JSON.stringify(cashRequests));
@@ -2321,12 +2379,12 @@ function pruneOldMaintenance(){
     const t=new Date(r.createdAt||0).getTime();
     return !isFinite(t)||t>=cutoff;
   });
-  if(newRepairs.length!==repairs.length){repairs=newRepairs;changed=true;saveRepairs();}
+  if(newRepairs.length!==repairs.length){repairs=newRepairs;changed=true;saveRepairs().catch(()=>{});}
   const newFluid=fluidLogs.filter(f=>{
     const t=new Date(f.changedAt||f.createdAt||0).getTime();
     return !isFinite(t)||t>=cutoff;
   });
-  if(newFluid.length!==fluidLogs.length){fluidLogs=newFluid;changed=true;saveFluid();}
+  if(newFluid.length!==fluidLogs.length){fluidLogs=newFluid;changed=true;saveFluid().catch(()=>{});}
   if(changed){
     const rm=document.getElementById('repairModal');if(rm&&!rm.classList.contains('hidden'))renderRepairList();
     const fm=document.getElementById('fluidModal');if(fm&&!fm.classList.contains('hidden'))renderFluidList();
@@ -2354,7 +2412,7 @@ function purgeOldPhotos(){
     }
     return r;
   });
-  if(repChanged){saveRepairs();console.log('[SKE] purgeOldPhotos: ลบรูปเก่าออกจาก repairs แล้ว');}
+  if(repChanged){saveRepairs().catch(()=>{});console.log('[SKE] purgeOldPhotos: ลบรูปเก่าออกจาก repairs แล้ว');}
 
   // fluidLogs: ลบ f.photos ของรายการที่อายุเกิน 12 เดือน
   fluidLogs=fluidLogs.map(f=>{
@@ -2364,7 +2422,7 @@ function purgeOldPhotos(){
     }
     return f;
   });
-  if(fluChanged){saveFluid();console.log('[SKE] purgeOldPhotos: ลบรูปเก่าออกจาก fluidLogs แล้ว');}
+  if(fluChanged){saveFluid().catch(()=>{});console.log('[SKE] purgeOldPhotos: ลบรูปเก่าออกจาก fluidLogs แล้ว');}
 }
 
 // ── ย้ายข้อมูลเก่า: พนักงานที่เคยมี status==='leave' (ก่อนแยก "ลา" ออกจากสถานะทั่วไป) ──
@@ -3084,7 +3142,7 @@ async function handleAvatarChange(input){
     const patch={photo:compressed};
     employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
     currentUser={...currentUser,...patch};
-    saveE();saveU();
+    localStorage.setItem('ske_emp',JSON.stringify(employees));saveU();
     if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
     renderDashboard();
     const msg=document.getElementById('setMsg');
@@ -3102,7 +3160,7 @@ function removeAvatar(){
   const patch={photo:null};
   employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
   currentUser={...currentUser,...patch};
-  saveE();saveU();
+  localStorage.setItem('ske_emp',JSON.stringify(employees));saveU();
   if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
   renderDashboard();
 }
@@ -3224,19 +3282,31 @@ function renderNewRepairPhotos(){
     <button type="button" onclick="delNewRepairPhoto(${i})" style="position:absolute;top:-6px;right:-6px;background:#EF4444;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;line-height:1;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3);">✕</button>
   </div>`).join('');
 }
-function doAddRepair(){
+async function doAddRepair(){
   if(!currentUser)return;
   const issue=document.getElementById('repIssue').value.trim();
   if(!issue){document.getElementById('repIssue').focus();return;}
   const me=employees.find(e=>e.id===currentUser.id)||currentUser;
-  repairs.unshift({
+  const newRec={
     id:'rep_'+Date.now(),
     empId:me.id,empName:me.name,plate:me.plate||'',
     issue,urgency:_repUrgency,status:'pending',approval:'pending',
     empPhotos:_repNewPhotos.slice(),
     createdAt:new Date().toISOString()
-  });
-  saveRepairs();
+  };
+  const hasPhotos=newRec.empPhotos.length>0;
+  repairs.unshift(newRec);
+  if(hasPhotos)showDocUploadPopup('กำลังส่งรูปแจ้งซ่อม','กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้');
+  try{
+    await saveRepairs();
+    if(hasPhotos){hideDocUploadPopup();showDocUploadToast('✅ ส่งแจ้งซ่อมสำเร็จ',true);}
+  }catch(e){
+    // เน็ตช้า/หลุด — ข้อมูลยังอยู่ในเครื่องและถูกคิวไว้ใน outbox แล้ว (_obMark ทำงานก่อนหน้านี้)
+    // ระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา ไม่ต้อง rollback/ให้กดส่งซ้ำ (กันรายการซ้ำ)
+    console.warn('doAddRepair: บันทึกไม่สำเร็จในทันที รอคิวส่งซ้ำอัตโนมัติ',e);
+    hideDocUploadPopup();
+    showDocUploadToast('⚠️ เน็ตช้า/หลุดอยู่ — ระบบจะส่งข้อมูลนี้ต่อให้อัตโนมัติเมื่อสัญญาณกลับมา',false);
+  }
   document.getElementById('repIssue').value='';
   _repNewPhotos=[];
   renderNewRepairPhotos();
@@ -3365,8 +3435,10 @@ function _refreshOneRepairCard(id){
   return false;
 }
 function setRepairApproval(id,decision){
-  repairs=repairs.map(r=>r.id===id?{...r,approval:decision}:r);
-  saveRepairs();
+  const patch={approval:decision};
+  repairs=repairs.map(r=>r.id===id?{...r,...patch}:r);
+  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  _patchRepair(id,patch);
   const adminPanel=document.getElementById('adminMaintPanel');
   if(adminPanel && !adminPanel.classList.contains('hidden')){
     renderAdminRepairList();
@@ -3380,8 +3452,10 @@ function saveRepairReply(id){
   const now=new Date().toISOString();
   const cur=repairs.find(r=>r.id===id);
   const hasPhotos=cur&&cur.photos&&cur.photos.length;
-  repairs=repairs.map(r=>r.id===id?{...r,reply:msg,replyAt:(msg||hasPhotos)?now:null,replyRead:false}:r);
-  saveRepairs();refreshRepairViews();
+  const patch={reply:msg,replyAt:(msg||hasPhotos)?now:null,replyRead:false};
+  repairs=repairs.map(r=>r.id===id?{...r,...patch}:r);
+  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  _patchRepair(id,patch);refreshRepairViews();
   alert((msg||hasPhotos)?'✅ ส่งถึงพนักงานแล้ว':'🗑️ ลบข้อความแล้ว');
 }
 
@@ -3450,9 +3524,22 @@ async function addRepairPhotos(id,input){
       const dataUrl=await _compressImage(f,900,0.6);
       existing.push(dataUrl);
     }
-    repairs=repairs.map(x=>x.id===id?{...x,photos:existing}:x);
-    saveRepairs();refreshRepairViews();
-  }catch(e){console.error('compress error',e);alert('❌ เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');}
+    showDocUploadPopup('กำลังส่งรูป','กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้');
+    const patch={photos:existing};
+    repairs=repairs.map(x=>x.id===id?{...x,...patch}:x);
+    localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+    if(window.fbUpdateRepairFields){
+      await window.fbUpdateRepairFields(id,patch).catch(async()=>{ if(window.fbSaveRepairs) await window.fbSaveRepairs(repairs).catch(()=>{}); });
+    } else if(window.fbSaveRepairs){
+      await window.fbSaveRepairs(repairs).catch(()=>{});
+    }
+    hideDocUploadPopup();
+    refreshRepairViews();
+  }catch(e){
+    console.error('compress error',e);
+    hideDocUploadPopup();
+    alert('❌ เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
+  }
 }
 
 // ลบรูปออกจากรายการซ่อม (field = 'photos' หรือ 'empPhotos')
@@ -3461,8 +3548,10 @@ function delRepairPhoto(id,idx,field){
   if(!confirm('ลบรูปนี้?'))return;
   const r=repairs.find(x=>x.id===id);if(!r||!r[field])return;
   const arr=r[field].filter((_,i)=>i!==idx);
-  repairs=repairs.map(x=>x.id===id?{...x,[field]:arr}:x);
-  saveRepairs();refreshRepairViews();
+  const patch={[field]:arr};
+  repairs=repairs.map(x=>x.id===id?{...x,...patch}:x);
+  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  _patchRepair(id,patch);refreshRepairViews();
   closePhotoViewer();
 }
 
@@ -3526,7 +3615,7 @@ function delFluidPhoto(id,idx){
   const f=fluidLogs.find(x=>x.id===id);if(!f||!f.photos)return;
   const photos=f.photos.filter((_,i)=>i!==idx);
   fluidLogs=fluidLogs.map(x=>x.id===id?{...x,photos}:x);
-  saveFluid();refreshFluidViews();
+  saveFluid().catch(()=>{});refreshFluidViews();
   closePhotoViewer();
 }
 let _empRepairVisible=12;
@@ -3580,13 +3669,16 @@ function renderRepairList(loadMore){
   updateMaintBadges();
 }
 function toggleRepairStatus(id){
-  repairs=repairs.map(r=>r.id===id?{...r,status:r.status==='done'?'pending':'done'}:r);
-  saveRepairs();refreshRepairViews();
+  const cur=repairs.find(r=>r.id===id);
+  const patch={status:(cur&&cur.status==='done')?'pending':'done'};
+  repairs=repairs.map(r=>r.id===id?{...r,...patch}:r);
+  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  _patchRepair(id,patch);refreshRepairViews();
 }
 function doDelRepair(id){
   if(!confirm('ลบรายการแจ้งซ่อมนี้?'))return;
   repairs=repairs.filter(r=>r.id!==id);
-  saveRepairs();refreshRepairViews();
+  saveRepairs().catch(()=>{});refreshRepairViews();
 }
 // รีเฟรชทุกหน้าที่อาจกำลังแสดงรายการแจ้งซ่อมอยู่ (หน้าพนักงาน + แผงผู้ดูแล)
 function refreshRepairViews(){
@@ -3665,21 +3757,32 @@ function renderNewFluidPhotos(){
     <button type="button" onclick="delNewFluidPhoto(${i})" style="position:absolute;top:-6px;right:-6px;background:#EF4444;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;line-height:1;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3);">✕</button>
   </div>`).join('');
 }
-function doAddFluid(){
+async function doAddFluid(){
   if(!currentUser)return;
   const type=document.getElementById('fluType').value;
   const date=document.getElementById('fluDate').value||todayStr();
   const odo=document.getElementById('fluOdo').value.trim();
   const note=document.getElementById('fluNote').value.trim();
   const me=employees.find(e=>e.id===currentUser.id)||currentUser;
-  fluidLogs.unshift({
+  const newRec={
     id:'flu_'+Date.now(),
     empId:me.id,empName:me.name,plate:me.plate||'',
     fluidType:type,changedAt:date,odometer:odo,note,
     photos:_fluNewPhotos.slice(),
     createdAt:new Date().toISOString()
-  });
-  saveFluid();
+  };
+  const hasPhotos=newRec.photos.length>0;
+  fluidLogs.unshift(newRec);
+  if(hasPhotos)showDocUploadPopup('กำลังส่งรูป','กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้');
+  try{
+    await saveFluid();
+    if(hasPhotos){hideDocUploadPopup();showDocUploadToast('✅ บันทึกสำเร็จ',true);}
+  }catch(e){
+    // เน็ตช้า/หลุด — ข้อมูลถูกคิวไว้ใน outbox แล้ว ระบบจะส่งซ้ำอัตโนมัติ ไม่ต้อง rollback
+    console.warn('doAddFluid: บันทึกไม่สำเร็จในทันที รอคิวส่งซ้ำอัตโนมัติ',e);
+    hideDocUploadPopup();
+    showDocUploadToast('⚠️ เน็ตช้า/หลุดอยู่ — ระบบจะส่งข้อมูลนี้ต่อให้อัตโนมัติเมื่อสัญญาณกลับมา',false);
+  }
   document.getElementById('fluOdo').value='';
   document.getElementById('fluNote').value='';
   _fluNewPhotos=[];renderNewFluidPhotos();
@@ -4184,8 +4287,10 @@ function renderAdminHistory(){
 function restoreRepair(id){
   const r=repairs.find(x=>x.id===id);if(!r)return;
   if(!confirm('นำรายการนี้กลับมาที่แท็บซ่อมบำรุงเพื่อดำเนินการต่อ?'))return;
-  repairs=repairs.map(x=>x.id===id?{...x,status:'open',approval:x.approval==='rejected'?'pending':x.approval,updatedAt:new Date().toISOString()}:x);
-  saveRepairs();refreshRepairViews();
+  const patch={status:'open',approval:r.approval==='rejected'?'pending':r.approval,updatedAt:new Date().toISOString()};
+  repairs=repairs.map(x=>x.id===id?{...x,...patch}:x);
+  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  _patchRepair(id,patch);refreshRepairViews();
 }
 
 // ── ประวัติการเปลี่ยนถ่ายของเหลว (ผู้ดูแล) ─────────────────────────────────
@@ -5434,13 +5539,22 @@ function renderAdminDocPanel(){
       <div style="background:#FFFBEB;border:1.5px solid #F59E0B;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:900;color:#92400E;">${c.pending}</div><div style="font-size:11px;color:#92400E;">รอตรวจ</div></div>
       <div style="background:#ECFDF5;border:1.5px solid #10B981;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:900;color:#065F46;">${c.approved}</div><div style="font-size:11px;color:#065F46;">อนุมัติแล้ว</div></div>
       <div style="background:#FEF2F2;border:1.5px solid #EF4444;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:900;color:#991B1B;">${c.rejected}</div><div style="font-size:11px;color:#991B1B;">ไม่อนุมัติ</div></div>
-      <div style="background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:900;color:#475569;">${c.missing}</div><div style="font-size:11px;color:#475569;">ยังไม่ส่ง</div></div>
+      <div style="background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:12px;padding:10px;text-align:center;cursor:pointer;" onclick="document.getElementById('adminDocMissingAnchor')?.scrollIntoView({behavior:'smooth',block:'start'})"><div style="font-size:20px;font-weight:900;color:#475569;">${c.missing}</div><div style="font-size:11px;color:#475569;">ยังไม่ส่ง</div></div>
     </div>`;
   const docs=[...(monthlyDocs||[]).filter(x=>x&&x.monthKey===monthKey)].sort((a,b)=>{
     const rank={pending:0,rejected:1,approved:2};
     return (rank[a.status||'pending']??9)-(rank[b.status||'pending']??9) || (b.submittedAt||0)-(a.submittedAt||0);
   });
-  if(!docs.length){listEl.innerHTML='<div class="empty">ยังไม่มีพนักงานส่งเอกสารเดือนนี้</div>';return;}
+  // รายชื่อพนักงานที่ "ยังไม่ส่ง" เอกสารเดือนนี้ — ไล่จากพนักงานทั้งหมดที่ไม่มี submission ในเดือนนี้
+  const missingEmps=(employees||[]).filter(e=>!getMonthlyDocSubmission(e.id,monthKey)).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'th'));
+  const missingHTML=missingEmps.length?`
+    <div id="adminDocMissingAnchor" class="section-label" style="margin-top:18px;color:#475569;">📭 ยังไม่ส่งเอกสาร (${missingEmps.length} คน)</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+      ${missingEmps.map(e=>`<div class="card" style="padding:9px 12px;border:1.5px solid #CBD5E1;background:#F8FAFC;">
+        <div style="font-size:13px;font-weight:900;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name||'-')}</div>
+      </div>`).join('')}
+    </div>` : '';
+  if(!docs.length){listEl.innerHTML='<div class="empty">ยังไม่มีพนักงานส่งเอกสารเดือนนี้</div>'+missingHTML;return;}
   listEl.innerHTML=docs.map(d=>{
     const emp=employees.find(e=>e.id===d.empId)||{};
     const st=_docStatusPill(d.status||'pending');
@@ -5469,7 +5583,7 @@ function renderAdminDocPanel(){
         <button class="btn btn-red" style="flex:1;font-size:12px;" onclick="rejectMonthlyDoc('${d.id}')">❌ ไม่อนุมัติ</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('')+missingHTML;
 }
 async function approveMonthlyDoc(id){
   const r=(monthlyDocs||[]).find(x=>x&&x.id===id);
