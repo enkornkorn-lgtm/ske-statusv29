@@ -2372,7 +2372,11 @@ window.SKEIntro={
 };
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-window.onload=function(){
+// ใช้ DOMContentLoaded แทน window.onload เพราะ window.onload จะรอให้ "ทุก resource" ในหน้ารวมถึง
+// วิดีโอ splash โหลดเสร็จ 100% ก่อนถึงจะเริ่มแอพ — ถ้าเน็ตช้ามากจะทำให้แอพค้างไม่เปิดเลย
+// DOMContentLoaded ยิงทันทีที่ HTML พาร์สเสร็จ ส่วนวิดีโอยังเล่นแบบ progressive ได้ตามปกติ
+// และถ้าเน็ตช้าจนเล่นวิดีโอไม่ได้จริงๆ ตัว fallback timeout 8.5 วิที่มีอยู่แล้วจะพาเข้าแอพให้เอง
+function skeInitApp(){
   const startApp=function(){
   const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent);
   const sa=window.navigator.standalone||window.matchMedia('(display-mode:standalone)').matches;
@@ -2402,7 +2406,14 @@ window.onload=function(){
   };
   if(window.SKEIntro&&typeof window.SKEIntro.play==='function') window.SKEIntro.play(startApp);
   else startApp();
-};
+}
+// สคริปต์นี้อยู่ท้าย body ทำให้ DOM พร้อมใช้งานแล้วเกือบตลอด แต่กันเคสที่ DOMContentLoaded
+// ยิงไปก่อนแล้ว (เช่นโหลดจาก cache) ด้วยการเช็ค readyState ก่อน
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',skeInitApp);
+} else {
+  skeInitApp();
+}
 
 // ── เข้าแอพใหม่ทุกครั้ง (กลับมาจากแบ็คกราวด์/สลับแอพ) → ดึงสถานะล่าสุดจาก Firebase ทันที ──
 // กันปัญหาเห็นข้อมูลค้าง/เก่า ตอนสลับแอพออกไปแล้วกลับเข้ามาใหม่ (รวมถึงตอน WebSocket ของ Firebase
