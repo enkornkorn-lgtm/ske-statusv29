@@ -1740,7 +1740,25 @@ const STATUSES=[
   {id:"repairing",  label:"กำลังซ่อมรถอยู่",       ic:"wrench",   emoji:"🔧",color:"#B91C1C",bg:"#FEF2F2",border:"#FCA5A5"},
   {id:"done",       label:"สแตนบายว่างงาน",        ic:"idle",     emoji:"✅",color:"#065F46",bg:"#ECFDF5",border:"#6EE7B7"},
 ];
-function getS(id){return STATUSES.find(s=>s.id===id)||STATUSES.find(s=>s.id==='standby')||STATUSES[0];}
+const INACTIVE_STATUS={id:"inactive",label:"ยังไม่ได้ผูกรถ (ถูกสลับออก)",ic:"idle",emoji:"⚪",color:"#64748B",bg:"#F1F5F9",border:"#CBD5E1"};
+function getS(id){if(id==='inactive')return INACTIVE_STATUS;return STATUSES.find(s=>s.id===id)||STATUSES.find(s=>s.id==='standby')||STATUSES[0];}
+// ── กันข้อมูลซ้ำ: ถ้ามีพนักงาน 2 คนขึ้นไปถือทะเบียนรถเดียวกันพร้อมกัน (เช่น แก้ไขโปรไฟล์ตรงๆ โดยไม่ผ่าน "สลับคนขับ"
+// หรือข้อมูลเก่าค้างจากก่อนหน้านี้) ให้ถือว่าคนที่อัปเดตสถานะล่าสุดคือคนขับตัวจริงของคันนั้น แล้วตัดคนอื่นออกจากบอร์ดสถานะ
+// ไม่กระทบข้อมูล/ประวัติเดิมของใครเลย แค่ไม่เอามาแสดง/นับซ้ำในหน้าสถานะเท่านั้น
+function _dedupByPlate(list){
+  const latestByPlate={};
+  list.forEach(e=>{
+    const p=(e.plate||'').trim();
+    if(!p)return;
+    const t=e.updatedAt||'';
+    if(!latestByPlate[p]||t>(latestByPlate[p].updatedAt||''))latestByPlate[p]=e;
+  });
+  return list.filter(e=>{
+    const p=(e.plate||'').trim();
+    if(!p)return true; // ไม่มีทะเบียน ไม่เข้าเงื่อนไขชนกัน แสดงตามปกติ
+    return latestByPlate[p]===e;
+  });
+}
 // คำนวณลำดับคิวของพนักงานคนนี้ ตอนสถานะเป็น "สแตนบายว่างงาน" — ใช้ตรรกะเดียวกับฝั่งแอดมิน (เรียงตามเวลาว่างงาน จังหวัดเดียวกัน)
 function getQueuePosition(emp){
   if(!emp||emp.status!=='done')return null;
@@ -4598,14 +4616,16 @@ function buildSummaryHTML(){
     return '<div class="empty-state"><div class="empty-icon">'+skeIcon('overview')+'</div><div class="empty-text">ยังไม่มีข้อมูลพนักงาน</div></div>';
   }
 
-  // นับแต่ละสถานะ (ไม่นับรวมคนที่ลาอยู่วันนี้ — รถของคนลาไม่ถือว่าอยู่ในสถานะปกติ)
+  // นับแต่ละสถานะ (ไม่นับรวมคนที่ลาอยู่วันนี้ — รถของคนลาไม่ถือว่าอยู่ในสถานะปกติ, ไม่นับคนที่ถูกสลับคนขับออกแล้ว — status==='inactive',
+  // และตัดรายการที่ทะเบียนซ้ำกัน — เหลือแค่คนที่อัปเดตสถานะล่าสุดของทะเบียนนั้นเท่านั้น ไม่งั้นตัวเลขสรุปจะไม่ตรงกับที่แสดงในลิสต์)
+  const dedupedEmployees=_dedupByPlate(employees);
   const counts={};
   STATUSES.forEach(st=>counts[st.id]=0);
-  employees.forEach(e=>{if(isLeaveActiveToday(e))return;if(counts[e.status]!==undefined)counts[e.status]++;else counts['standby']++;});
+  dedupedEmployees.forEach(e=>{if(isLeaveActiveToday(e)||e.status==='inactive')return;if(counts[e.status]!==undefined)counts[e.status]++;else counts['standby']++;});
 
   // สรุปบนสุด — แจ้งเตือนเฉพาะสถานะที่กำลังทำงานอยู่ที่ช่อง (4 สถานะ) เกิน ALERT_HOURS ชม.
-  const total=employees.filter(e=>!isLeaveActiveToday(e)).length;
-  const stale=employees.filter(e=>!isLeaveActiveToday(e)&&ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS)).length;
+  const total=dedupedEmployees.filter(e=>!isLeaveActiveToday(e)&&e.status!=='inactive').length;
+  const stale=dedupedEmployees.filter(e=>!isLeaveActiveToday(e)&&ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS)).length;
 
   let html=`
   <div style="text-align:center;margin-bottom:10px;padding:8px 14px;background:linear-gradient(135deg,#6C3FE8,#1E90D6);border-radius:12px;box-shadow:0 2px 8px rgba(108,63,232,.25);">
@@ -4654,8 +4674,8 @@ function buildSummaryHTML(){
   // แยกกลุ่ม "ขึ้นสินค้า" กับ "ลงสินค้า" ออกจากกัน ไม่ให้ปนกันจนงง
   const LOAD_ALERT_STATUSES=['loading_bay','loading'];     // เข้าช่องขึ้นงานแล้ว + กำลังขึ้นงาน
   const UNLOAD_ALERT_STATUSES=['unload_bay','unloading'];  // ถึงแล้วรอลงงาน + กำลังลงงาน
-  const staleLoadList=employees.filter(e=>LOAD_ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS));
-  const staleUnloadList=employees.filter(e=>UNLOAD_ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS));
+  const staleLoadList=dedupedEmployees.filter(e=>LOAD_ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS));
+  const staleUnloadList=dedupedEmployees.filter(e=>UNLOAD_ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS));
   const renderStaleGroup=(title,list,accentColor,borderColor,bgColor)=>{
     if(!list.length)return'';
     list.sort((a,b)=>{const av=a.updatedAt?new Date(a.updatedAt).getTime():0,bv=b.updatedAt?new Date(b.updatedAt).getTime():0;return av-bv;});
@@ -4824,7 +4844,7 @@ function updateLeaveBadge(){
 
 // รายชื่อพนักงานแบบเรียบ (ไม่จัดกลุ่มจังหวัด) ใช้กับสถานะอื่นๆ ที่ไม่ใช่ standby/traveling
 function renderStatusEmployeeList(st){
-  const list=employees.filter(e=>e.status===st.id&&!isLeaveActiveToday(e));
+  const list=_dedupByPlate(employees).filter(e=>e.status===st.id&&!isLeaveActiveToday(e));
   if(!list.length)return'';
   list.sort((a,b)=>(b.updatedAt||'')>(a.updatedAt||'')?1:-1);
   let html=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E8EAF0;display:flex;flex-direction:column;gap:6px;">`;
@@ -4846,7 +4866,7 @@ function renderStatusEmployeeList(st){
 }
 
 function renderStandbyByProv(){
-  const standby=employees.filter(e=>e.status==='standby'&&!isLeaveActiveToday(e));
+  const standby=_dedupByPlate(employees).filter(e=>e.status==='standby'&&!isLeaveActiveToday(e));
   if(!standby.length)return'';
   const byProv={};
   standby.forEach(e=>{const p=e.province||'ไม่ระบุจังหวัด';if(!byProv[p])byProv[p]=[];byProv[p].push(e);});
@@ -5126,7 +5146,7 @@ function renderSysInfo(){
 }
 
 function renderTravelingByProv(){
-  const traveling=employees.filter(e=>e.status==='traveling'&&!isLeaveActiveToday(e));
+  const traveling=_dedupByPlate(employees).filter(e=>e.status==='traveling'&&!isLeaveActiveToday(e));
   if(!traveling.length)return'';
   const byProv={};
   traveling.forEach(e=>{const p=e.province||'ไม่ระบุปลายทาง';if(!byProv[p])byProv[p]=[];byProv[p].push(e);});
@@ -5160,7 +5180,7 @@ function renderTravelingByProv(){
 }
 
 function renderReturningByProv(){
-  const returning=employees.filter(e=>e.status==='returning'&&!isLeaveActiveToday(e));
+  const returning=_dedupByPlate(employees).filter(e=>e.status==='returning'&&!isLeaveActiveToday(e));
   if(!returning.length)return'';
   const byProv={};
   returning.forEach(e=>{const p=e.province||'ไม่ระบุจังหวัด';if(!byProv[p])byProv[p]=[];byProv[p].push(e);});
@@ -5194,7 +5214,7 @@ function renderReturningByProv(){
 }
 
 function renderDoneByProv(){
-  const done=employees.filter(e=>e.status==='done'&&!isLeaveActiveToday(e));
+  const done=_dedupByPlate(employees).filter(e=>e.status==='done'&&!isLeaveActiveToday(e));
   if(!done.length)return'';
   const byProv={};
   done.forEach(e=>{const p=e.province||'ไม่ระบุจังหวัด';if(!byProv[p])byProv[p]=[];byProv[p].push(e);});
@@ -5722,6 +5742,7 @@ function _sdStep3Html(){
 }
 function sdConfirmSwitch(){
   const plate=_sd.plate;
+  const now=new Date().toISOString();
   let finalId=null,finalName='';
   if(_sd.driverMode==='existing'||_sd.driverMode==='owner'){
     finalId=_sd.driverId;
@@ -5732,12 +5753,24 @@ function sdConfirmSwitch(){
     const e=employees.find(x=>x.id===finalId);finalName=e?e.name:'';
   }else if(_sd.driverMode==='new'){
     finalId=Date.now()+'';
-    const rec={id:finalId,name:_sd.newName,plate,phone:_sd.newPhone,status:'standby',province:'',note:'',updatedAt:new Date().toISOString()};
+    const rec={id:finalId,name:_sd.newName,plate,phone:_sd.newPhone,status:'standby',province:'',note:'',updatedAt:now};
     if(_sd.ownerPickMarkNew)rec.isOwner=true;
     employees.push(rec);
     saveE();
     if(window.fbSaveEmployees)window.fbSaveEmployees(employees);
     finalName=_sd.newName;
+  }
+  // ── คนขับเก่าของทะเบียนนี้ (ที่ถูกสลับออก) ต้องหายไปจากหน้าสถานะทันที ──
+  // ล้างทะเบียน/จังหวัด และตั้งสถานะเป็น 'inactive' (ไม่ตรงกับสถานะใดบนบอร์ด standby/traveling/returning/done ฯลฯ)
+  // ประวัติเก่าทั้งหมด (ลา/ซ่อม/เที่ยววิ่ง/เอกสาร) ยังผูกกับ empId เดิมอยู่ครบ ไม่ถูกลบหรือแก้ไข
+  const swappedOutIds=employees.filter(e=>e.plate===plate&&e.id!==finalId).map(e=>e.id);
+  if(swappedOutIds.length){
+    const outPatch={status:'inactive',plate:'',province:'',standbyAt:null,updatedAt:now};
+    employees=employees.map(e=>swappedOutIds.includes(e.id)?{...e,...outPatch}:e);
+    saveE();
+    swappedOutIds.forEach(id=>{
+      if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(id,outPatch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+    });
   }
   _sd.step=4;_sd.doneName=finalName;
   renderSwitchDriverModal();
