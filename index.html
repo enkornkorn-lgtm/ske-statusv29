@@ -99,7 +99,7 @@
   // ติดตามว่าแต่ละชุดข้อมูล sync ครั้งแรกเสร็จหรือยัง — ใช้กันบั๊ก "ข้อมูลที่ลบไปแล้วฟื้นคืนชีพ"
   // (เดิม: พอลบรายการจนหมด ข้อมูลเป็น null → listener เข้าใจผิดว่า Firebase ว่าง แล้วอัพโหลดข้อมูลเก่าในเครื่องกลับขึ้นไป)
   // หลักการใหม่: อัพโหลดข้อมูลเครื่องขึ้น Firebase ได้ "เฉพาะครั้งแรกสุด" เท่านั้น หลังจากนั้น null = ว่างจริง ให้เคารพค่าว่าง
-  const _firstSync = { employees:false, repairs:false, fluidLogs:false, cashRequests:false, leaveLogs:false, runLogs:false };
+  const _firstSync = { employees:false, repairs:false, fluidLogs:false, cashRequests:false, leaveLogs:false, runLogs:false, monthlyDocs:false };
 
 
   // บันทึกข้อมูลพนักงานทั้งหมดขึ้น Firebase
@@ -424,9 +424,33 @@
 
 
   // ══ Monthly document submissions — realtime Firebase sync ══
+  // คืนค่า Promise เสมอ เพื่อให้ฝั่งอัปโหลดรอจน Firebase บันทึกสำเร็จจริงก่อนแจ้งผล
   window.fbSaveMonthlyDocs = function(list) {
-    set(ref(db, 'monthlyDocs'), Array.isArray(list) ? list : []).catch(e => console.error('fbSaveMonthlyDocs error', e));
+    const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object') : [];
+    return set(ref(db, 'monthlyDocs'), clean).catch(e => {
+      console.error('fbSaveMonthlyDocs error', e);
+      throw e;
+    });
   };
+
+  // อัปเดตเอกสารรายคนแบบปลอดภัย: ดึงข้อมูลล่าสุดจาก Firebase ก่อน แล้วแทนเฉพาะรายการของคน/เดือนนั้น
+  // ป้องกันข้อมูลหายเวลาเครื่องอื่นเพิ่งส่ง/อนุมัติพร้อมกัน และป้องกัน localStorage เก่าเขียนทับข้อมูลใหม่
+  window.fbUpsertMonthlyDoc = async function(rec) {
+    if (!rec || !rec.id) throw new Error('invalid monthly doc record');
+    const snap = await get(ref(db, 'monthlyDocs'));
+    const serverList = normalizeList(snap.val()) || [];
+    const next = serverList.filter(x => x && x.id !== rec.id).concat([rec]);
+    await set(ref(db, 'monthlyDocs'), next);
+    window.monthlyDocs = next;
+    localStorage.setItem('ske_monthly_docs', JSON.stringify(next));
+    return next;
+  };
+
+  window.fbGetMonthlyDocs = async function() {
+    const snap = await get(ref(db, 'monthlyDocs'));
+    return normalizeList(snap.val()) || [];
+  };
+
   onValue(ref(db, 'monthlyDocs'), (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (data) {
@@ -436,10 +460,23 @@
       const admin = document.getElementById('admin');
       if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
       if (admin && !admin.classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
-    } else {
+    } else if (!_firstSync.monthlyDocs) {
+      // อัปโหลด cache เครื่องขึ้น Firebase เฉพาะครั้งแรกเท่านั้น เพื่อไม่ให้ข้อมูลเก่าในเครื่องฟื้นกลับมาทับข้อมูลที่ลบ/อัปเดตแล้ว
       const cache = (()=>{try{return JSON.parse(localStorage.getItem('ske_monthly_docs')||'[]');}catch(e){return [];}})();
-      if (Array.isArray(cache) && cache.length) set(ref(db, 'monthlyDocs'), cache);
+      if (Array.isArray(cache) && cache.length) set(ref(db, 'monthlyDocs'), cache).catch(e=>console.error('fb seed monthlyDocs error', e));
+      else {
+        window.monthlyDocs = [];
+        localStorage.setItem('ske_monthly_docs', '[]');
+      }
+    } else {
+      window.monthlyDocs = [];
+      localStorage.setItem('ske_monthly_docs', '[]');
+      const dash = document.getElementById('dashboard');
+      const admin = document.getElementById('admin');
+      if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
+      if (admin && !admin.classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
     }
+    _firstSync.monthlyDocs = true;
   });
   get(ref(db, 'monthlyDocs')).then(snapshot => {
     const data = normalizeList(snapshot.val());
@@ -447,7 +484,8 @@
       window.monthlyDocs = data;
       localStorage.setItem('ske_monthly_docs', JSON.stringify(data));
     }
-  }).catch(e => console.error('fbGet monthlyDocs error', e));
+    _firstSync.monthlyDocs = true;
+  }).catch(e => { _firstSync.monthlyDocs = true; console.error('fbGet monthlyDocs error', e); });
 
 </script>
 <style>
@@ -1076,6 +1114,20 @@ select.inp option{background:#fff;color:#1a1a2e;}
 @media (max-height:420px){
   #login::after{margin:-30px auto 10px!important;padding:5px 10px!important;font-size:10px!important;}
 }
+
+
+/* === Verified document upload popup / toast === */
+.doc-upload-pop{position:fixed;inset:0;z-index:120000;display:flex;align-items:center;justify-content:center;padding:22px;background:rgba(15,23,42,.42);backdrop-filter:blur(7px);}
+.doc-upload-card{width:min(92vw,360px);background:#fff;border-radius:26px;padding:24px 20px;text-align:center;box-shadow:0 20px 60px rgba(15,23,42,.24);border:1px solid rgba(255,255,255,.82);}
+.doc-upload-spinner{width:54px;height:54px;border-radius:50%;border:5px solid #E5E7EB;border-top-color:#1E90D6;margin:0 auto 14px;animation:docSpin .85s linear infinite;}
+.doc-upload-title{font-size:18px;font-weight:900;color:#111827;line-height:1.35;}
+.doc-upload-sub{font-size:13px;font-weight:700;color:#64748B;margin-top:6px;line-height:1.5;}
+.doc-upload-toast{position:fixed;left:50%;bottom:max(22px,calc(16px + env(safe-area-inset-bottom,0px)));transform:translateX(-50%);z-index:120001;width:min(92vw,380px);border-radius:18px;padding:13px 16px;font-size:14px;font-weight:900;text-align:center;box-shadow:0 16px 38px rgba(15,23,42,.20);animation:docToastIn .18s ease-out;}
+.doc-upload-toast.ok{background:#ECFDF5;color:#065F46;border:1.5px solid #10B981;}
+.doc-upload-toast.err{background:#FEF2F2;color:#991B1B;border:1.5px solid #EF4444;}
+@keyframes docSpin{to{transform:rotate(360deg)}}
+@keyframes docToastIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
 </style>
 </head>
 
@@ -2010,8 +2062,9 @@ function saveLeaveLogs(){
   if(window.fbSaveLeaveLogs) window.fbSaveLeaveLogs(leaveLogs);
 }
 function saveMonthlyDocs(){
-  localStorage.setItem('ske_monthly_docs',JSON.stringify(monthlyDocs));
-  if(window.fbSaveMonthlyDocs) window.fbSaveMonthlyDocs(monthlyDocs);
+  localStorage.setItem('ske_monthly_docs',JSON.stringify(monthlyDocs||[]));
+  if(window.fbSaveMonthlyDocs) return window.fbSaveMonthlyDocs(monthlyDocs||[]);
+  return Promise.resolve();
 }
 function saveRunLogs(){
   localStorage.setItem('ske_runlogs',JSON.stringify(runLogs));
@@ -4145,31 +4198,124 @@ function renderMonthlyDocAlert(me){
     <label class="emp-upload-btn">☁️ อัปโหลดหลักฐาน<input type="file" accept="image/*" style="display:none;" onchange="handleMonthlyDocPhoto(event)"></label>
   </div>`;
 }
-function handleMonthlyDocPhoto(ev){
-  if(!isMonthlyDocWindowOpen()){
-    alert('ระบบเปิดให้ส่งเอกสารเฉพาะวันที่ 1-15 ของทุกเดือนเท่านั้น');
-    if(ev&&ev.target)ev.target.value='';
-    return;
+function showDocUploadPopup(title='กำลังอัปโหลดรูปเอกสาร', sub='กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้'){
+  let el=document.getElementById('docUploadPopup');
+  if(!el){
+    el=document.createElement('div');
+    el.id='docUploadPopup';
+    el.className='doc-upload-pop';
+    document.body.appendChild(el);
   }
-  const file=ev?.target?.files?.[0];
-  if(!file)return;
-  if(!file.type||!file.type.startsWith('image/')){alert('กรุณาแนบไฟล์รูปภาพเท่านั้น');return;}
-  const reader=new FileReader();
-  reader.onload=function(){
+  el.innerHTML=`<div class="doc-upload-card"><div class="doc-upload-spinner"></div><div class="doc-upload-title">${esc(title)}</div><div class="doc-upload-sub">${esc(sub)}</div></div>`;
+  el.classList.remove('hidden');
+}
+function updateDocUploadPopup(title,sub){
+  const el=document.getElementById('docUploadPopup');
+  if(!el)return;
+  const t=el.querySelector('.doc-upload-title');
+  const s=el.querySelector('.doc-upload-sub');
+  if(t)t.textContent=title||'';
+  if(s)s.textContent=sub||'';
+}
+function hideDocUploadPopup(){
+  const el=document.getElementById('docUploadPopup');
+  if(el)el.classList.add('hidden');
+}
+function showDocUploadToast(msg,ok=true){
+  let el=document.getElementById('docUploadToast');
+  if(!el){el=document.createElement('div');el.id='docUploadToast';document.body.appendChild(el);}
+  el.className='doc-upload-toast '+(ok?'ok':'err');
+  el.textContent=msg;
+  setTimeout(()=>{ if(el)el.remove(); }, ok?2600:4200);
+}
+function compressMonthlyDocImage(file, maxSide=1280, quality=.78){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('อ่านไฟล์รูปภาพไม่สำเร็จ'));
+    reader.onload=()=>{
+      const raw=String(reader.result||'');
+      const img=new Image();
+      img.onload=()=>{
+        try{
+          let w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+          if(!w||!h) return resolve(raw);
+          const scale=Math.min(1, maxSide/Math.max(w,h));
+          const cw=Math.max(1, Math.round(w*scale));
+          const ch=Math.max(1, Math.round(h*scale));
+          const canvas=document.createElement('canvas');
+          canvas.width=cw;canvas.height=ch;
+          const ctx=canvas.getContext('2d');
+          ctx.drawImage(img,0,0,cw,ch);
+          let out=canvas.toDataURL('image/jpeg', quality);
+          // ถ้ายังใหญ่เกินไป ลดขนาด/คุณภาพอีกรอบ เพื่อให้ Firebase RTDB บันทึกนิ่งขึ้นบนมือถือ
+          if(out.length>900000){
+            const scale2=Math.min(1, 950/Math.max(w,h));
+            canvas.width=Math.max(1,Math.round(w*scale2));
+            canvas.height=Math.max(1,Math.round(h*scale2));
+            canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+            out=canvas.toDataURL('image/jpeg', .68);
+          }
+          resolve(out);
+        }catch(e){reject(e);}
+      };
+      img.onerror=()=>reject(new Error('ไฟล์รูปนี้เปิดอ่านไม่ได้ กรุณาลองเลือกรูปใหม่'));
+      img.src=raw;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function handleMonthlyDocPhoto(ev){
+  const input=ev&&ev.target;
+  try{
+    if(!isMonthlyDocWindowOpen()){
+      alert('ระบบเปิดให้ส่งเอกสารเฉพาะวันที่ 1-15 ของทุกเดือนเท่านั้น');
+      if(input)input.value='';
+      return;
+    }
+    const file=input?.files?.[0];
+    if(!file)return;
+    if(!file.type||!file.type.startsWith('image/')){alert('กรุณาแนบไฟล์รูปภาพเท่านั้น');return;}
+    if(file.size>12*1024*1024){alert('รูปภาพมีขนาดใหญ่เกินไป กรุณาเลือกรูปไม่เกิน 12 MB');return;}
     const me=employees.find(e=>e.id===currentUser?.id)||currentUser;
     if(!me){alert('ไม่พบข้อมูลพนักงาน');return;}
+
+    showDocUploadPopup('กำลังเตรียมรูปเอกสาร','กำลังบีบอัดรูปให้เหมาะกับการบันทึก');
+    const photoData=await compressMonthlyDocImage(file);
+    updateDocUploadPopup('กำลังบันทึกลงระบบ','กำลังส่งข้อมูลไป Firebase กรุณารอสักครู่');
+
     const monthKey=_docMonthKey();
     const id=_docId(me.id,monthKey);
     const old=getMonthlyDocSubmission(me.id,monthKey)||{};
-    const rec={...old,id,empId:me.id,empName:me.name,plate:me.plate,phone:me.phone||'',monthKey,photo:reader.result,submittedAt:Date.now(),status:'pending',reviewedAt:null,reviewedBy:null,rejectReason:''};
-    monthlyDocs=(monthlyDocs||[]).filter(x=>x&&x.id!==id).concat([rec]);
-    saveMonthlyDocs();
-    alert('✅ บันทึกหลักฐานแล้ว รอส่วนกลางตรวจสอบ');
+    const rec={...old,id,empId:me.id,empName:me.name||'',plate:me.plate||'',phone:me.phone||'',lineId:me.lineId||'',monthKey,photo:photoData,photoSize:photoData.length,submittedAt:Date.now(),status:'pending',reviewedAt:null,reviewedBy:null,rejectReason:''};
+
+    if(window.fbUpsertMonthlyDoc){
+      monthlyDocs=await window.fbUpsertMonthlyDoc(rec);
+    }else{
+      monthlyDocs=(monthlyDocs||[]).filter(x=>x&&x.id!==id).concat([rec]);
+      await saveMonthlyDocs();
+    }
+
+    // ตรวจซ้ำหลังบันทึกว่ารายการนี้ยังอยู่จริง และมีรูปจริง ก่อนแจ้งสำเร็จ
+    updateDocUploadPopup('กำลังตรวจสอบข้อมูล','ตรวจว่ารูปถูกบันทึกแล้วและรีเฟรชจะไม่หาย');
+    if(window.fbGetMonthlyDocs){
+      const latest=await window.fbGetMonthlyDocs();
+      const found=latest.find(x=>x&&x.id===id&&x.photo);
+      if(!found) throw new Error('บันทึกแล้วแต่ตรวจไม่พบรูปใน Firebase');
+      monthlyDocs=latest;
+      localStorage.setItem('ske_monthly_docs', JSON.stringify(monthlyDocs));
+    }
+
+    hideDocUploadPopup();
+    showDocUploadToast('✅ อัปโหลดสำเร็จ รอส่วนกลางตรวจสอบ', true);
     renderDashboard();
     if(document.getElementById('admin')&&!document.getElementById('admin').classList.contains('hidden'))renderAdmin();
-  };
-  reader.onerror=function(){alert('อ่านไฟล์รูปภาพไม่สำเร็จ กรุณาลองใหม่');};
-  reader.readAsDataURL(file);
+  }catch(err){
+    console.error('monthly doc upload error', err);
+    hideDocUploadPopup();
+    showDocUploadToast('❌ อัปโหลดไม่สำเร็จ: '+(err?.message||'กรุณาลองใหม่'), false);
+  }finally{
+    if(input)input.value='';
+  }
 }
 
 
@@ -5072,23 +5218,27 @@ function renderAdminDocPanel(){
     </div>`;
   }).join('');
 }
-function approveMonthlyDoc(id){
+async function approveMonthlyDoc(id){
   const r=(monthlyDocs||[]).find(x=>x&&x.id===id);
   if(!r){alert('ไม่พบรายการเอกสาร');return;}
   if(!confirm('ยืนยันอนุมัติเอกสารนี้?'))return;
-  monthlyDocs=monthlyDocs.map(x=>x&&x.id===id?{...x,status:'approved',reviewedAt:Date.now(),reviewedBy:'admin',rejectReason:''}:x);
-  saveMonthlyDocs();renderAdminDocPanel();updateAdminDocBadge();
-  if(currentUser&&r.empId===currentUser.id)renderDashboard();
-  alert('✅ อนุมัติเอกสารเรียบร้อยแล้ว');
+  try{
+    monthlyDocs=monthlyDocs.map(x=>x&&x.id===id?{...x,status:'approved',reviewedAt:Date.now(),reviewedBy:'admin',rejectReason:''}:x);
+    await saveMonthlyDocs();renderAdminDocPanel();updateAdminDocBadge();
+    if(currentUser&&r.empId===currentUser.id)renderDashboard();
+    alert('✅ อนุมัติเอกสารเรียบร้อยแล้ว');
+  }catch(e){console.error(e);alert('❌ บันทึกอนุมัติไม่สำเร็จ กรุณาลองใหม่');}
 }
-function rejectMonthlyDoc(id){
+async function rejectMonthlyDoc(id){
   const r=(monthlyDocs||[]).find(x=>x&&x.id===id);
   if(!r){alert('ไม่พบรายการเอกสาร');return;}
   const reason=prompt('ระบุเหตุผลที่ไม่อนุมัติ (เช่น รูปไม่ชัด / เอกสารไม่ครบ)')||'';
-  monthlyDocs=monthlyDocs.map(x=>x&&x.id===id?{...x,status:'rejected',reviewedAt:Date.now(),reviewedBy:'admin',rejectReason:reason}:x);
-  saveMonthlyDocs();renderAdminDocPanel();updateAdminDocBadge();
-  if(currentUser&&r.empId===currentUser.id)renderDashboard();
-  alert('❌ บันทึกไม่อนุมัติแล้ว พนักงานต้องแนบรูปใหม่');
+  try{
+    monthlyDocs=monthlyDocs.map(x=>x&&x.id===id?{...x,status:'rejected',reviewedAt:Date.now(),reviewedBy:'admin',rejectReason:reason}:x);
+    await saveMonthlyDocs();renderAdminDocPanel();updateAdminDocBadge();
+    if(currentUser&&r.empId===currentUser.id)renderDashboard();
+    alert('❌ บันทึกไม่อนุมัติแล้ว พนักงานต้องแนบรูปใหม่');
+  }catch(e){console.error(e);alert('❌ บันทึกไม่อนุมัติไม่สำเร็จ กรุณาลองใหม่');}
 }
 
 function renderAdmin(){
