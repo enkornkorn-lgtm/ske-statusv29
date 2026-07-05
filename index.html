@@ -101,48 +101,132 @@
   // หลักการใหม่: อัพโหลดข้อมูลเครื่องขึ้น Firebase ได้ "เฉพาะครั้งแรกสุด" เท่านั้น หลังจากนั้น null = ว่างจริง ให้เคารพค่าว่าง
   const _firstSync = { employees:false, vehicles:false, repairs:false, fluidLogs:false, cashRequests:false, leaveLogs:false, runLogs:false, monthlyDocs:false };
 
+  // ══ ระบบกันบันทึกหาย (Offline-safe save queue / outbox) ═══════════════════════
+  // ปัญหาเดิม: ถ้าเน็ตหลุด/อ่อนตอนกำลังบันทึก (เปลี่ยนสถานะ, อัปโหลดรูป, แจ้งซ่อม, เบิกเงิน, ลา ฯลฯ)
+  // การเขียนขึ้น Firebase อาจ "ค้างไม่มีกำหนด" หรือ "ล้มเหลวเงียบๆ" โดยไม่แจ้งเตือนและไม่มีการส่งซ้ำ
+  // ถ้าผู้ใช้ปิดแอพ/รีเฟรชระหว่างนั้น ข้อมูลที่เพิ่งเปลี่ยนจะหายไปเลย เพราะยังไม่ทันขึ้น Firebase จริง
+  // แล้วพอเปิดแอพใหม่ ตัว onValue จะดึงค่าเก่าจากเซิร์ฟเวอร์มาทับข้อมูลในเครื่องทันที ดูเหมือน "สถานะย้อนกลับ"
+  //
+  // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
+  // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
+  // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
+  const SKE_OUTBOX_KEY = 'ske_outbox_v1';
+  function _obLoad() { try { return JSON.parse(localStorage.getItem(SKE_OUTBOX_KEY) || '{}'); } catch (e) { return {}; } }
+  function _obSaveAll(ob) { try { localStorage.setItem(SKE_OUTBOX_KEY, JSON.stringify(ob)); } catch (e) {} }
+  function _obMark(key, payload) { const ob = _obLoad(); ob[key] = { payload, ts: Date.now() }; _obSaveAll(ob); _obUpdateIndicator(); }
+  function _obClear(key) { const ob = _obLoad(); if (ob[key]) { delete ob[key]; _obSaveAll(ob); _obUpdateIndicator(); } }
+  function _obHas(key) { return !!_obLoad()[key]; }
+  function _obUpdateIndicator() {
+    const n = Object.keys(_obLoad()).length;
+    if (typeof window._setSyncPending === 'function') window._setSyncPending(n > 0);
+  }
+  // ครอบ Promise ด้วย timeout กันเคส get()/set()/update() ค้างรอเฉยๆไม่มีกำหนดตอนเน็ตแย่
+  function _withTimeout(promise, ms, msg) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(msg || 'timeout')), ms))
+    ]);
+  }
+  const SKE_WRITE_TIMEOUT_MS = 15000;
+  // ส่งข้อมูลค้าง (ถ้ามี) ของทุกชุดซ้ำอีกครั้ง — เรียกตอนเน็ตกลับมา หรือทุก 8 วิ
+  function _obFlushAll() {
+    const ob = _obLoad();
+    Object.keys(ob).forEach(key => {
+      const entry = ob[key];
+      if (!entry) return;
+      if (key === 'employees' && window.fbSaveEmployees) window.fbSaveEmployees(entry.payload);
+      else if (key === 'vehicles' && window.fbSaveVehicles) window.fbSaveVehicles(entry.payload);
+      else if (key === 'repairs' && window.fbSaveRepairs) window.fbSaveRepairs(entry.payload);
+      else if (key === 'fluidLogs' && window.fbSaveFluidLogs) window.fbSaveFluidLogs(entry.payload);
+      else if (key === 'cashRequests' && window.fbSaveCashRequests) window.fbSaveCashRequests(entry.payload);
+      else if (key === 'leaveLogs' && window.fbSaveLeaveLogs) window.fbSaveLeaveLogs(entry.payload);
+    });
+  }
+  setInterval(() => { if (Object.keys(_obLoad()).length > 0) _obFlushAll(); }, 8000);
+  window._obHas = _obHas;
+
+  // ── แถบแจ้งสถานะซิงค์ข้อมูล/ออฟไลน์ (ไม่มีมาก่อน) ──────────────────────────────
+  // ให้พนักงานเห็นชัดว่า "ยังบันทึกไม่เสร็จ อย่าเพิ่งปิดแอพ" แทนที่จะปิดแอพไปเงียบๆ แล้วข้อมูลหาย
+  (function initSyncBanner(){
+    function ensureBanner(){
+      let el = document.getElementById('skeSyncBanner');
+      if (el) return el;
+      el = document.createElement('div');
+      el.id = 'skeSyncBanner';
+      el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;display:none;align-items:center;justify-content:center;gap:8px;padding:9px 14px;font-size:12.5px;font-weight:800;color:#fff;text-align:center;transition:background .2s;';
+      document.body.appendChild(el);
+      return el;
+    }
+    let offline = false, pending = false;
+    function render(){
+      const el = ensureBanner();
+      if (offline) {
+        el.style.display='flex'; el.style.background='#DC2626';
+        el.textContent = '📡 เน็ตหลุดอยู่ — ข้อมูลจะบันทึกอัตโนมัติเมื่อสัญญาณกลับมา';
+      } else if (pending) {
+        el.style.display='flex'; el.style.background='#F59E0B';
+        el.textContent = '🔄 กำลังซิงค์ข้อมูล... กรุณาอย่าเพิ่งปิดแอพ';
+      } else {
+        el.style.display='none';
+      }
+    }
+    window._setOnlineDot = function(connected){ offline = !connected; render(); };
+    window._setSyncPending = function(isPending){ pending = !!isPending; render(); };
+    if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', ()=>{ ensureBanner(); });
+    else ensureBanner();
+  })();
+
 
   // บันทึกข้อมูลพนักงานทั้งหมดขึ้น Firebase
   window.fbSaveEmployees = function(emps) {
-    set(ref(db, 'employees'), emps).catch(e => console.error('fbSave error', e));
+    _obMark('employees', emps);
+    return _withTimeout(set(ref(db, 'employees'), emps), SKE_WRITE_TIMEOUT_MS, 'timeout:employees')
+      .then(() => { _obClear('employees'); })
+      .catch(e => console.error('fbSave error', e));
   };
 
   // อัพเดทเฉพาะ "ของพนักงานคนเดียว" (ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์มาก่อนแล้วแก้เฉพาะฟิลด์ที่เปลี่ยน)
   // ป้องกันปัญหาเขียนทับทั้งรายชื่อแล้วทำสถานะของพนักงานคนอื่นที่เพิ่งอัพเดทไปหายโดยไม่ได้ตั้งใจ
+  // ครอบด้วย timeout กันเคสเน็ตช้า/หลุดกลางทางแล้วค้างรอไม่มีกำหนด (จุดที่ .catch fallback ของทุกจุดเรียกจะยังทำงานได้)
   window.fbUpdateEmployeeFields = function(empId, patch) {
-    return get(ref(db, 'employees')).then(snapshot => {
+    return _withTimeout(get(ref(db, 'employees')), SKE_WRITE_TIMEOUT_MS, 'timeout:employees-get').then(snapshot => {
       const data = normalizeEmployees(snapshot.val());
       if (!data || !data.length) return Promise.reject(new Error('no employees data'));
       const idx = data.findIndex(e => e && e.id === empId);
       if (idx === -1) return Promise.reject(new Error('employee not found'));
       const updates = {};
       Object.keys(patch).forEach(k => { updates[`employees/${idx}/${k}`] = patch[k]; });
-      return update(ref(db), updates).then(() => {
+      return _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:employees-update').then(() => {
         const merged = data.map((e, i) => i === idx ? { ...e, ...patch } : e);
         employees = merged;
         localStorage.setItem('ske_emp', JSON.stringify(employees));
+        _obClear('employees');
       });
     });
   };
 
   // บันทึกรายการรถทั้งหมดขึ้น Firebase (ทะเบียนรถเป็น "เอนทิตี้แยก" ไม่ผูกกับพนักงานอีกต่อไป)
   window.fbSaveVehicles = function(list) {
-    set(ref(db, 'vehicles'), list).catch(e => console.error('fbSaveVehicles error', e));
+    _obMark('vehicles', list);
+    return _withTimeout(set(ref(db, 'vehicles'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:vehicles')
+      .then(() => { _obClear('vehicles'); })
+      .catch(e => console.error('fbSaveVehicles error', e));
   };
 
   // อัพเดทเฉพาะ "รถคันเดียว" (ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์มาก่อนแล้วแก้เฉพาะฟิลด์ที่เปลี่ยน)
   window.fbUpdateVehicleFields = function(vehId, patch) {
-    return get(ref(db, 'vehicles')).then(snapshot => {
+    return _withTimeout(get(ref(db, 'vehicles')), SKE_WRITE_TIMEOUT_MS, 'timeout:vehicles-get').then(snapshot => {
       const data = normalizeList(snapshot.val());
       if (!data || !data.length) return Promise.reject(new Error('no vehicles data'));
       const idx = data.findIndex(v => v && v.id === vehId);
       if (idx === -1) return Promise.reject(new Error('vehicle not found'));
       const updates = {};
       Object.keys(patch).forEach(k => { updates[`vehicles/${idx}/${k}`] = patch[k]; });
-      return update(ref(db), updates).then(() => {
+      return _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:vehicles-update').then(() => {
         const merged = data.map((v, i) => i === idx ? { ...v, ...patch } : v);
         vehicles = merged;
         localStorage.setItem('ske_vehicles', JSON.stringify(vehicles));
+        _obClear('vehicles');
       });
     });
   };
@@ -169,22 +253,34 @@
 
   // บันทึกรายการแจ้งซ่อมขึ้น Firebase
   window.fbSaveRepairs = function(list) {
-    set(ref(db, 'repairs'), list).catch(e => console.error('fbSaveRepairs error', e));
+    _obMark('repairs', list);
+    return _withTimeout(set(ref(db, 'repairs'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs')
+      .then(() => { _obClear('repairs'); })
+      .catch(e => console.error('fbSaveRepairs error', e));
   };
 
   // บันทึกรายการเปลี่ยนถ่ายของเหลวขึ้น Firebase
   window.fbSaveFluidLogs = function(list) {
-    set(ref(db, 'fluidLogs'), list).catch(e => console.error('fbSaveFluidLogs error', e));
+    _obMark('fluidLogs', list);
+    return _withTimeout(set(ref(db, 'fluidLogs'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs')
+      .then(() => { _obClear('fluidLogs'); })
+      .catch(e => console.error('fbSaveFluidLogs error', e));
   };
 
   // บันทึกรายการเบิกเงินพนักงานขึ้น Firebase
   window.fbSaveCashRequests = function(list) {
-    set(ref(db, 'cashRequests'), list).catch(e => console.error('fbSaveCashRequests error', e));
+    _obMark('cashRequests', list);
+    return _withTimeout(set(ref(db, 'cashRequests'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:cashRequests')
+      .then(() => { _obClear('cashRequests'); })
+      .catch(e => console.error('fbSaveCashRequests error', e));
   };
 
   // บันทึกประวัติการลาขึ้น Firebase
   window.fbSaveLeaveLogs = function(list) {
-    set(ref(db, 'leaveLogs'), list).catch(e => console.error('fbSaveLeaveLogs error', e));
+    _obMark('leaveLogs', list);
+    return _withTimeout(set(ref(db, 'leaveLogs'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:leaveLogs')
+      .then(() => { _obClear('leaveLogs'); })
+      .catch(e => console.error('fbSaveLeaveLogs error', e));
   };
 
   // บันทึกประวัติเที่ยววิ่งงาน (บันทึกถาวร ไม่ขึ้นกับสถานะปัจจุบันของพนักงาน) ขึ้น Firebase
@@ -220,6 +316,11 @@
   let _empSynced = false;
   onValue(ref(db, 'employees'), (snapshot) => {
     const data = normalizeEmployees(snapshot.val());
+    if (_obHas('employees')) {
+      // ยังมีงานค้างส่งของเครื่องนี้อยู่ — ข้อมูลเซิร์ฟเวอร์ตอนนี้เก่ากว่าของเครื่อง อย่าเพิ่งเอามาทับ
+      // (setInterval ใน _obFlushAll จะพยายามส่งซ้ำเองจนสำเร็จ แล้วค่อยปล่อยให้ onValue รอบถัดไปทำงานตามปกติ)
+      _firstSync.employees = true; _empSynced = true; window._fbReady = true; return;
+    }
     if (data && data.length > 0) {
       // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ (ไม่เขียนทับด้วยข้อมูลเครื่อง)
       const oldEmployees = employees;
@@ -248,6 +349,7 @@
   let _vehSynced = false;
   onValue(ref(db, 'vehicles'), (snapshot) => {
     const data = normalizeList(snapshot.val());
+    if (_obHas('vehicles')) { _firstSync.vehicles = true; _vehSynced = true; return; }
     if (data) {
       vehicles = data;
       localStorage.setItem('ske_vehicles', JSON.stringify(vehicles));
@@ -288,6 +390,7 @@
   // ฟัง realtime — รายการแจ้งซ่อม
   onValue(ref(db, 'repairs'), (snapshot) => {
     const data = normalizeList(snapshot.val());
+    if (_obHas('repairs')) { _firstSync.repairs = true; return; }
     if (data) {
       repairs = data;
       localStorage.setItem('ske_repairs', JSON.stringify(repairs));
@@ -310,6 +413,7 @@
   // ฟัง realtime — รายการเปลี่ยนถ่ายของเหลว
   onValue(ref(db, 'fluidLogs'), (snapshot) => {
     const data = normalizeList(snapshot.val());
+    if (_obHas('fluidLogs')) { _firstSync.fluidLogs = true; return; }
     if (data) {
       fluidLogs = data;
       localStorage.setItem('ske_fluid', JSON.stringify(fluidLogs));
@@ -325,6 +429,7 @@
   // ฟัง realtime — รายการเบิกเงินพนักงาน
   onValue(ref(db, 'cashRequests'), (snapshot) => {
     const data = normalizeList(snapshot.val());
+    if (_obHas('cashRequests')) { _firstSync.cashRequests = true; return; }
     if (data) {
       cashRequests = data;
       localStorage.setItem('ske_cash', JSON.stringify(cashRequests));
@@ -343,6 +448,7 @@
   // ฟัง realtime — ประวัติการลา
   onValue(ref(db, 'leaveLogs'), (snapshot) => {
     const data = normalizeList(snapshot.val());
+    if (_obHas('leaveLogs')) { _firstSync.leaveLogs = true; return; }
     if (data) {
       leaveLogs = data;
       localStorage.setItem('ske_leaveLogs', JSON.stringify(leaveLogs));
@@ -377,9 +483,12 @@
   // ── เฝ้าระวังสถานะการเชื่อมต่อ — ดึงข้อมูลล่าสุดทันทีทุกครั้งที่กลับมาออนไลน์ ──
   // ทำให้แอพ real-time ต่อเนื่อง แม้เน็ตหลุด/สลับ WiFi-มือถือ/เครื่องพักการเชื่อมต่อ
   let _wasConnected = false;
+  window._fbConnected = false;
   onValue(ref(db, '.info/connected'), (snap) => {
     const connected = snap.val() === true;
+    window._fbConnected = connected;
     if (connected && !_wasConnected) {
+      _obFlushAll();
       // เพิ่งกลับมาเชื่อมต่อได้ → sync ข้อมูลทุกชุดทันที (onValue จะ replay ให้เองอยู่แล้ว แต่ get ย้ำให้ชัวร์+เร็ว)
       get(ref(db, 'employees')).then(s => {
         const d = normalizeList(s.val());
@@ -485,12 +594,16 @@
 
   // อัปเดตเอกสารรายคนแบบปลอดภัย: ดึงข้อมูลล่าสุดจาก Firebase ก่อน แล้วแทนเฉพาะรายการของคน/เดือนนั้น
   // ป้องกันข้อมูลหายเวลาเครื่องอื่นเพิ่งส่ง/อนุมัติพร้อมกัน และป้องกัน localStorage เก่าเขียนทับข้อมูลใหม่
+  // ครอบด้วย timeout กันเคสเน็ตช้า/หลุดกลางทาง แล้ว get()/set() ค้างรอเฉยๆไม่มีกำหนด (ใช้ _withTimeout ตัวกลางร่วมกับฟังก์ชันอื่นๆ)
+  // (ถ้าไม่ครอบ ผู้ใช้จะเห็นสปินเนอร์ค้างตลอดไป แล้วมักปิดแอพทิ้งเอง ทำให้ข้อมูลที่พึ่งส่งหายไปจริงๆ
+  //  เพราะยังไม่ทันบันทึกถึง Firebase — พอเปิดแอพใหม่เลยเห็นสถานะเก่าเหมือนไม่เคยส่ง)
   window.fbUpsertMonthlyDoc = async function(rec) {
     if (!rec || !rec.id) throw new Error('invalid monthly doc record');
-    const snap = await get(ref(db, 'monthlyDocs'));
+    if (window._fbConnected === false) throw new Error('การเชื่อมต่ออินเทอร์เน็ตหลุดอยู่ กรุณาเช็คสัญญาณแล้วลองใหม่');
+    const snap = await _withTimeout(get(ref(db, 'monthlyDocs')), 15000, 'เชื่อมต่อ Firebase ช้าเกินไป (ดึงข้อมูลไม่สำเร็จ) กรุณาลองใหม่เมื่อสัญญาณเน็ตดีขึ้น');
     const serverList = normalizeList(snap.val()) || [];
     const next = serverList.filter(x => x && x.id !== rec.id).concat([rec]);
-    await set(ref(db, 'monthlyDocs'), next);
+    await _withTimeout(set(ref(db, 'monthlyDocs'), next), 20000, 'บันทึกไม่สำเร็จเพราะเน็ตช้า/หลุดระหว่างส่ง กรุณาลองส่งใหม่อีกครั้ง (รูปยังไม่ถูกบันทึก)');
     window.monthlyDocs = next;
     localStorage.setItem('ske_monthly_docs', JSON.stringify(next));
     return next;
@@ -4410,6 +4523,11 @@ async function handleMonthlyDocPhoto(ev){
     if(file.size>12*1024*1024){alert('รูปภาพมีขนาดใหญ่เกินไป กรุณาเลือกรูปไม่เกิน 12 MB');return;}
     const me=employees.find(e=>e.id===currentUser?.id)||currentUser;
     if(!me){alert('ไม่พบข้อมูลพนักงาน');return;}
+    if(window._fbConnected===false){
+      alert('⚠️ ตอนนี้เน็ตหลุดอยู่ กรุณาเช็คสัญญาณอินเทอร์เน็ตก่อนส่งเอกสาร');
+      if(input)input.value='';
+      return;
+    }
 
     showDocUploadPopup('กำลังเตรียมรูปเอกสาร','กำลังบีบอัดรูปให้เหมาะกับการบันทึก');
     const photoData=await compressMonthlyDocImage(file);
