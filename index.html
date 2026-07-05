@@ -4737,12 +4737,33 @@ function buildSummaryHTML(){
 function buildLeaveHTML(){
   const isViewer=adminRole==='viewer';
   const onLeaveList=employees.filter(e=>e.onLeave);
+  const pending=onLeaveList.filter(e=>!e.leaveApproval||e.leaveApproval==='pending').length;
+  const approved=onLeaveList.filter(e=>e.leaveApproval==='approved').length;
+  // แสดงเฉพาะรายการที่ "รออนุมัติ" ในหน้านี้เท่านั้น
+  // ส่วนที่อนุมัติแล้วให้ย้ายไปอยู่ในหน้า "ประวัติการลา" แทน เพื่อไม่ให้ปนกับรายการที่ต้องพิจารณา
+  const visibleList=onLeaveList.filter(e=>e.leaveApproval!=='approved');
   if(!onLeaveList.length){
     return '<div class="empty-state"><div class="empty-icon">'+skeIcon('leave')+'</div><div class="empty-text">ไม่มีพนักงานลาในขณะนี้</div></div>';
   }
-  onLeaveList.sort((a,b)=>(b.updatedAt||'')>(a.updatedAt||'')?1:-1);
-  const pending=onLeaveList.filter(e=>!e.leaveApproval||e.leaveApproval==='pending').length;
-  const approved=onLeaveList.filter(e=>e.leaveApproval==='approved').length;
+  if(!visibleList.length){
+    return `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div style="background:#fff;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #E8EAF0;">
+        <div style="font-size:22px;font-weight:900;color:#475569;">${onLeaveList.length}</div>
+        <div style="font-size:10px;color:#888;margin-top:2px;">${skeIcon('leave')} ลาทั้งหมด</div>
+      </div>
+      <div style="background:#fff;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #E8EAF0;">
+        <div style="font-size:22px;font-weight:900;color:#1E90D6;">0</div>
+        <div style="font-size:10px;color:#888;margin-top:2px;">🕐 รออนุมัติ</div>
+      </div>
+      <div style="background:#F0FDF4;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #86EFAC;">
+        <div style="font-size:22px;font-weight:900;color:#10B981;">${approved}</div>
+        <div style="font-size:10px;color:#888;margin-top:2px;">✅ อนุมัติแล้ว</div>
+      </div>
+    </div>
+    <div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">ไม่มีรายการรออนุมัติ<br><span style="font-size:11px;color:#aaa;">รายการที่อนุมัติแล้วถูกย้ายไปที่ "ดูประวัติการลา"</span></div></div>`;
+  }
+  visibleList.sort((a,b)=>(b.updatedAt||'')>(a.updatedAt||'')?1:-1);
   let html=`
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
     <div style="background:#fff;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #E8EAF0;">
@@ -4759,7 +4780,7 @@ function buildLeaveHTML(){
     </div>
   </div>
   <div style="display:flex;flex-direction:column;gap:8px;">
-    ${onLeaveList.map(e=>{
+    ${visibleList.map(e=>{
       const pill=leaveApprovalPill(e);
       return`<div class="card" style="display:flex;flex-direction:column;gap:8px;padding:12px;">
         <div style="display:flex;align-items:flex-start;gap:10px;">
