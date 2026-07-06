@@ -96,6 +96,32 @@
   function normalizeEmployees(data) { return normalizeList(data); }
   window._normalizeEmployees = normalizeEmployees;
 
+  // หา "คีย์จริง" ของรายการบน Firebase ก่อนเขียนแบบเจาะจงตำแหน่ง (กันแพตช์ลงผิดคน)
+  // ปัญหา: Firebase เก็บ array เป็น object {0:..,1:..} — ถ้าบนเซิร์ฟเวอร์มีช่องว่าง (จากการลบ/เขียนพลาดในอดีต)
+  // แล้วฝั่งเครื่อง normalize บีบลำดับใหม่ ตำแหน่งจะคลาดกัน → แพตช์ "จังหวัด/สถานะ" ไปลงคนข้างๆแทน
+  // วิธีนี้: เช็คตำแหน่งที่คาดไว้ก่อน โดยอ่านแค่ฟิลด์ id ฟิลด์เดียว (เบามาก ไม่กี่ไบต์ แม้เน็ตอ่อนก็เร็ว)
+  // ถ้าตรง → ใช้เลย ถ้าไม่ตรง/อ่านไม่ได้ → โหลดชุดดิบจากเซิร์ฟเวอร์แล้วไล่หาคีย์จริงจาก id (ไม่ผ่าน normalize เพื่อไม่ให้ index เพี้ยน)
+  async function _findServerKey(path, itemId, localList) {
+    const localIdx = Array.isArray(localList) ? localList.findIndex(x => x && x.id === itemId) : -1;
+    if (localIdx !== -1) {
+      try {
+        const s = await _withTimeout(get(ref(db, path + '/' + localIdx + '/id')), 8000, 'timeout:verify-id');
+        if (s.val() === itemId) return String(localIdx);
+      } catch (e) { /* เช็คเร็วไม่ผ่าน — ตกไปหาจากชุดเต็มด้านล่าง */ }
+    }
+    const snap = await _withTimeout(get(ref(db, path)), SKE_WRITE_TIMEOUT_MS, 'timeout:' + path + '-get');
+    const raw = snap.val();
+    if (!raw) return null;
+    if (Array.isArray(raw)) {
+      for (let i = 0; i < raw.length; i++) if (raw[i] && raw[i].id === itemId) return String(i);
+      return null;
+    }
+    if (typeof raw === 'object') {
+      for (const k of Object.keys(raw)) if (raw[k] && raw[k].id === itemId) return k;
+    }
+    return null;
+  }
+
   // ติดตามว่าแต่ละชุดข้อมูล sync ครั้งแรกเสร็จหรือยัง — ใช้กันบั๊ก "ข้อมูลที่ลบไปแล้วฟื้นคืนชีพ"
   // (เดิม: พอลบรายการจนหมด ข้อมูลเป็น null → listener เข้าใจผิดว่า Firebase ว่าง แล้วอัพโหลดข้อมูลเก่าในเครื่องกลับขึ้นไป)
   // หลักการใหม่: อัพโหลดข้อมูลเครื่องขึ้น Firebase ได้ "เฉพาะครั้งแรกสุด" เท่านั้น หลังจากนั้น null = ว่างจริง ให้เคารพค่าว่าง
@@ -189,23 +215,15 @@
   // อัพเดทเฉพาะ "ของพนักงานคนเดียว" (ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์มาก่อนแล้วแก้เฉพาะฟิลด์ที่เปลี่ยน)
   // ป้องกันปัญหาเขียนทับทั้งรายชื่อแล้วทำสถานะของพนักงานคนอื่นที่เพิ่งอัพเดทไปหายโดยไม่ได้ตั้งใจ
   // ครอบด้วย timeout กันเคสเน็ตช้า/หลุดกลางทางแล้วค้างรอไม่มีกำหนด (จุดที่ .catch fallback ของทุกจุดเรียกจะยังทำงานได้)
-  window.fbUpdateEmployeeFields = function(empId, patch) {
-    // ใช้ข้อมูลในเครื่องก่อนถ้าเจอพนักงานคนนี้อยู่แล้ว (sync สดหรือ cache เก่าก็ได้) — ลดการรอโหลดใหม่ทั้งก้อนเวลาเน็ตแย่
-    const localIdx = Array.isArray(employees) ? employees.findIndex(e => e && e.id === empId) : -1;
-    const dataP = localIdx !== -1 ? Promise.resolve(employees) : _withTimeout(get(ref(db, 'employees')), SKE_WRITE_TIMEOUT_MS, 'timeout:employees-get').then(s => normalizeEmployees(s.val()));
-    return dataP.then(data => {
-      if (!data || !data.length) return Promise.reject(new Error('no employees data'));
-      const idx = data.findIndex(e => e && e.id === empId);
-      if (idx === -1) return Promise.reject(new Error('employee not found'));
-      const updates = {};
-      Object.keys(patch).forEach(k => { updates[`employees/${idx}/${k}`] = patch[k]; });
-      return _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:employees-update').then(() => {
-        const merged = data.map((e, i) => i === idx ? { ...e, ...patch } : e);
-        employees = merged;
-        localStorage.setItem('ske_emp', JSON.stringify(employees));
-        _obClear('employees');
-      });
-    });
+  window.fbUpdateEmployeeFields = async function(empId, patch) {
+    const key = await _findServerKey('employees', empId, employees);
+    if (key == null) throw new Error('employee not found');
+    const updates = {};
+    Object.keys(patch).forEach(k => { updates[`employees/${key}/${k}`] = patch[k]; });
+    await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:employees-update');
+    employees = (employees || []).map(e => e && e.id === empId ? { ...e, ...patch } : e);
+    localStorage.setItem('ske_emp', JSON.stringify(employees));
+    _obClear('employees');
   };
 
   // บันทึกรายการรถทั้งหมดขึ้น Firebase (ทะเบียนรถเป็น "เอนทิตี้แยก" ไม่ผูกกับพนักงานอีกต่อไป)
@@ -217,22 +235,15 @@
   };
 
   // อัพเดทเฉพาะ "รถคันเดียว" (ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์มาก่อนแล้วแก้เฉพาะฟิลด์ที่เปลี่ยน)
-  window.fbUpdateVehicleFields = function(vehId, patch) {
-    const localIdx = Array.isArray(vehicles) ? vehicles.findIndex(v => v && v.id === vehId) : -1;
-    const dataP = localIdx !== -1 ? Promise.resolve(vehicles) : _withTimeout(get(ref(db, 'vehicles')), SKE_WRITE_TIMEOUT_MS, 'timeout:vehicles-get').then(s => normalizeList(s.val()));
-    return dataP.then(data => {
-      if (!data || !data.length) return Promise.reject(new Error('no vehicles data'));
-      const idx = data.findIndex(v => v && v.id === vehId);
-      if (idx === -1) return Promise.reject(new Error('vehicle not found'));
-      const updates = {};
-      Object.keys(patch).forEach(k => { updates[`vehicles/${idx}/${k}`] = patch[k]; });
-      return _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:vehicles-update').then(() => {
-        const merged = data.map((v, i) => i === idx ? { ...v, ...patch } : v);
-        vehicles = merged;
-        localStorage.setItem('ske_vehicles', JSON.stringify(vehicles));
-        _obClear('vehicles');
-      });
-    });
+  window.fbUpdateVehicleFields = async function(vehId, patch) {
+    const key = await _findServerKey('vehicles', vehId, vehicles);
+    if (key == null) throw new Error('vehicle not found');
+    const updates = {};
+    Object.keys(patch).forEach(k => { updates[`vehicles/${key}/${k}`] = patch[k]; });
+    await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:vehicles-update');
+    vehicles = (vehicles || []).map(v => v && v.id === vehId ? { ...v, ...patch } : v);
+    localStorage.setItem('ske_vehicles', JSON.stringify(vehicles));
+    _obClear('vehicles');
   };
 
   // บันทึก admin password (รหัสผู้ดูแล — สิทธิ์เต็ม) — เก็บเป็น SHA-256 hash เท่านั้น ไม่ส่ง/เก็บ plain text ขึ้น Firebase อีกต่อไป
@@ -266,22 +277,15 @@
   // อัพเดทเฉพาะ "รายการแจ้งซ่อมรายการเดียว" (ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์มาก่อนแล้วแก้เฉพาะฟิลด์ที่เปลี่ยน)
   // แก้ปัญหาเดิม: repairs เก็บรูปแนบสะสมไว้ 12 เดือน พอมีคนเดียวเปลี่ยน 1 รายการ (เช่นแนบรูปเพิ่ม)
   // ระบบเดิมจะอัพโหลด "ประวัติทั้งหมดของทุกคน" ซ้ำทุกครั้ง ทำให้ช้ามากบนเน็ตมือถือ และเสี่ยง timeout จนบันทึกไม่สำเร็จแบบเงียบๆ
-  window.fbUpdateRepairFields = function(repairId, patch) {
-    const localIdx = Array.isArray(repairs) ? repairs.findIndex(r => r && r.id === repairId) : -1;
-    const dataP = localIdx !== -1 ? Promise.resolve(repairs) : _withTimeout(get(ref(db, 'repairs')), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs-get').then(s => normalizeList(s.val()));
-    return dataP.then(data => {
-      if (!data || !data.length) return Promise.reject(new Error('no repairs data'));
-      const idx = data.findIndex(r => r && r.id === repairId);
-      if (idx === -1) return Promise.reject(new Error('repair not found'));
-      const updates = {};
-      Object.keys(patch).forEach(k => { updates[`repairs/${idx}/${k}`] = patch[k]; });
-      return _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs-update').then(() => {
-        const merged = data.map((r, i) => i === idx ? { ...r, ...patch } : r);
-        repairs = merged;
-        localStorage.setItem('ske_repairs', JSON.stringify(repairs));
-        _obClear('repairs');
-      });
-    });
+  window.fbUpdateRepairFields = async function(repairId, patch) {
+    const key = await _findServerKey('repairs', repairId, repairs);
+    if (key == null) throw new Error('repair not found');
+    const updates = {};
+    Object.keys(patch).forEach(k => { updates[`repairs/${key}/${k}`] = patch[k]; });
+    await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs-update');
+    repairs = (repairs || []).map(r => r && r.id === repairId ? { ...r, ...patch } : r);
+    localStorage.setItem('ske_repairs', JSON.stringify(repairs));
+    _obClear('repairs');
   };
 
   // บันทึกรายการเปลี่ยนถ่ายของเหลวขึ้น Firebase
@@ -293,22 +297,15 @@
   };
 
   // อัพเดทเฉพาะ "รายการเปลี่ยนถ่ายของเหลวรายการเดียว" — เหตุผลเดียวกับ fbUpdateRepairFields ด้านบน
-  window.fbUpdateFluidFields = function(fluidId, patch) {
-    const localIdx = Array.isArray(fluidLogs) ? fluidLogs.findIndex(f => f && f.id === fluidId) : -1;
-    const dataP = localIdx !== -1 ? Promise.resolve(fluidLogs) : _withTimeout(get(ref(db, 'fluidLogs')), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs-get').then(s => normalizeList(s.val()));
-    return dataP.then(data => {
-      if (!data || !data.length) return Promise.reject(new Error('no fluidLogs data'));
-      const idx = data.findIndex(f => f && f.id === fluidId);
-      if (idx === -1) return Promise.reject(new Error('fluid log not found'));
-      const updates = {};
-      Object.keys(patch).forEach(k => { updates[`fluidLogs/${idx}/${k}`] = patch[k]; });
-      return _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs-update').then(() => {
-        const merged = data.map((f, i) => i === idx ? { ...f, ...patch } : f);
-        fluidLogs = merged;
-        localStorage.setItem('ske_fluid', JSON.stringify(fluidLogs));
-        _obClear('fluidLogs');
-      });
-    });
+  window.fbUpdateFluidFields = async function(fluidId, patch) {
+    const key = await _findServerKey('fluidLogs', fluidId, fluidLogs);
+    if (key == null) throw new Error('fluid log not found');
+    const updates = {};
+    Object.keys(patch).forEach(k => { updates[`fluidLogs/${key}/${k}`] = patch[k]; });
+    await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs-update');
+    fluidLogs = (fluidLogs || []).map(f => f && f.id === fluidId ? { ...f, ...patch } : f);
+    localStorage.setItem('ske_fluid', JSON.stringify(fluidLogs));
+    _obClear('fluidLogs');
   };
 
   // บันทึกรายการเบิกเงินพนักงานขึ้น Firebase
@@ -644,45 +641,36 @@
   window.fbUpsertMonthlyDoc = async function(rec) {
     if (!rec || !rec.id) throw new Error('invalid monthly doc record');
     if (window._fbConnected === false) throw new Error('การเชื่อมต่ออินเทอร์เน็ตหลุดอยู่ กรุณาเช็คสัญญาณแล้วลองใหม่');
-    // ถ้าเจอรายการของตัวเอง (เดือนนี้) อยู่ในเครื่องแล้ว แปลว่าเป็นการ "ส่งซ้ำ/แก้ไขของเดิม" — ใช้ index เดิมได้เลยไม่ต้องรอโหลดใหม่
-    // แต่ถ้ายังไม่เคยมี (ส่งครั้งแรกของเดือน) ต้องเช็คกับเซิร์ฟเวอร์ก่อนเสมอ กันชนกับพนักงานคนอื่นที่ส่งพร้อมกันพอดี
-    const localIdx = Array.isArray(monthlyDocs) ? monthlyDocs.findIndex(x => x && x.id === rec.id) : -1;
-    let serverList, idx;
-    if (localIdx !== -1) {
-      serverList = monthlyDocs;
-      idx = localIdx;
-    } else {
+    // หา "คีย์จริง" ของรายการนี้บนเซิร์ฟเวอร์ก่อนเสมอ (ยืนยันด้วย id กันเขียนทับรายการของคนอื่น)
+    let key = await _findServerKey('monthlyDocs', rec.id, monthlyDocs);
+    if (key == null) {
+      // ยังไม่เคยส่งเดือนนี้ — ต้องหา slot ว่างต่อท้ายจากข้อมูลดิบบนเซิร์ฟเวอร์ (ไม่ผ่าน normalize กัน index เพี้ยน)
       const snap = await _withTimeout(get(ref(db, 'monthlyDocs')), 25000, 'เชื่อมต่อ Firebase ช้าเกินไป (ดึงข้อมูลไม่สำเร็จ) กรุณาลองใหม่เมื่อสัญญาณเน็ตดีขึ้น');
-      serverList = normalizeList(snap.val()) || [];
-      idx = serverList.findIndex(x => x && x.id === rec.id);
+      const raw = snap.val();
+      if (!raw) key = '0';
+      else if (Array.isArray(raw)) key = String(raw.length);
+      else {
+        const nums = Object.keys(raw).map(k => parseInt(k, 10)).filter(n => !isNaN(n));
+        key = String(nums.length ? Math.max(...nums) + 1 : 0);
+      }
     }
-    const targetIdx = idx === -1 ? serverList.length : idx;
-    await _withTimeout(update(ref(db), { [`monthlyDocs/${targetIdx}`]: rec }), 30000, 'บันทึกไม่สำเร็จเพราะเน็ตช้า/หลุดระหว่างส่ง กรุณาลองส่งใหม่อีกครั้ง (รูปยังไม่ถูกบันทึก)');
-    const next = idx === -1 ? serverList.concat([rec]) : serverList.map((x, i) => i === idx ? rec : x);
-    monthlyDocs = next;
-    localStorage.setItem('ske_monthly_docs', JSON.stringify(next));
-    return next;
+    await _withTimeout(update(ref(db), { [`monthlyDocs/${key}`]: rec }), 30000, 'บันทึกไม่สำเร็จเพราะเน็ตช้า/หลุดระหว่างส่ง กรุณาลองส่งใหม่อีกครั้ง (รูปยังไม่ถูกบันทึก)');
+    const exists = (monthlyDocs || []).some(x => x && x.id === rec.id);
+    monthlyDocs = exists ? monthlyDocs.map(x => x && x.id === rec.id ? rec : x) : (monthlyDocs || []).concat([rec]);
+    localStorage.setItem('ske_monthly_docs', JSON.stringify(monthlyDocs));
+    return monthlyDocs;
   };
 
 
-  // อัพเดทเฉพาะฟิลด์ของเอกสารรายการเดียว (เช่น อนุมัติ/ไม่อนุมัติ) — ใช้ข้อมูลในเครื่องที่ sync ไว้แล้วเป็นหลัก ไม่ต้องดึงทั้งก้อนใหม่
-  window.fbUpdateMonthlyDocFields = function(docId, patch) {
-    // ใช้ข้อมูลในเครื่องก่อนเสมอถ้าเจอรายการนี้อยู่แล้ว (ไม่ว่าจะมาจาก realtime sync หรือ cache เก่าใน localStorage ตอนเปิดแอป)
-    // เพราะแค่แพตช์ไม่กี่ฟิลด์ ไม่จำเป็นต้องรอซิงก์สดทั้งชุดก่อนเสมอไป — ช่วยเคสเน็ตแย่มากจนยังไม่เคยซิงก์สำเร็จเลยในเซสชันนี้
-    const localIdx = Array.isArray(monthlyDocs) ? monthlyDocs.findIndex(d => d && d.id === docId) : -1;
-    const dataP = localIdx !== -1 ? Promise.resolve(monthlyDocs) : _withTimeout(get(ref(db, 'monthlyDocs')), SKE_WRITE_TIMEOUT_MS, 'timeout:monthlyDocs-get').then(s => normalizeList(s.val()));
-    return dataP.then(data => {
-      if (!data || !data.length) return Promise.reject(new Error('no monthlyDocs data'));
-      const idx = data.findIndex(d => d && d.id === docId);
-      if (idx === -1) return Promise.reject(new Error('monthly doc not found'));
-      const updates = {};
-      Object.keys(patch).forEach(k => { updates[`monthlyDocs/${idx}/${k}`] = patch[k]; });
-      return _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:monthlyDocs-update').then(() => {
-        const merged = data.map((d, i) => i === idx ? { ...d, ...patch } : d);
-        monthlyDocs = merged;
-        localStorage.setItem('ske_monthly_docs', JSON.stringify(monthlyDocs));
-      });
-    });
+  // อัพเดทเฉพาะฟิลด์ของเอกสารรายการเดียว (เช่น อนุมัติ/ไม่อนุมัติ) — ยืนยันคีย์จริงบนเซิร์ฟเวอร์ก่อนเขียนเสมอ กันแพตช์ลงผิดรายการ
+  window.fbUpdateMonthlyDocFields = async function(docId, patch) {
+    const key = await _findServerKey('monthlyDocs', docId, monthlyDocs);
+    if (key == null) throw new Error('monthly doc not found');
+    const updates = {};
+    Object.keys(patch).forEach(k => { updates[`monthlyDocs/${key}/${k}`] = patch[k]; });
+    await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:monthlyDocs-update');
+    monthlyDocs = (monthlyDocs || []).map(d => d && d.id === docId ? { ...d, ...patch } : d);
+    localStorage.setItem('ske_monthly_docs', JSON.stringify(monthlyDocs));
   };
 
   window.fbGetMonthlyDocs = async function() {
