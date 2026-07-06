@@ -3295,7 +3295,7 @@ async function addNewRepairPhotos(input){
       _repNewPhotos.push(dataUrl);
     }
     renderNewRepairPhotos();
-  }catch(e){console.error('compress error',e);alert('❌ เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');}
+  }catch(e){console.error('compress error',e);alert('❌ '+((e&&e.message&&/[ก-๙]/.test(e.message))?e.message:'เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง'));}
 }
 function delNewRepairPhoto(idx){
   _repNewPhotos.splice(idx,1);
@@ -3487,52 +3487,56 @@ function saveRepairReply(id){
 }
 
 // ย่อ + บีบอัดรูปเป็น base64 (ด้านยาวสุด 900px, JPEG คุณภาพ 0.6) ก่อนเก็บลง DB
-async function _compressImage(file,maxDim,quality){
-  return new Promise((resolve,reject)=>{
-    // รองรับเฉพาะไฟล์รูปภาพ
-    if(!file || !file.type.startsWith('image/')){
-      reject(new Error('invalid image file'));
-      return;
+// ── ตัวช่วยอ่านรูปแบบทนทาน (ใช้ร่วมกันทุกจุดอัปโหลดรูป) ──
+// ปัญหาที่เจอบ่อย: มือถือ Samsung/รุ่นใหม่ตั้งค่ากล้องเป็น "รูปภาพประสิทธิภาพสูง" → ได้ไฟล์ HEIC/HEIF
+// ซึ่ง Chrome บน Android เปิดอ่านไม่ได้เลย ระบบบีบอัดรูปจึงล้มเหลวทุกครั้งที่พนักงานเลือกรูปพวกนี้
+function _isHeicFile(file){
+  const t=((file&&file.type)||'').toLowerCase();
+  const n=((file&&file.name)||'').toLowerCase();
+  return t.includes('heic')||t.includes('heif')||/\.hei[cf]$/.test(n);
+}
+const HEIC_HELP_MSG='รูปนี้เป็นไฟล์ HEIC/HEIF ซึ่งเบราว์เซอร์เปิดไม่ได้\n\nวิธีแก้ (เลือกอย่างใดอย่างหนึ่ง):\n1) ส่งรูปนี้เข้า LINE (ส่งหาตัวเองหรือ Keep) แล้วเซฟกลับมาเลือกใหม่ — LINE จะแปลงเป็น JPEG ให้อัตโนมัติ\n2) เข้าตั้งค่ากล้องมือถือ ปิดโหมด "รูปภาพประสิทธิภาพสูง (HEIF)" แล้วถ่ายรูปใหม่';
+// decode รูปเป็นสิ่งที่วาดลง canvas ได้ — ลอง createImageBitmap ก่อน (ทนกว่าและประหยัดแรมกว่ากับรูปใหญ่ๆ)
+// ถ้าไม่ได้ค่อย fallback เป็นวิธีเดิม (FileReader + <img>) แล้วถ้ายังไม่ได้อีกจึงแจ้ง error ที่บอกวิธีแก้จริงๆ
+async function _decodeImage(file){
+  try{
+    if(window.createImageBitmap){
+      const bmp=await createImageBitmap(file);
+      if(bmp&&bmp.width&&bmp.height)return{src:bmp,w:bmp.width,h:bmp.height,close:()=>{try{bmp.close();}catch(e){}}};
+      try{bmp&&bmp.close&&bmp.close();}catch(e){}
     }
-
-    const reader=new FileReader();
-    reader.onload=e=>{
-      const img=new Image();
-
-      img.onload=()=>{
-        try{
-          let w=img.naturalWidth || img.width;
-          let h=img.naturalHeight || img.height;
-
-          if(w>h){
-            if(w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; }
-          }else{
-            if(h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; }
-          }
-
-          const cv=document.createElement('canvas');
-          cv.width=w;
-          cv.height=h;
-
-          const ctx=cv.getContext('2d');
-          ctx.drawImage(img,0,0,w,h);
-
-          resolve(cv.toDataURL('image/jpeg',quality || 0.7));
-        }catch(err){
-          reject(err);
-        }
-      };
-
-      img.onerror=()=>{
-        reject(new Error('image decode failed'));
-      };
-
-      img.src=e.target.result;
-    };
-
-    reader.onerror=()=>reject(new Error('file read error'));
-    reader.readAsDataURL(file);
+  }catch(e){/* ตกไปวิธีถัดไปด้านล่าง */}
+  const dataUrl=await new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onerror=()=>rej(new Error('อ่านไฟล์รูปภาพไม่สำเร็จ กรุณาลองเลือกรูปใหม่'));
+    r.onload=()=>res(String(r.result||''));
+    r.readAsDataURL(file);
   });
+  const img=await new Promise((res,rej)=>{
+    const im=new Image();
+    im.onload=()=>res(im);
+    im.onerror=()=>rej(new Error(_isHeicFile(file)?HEIC_HELP_MSG:'ไฟล์รูปนี้เปิดอ่านไม่ได้ กรุณาลองเลือกรูปใหม่'));
+    im.src=dataUrl;
+  });
+  return{src:img,w:img.naturalWidth||img.width,h:img.naturalHeight||img.height,close:()=>{}};
+}
+
+async function _compressImage(file,maxDim,quality){
+  // รองรับเฉพาะไฟล์รูปภาพ (บาง gallery picker ให้ type ว่างมา — ปล่อยผ่านให้ decoder ตัดสินเอง)
+  if(!file||(file.type&&!file.type.startsWith('image/'))){
+    throw new Error('ไฟล์ที่เลือกไม่ใช่รูปภาพ กรุณาเลือกรูปภาพเท่านั้น');
+  }
+  const d=await _decodeImage(file);
+  try{
+    let w=d.w,h=d.h;
+    if(!w||!h)throw new Error('ไฟล์รูปนี้เปิดอ่านไม่ได้ กรุณาลองเลือกรูปใหม่');
+    if(w>h){ if(w>maxDim){h=Math.round(h*maxDim/w);w=maxDim;} }
+    else{ if(h>maxDim){w=Math.round(w*maxDim/h);h=maxDim;} }
+    const cv=document.createElement('canvas');
+    cv.width=w;cv.height=h;
+    cv.getContext('2d').drawImage(d.src,0,0,w,h);
+    return cv.toDataURL('image/jpeg',quality||0.7);
+  }finally{d.close();}
 }
 
 // แนบรูปเข้ารายการซ่อม (สูงสุด 3 รูป) — ย่อก่อนเก็บแล้ว sync ขึ้น Firebase
@@ -3565,7 +3569,7 @@ async function addRepairPhotos(id,input){
   }catch(e){
     console.error('compress error',e);
     hideDocUploadPopup();
-    alert('❌ เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
+    alert('❌ '+((e&&e.message&&/[ก-๙]/.test(e.message))?e.message:'เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง'));
   }
 }
 
@@ -3773,7 +3777,7 @@ async function addNewFluidPhotos(input){
       _fluNewPhotos.push(dataUrl);
     }
     renderNewFluidPhotos();
-  }catch(e){console.error('compress error',e);alert('❌ เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');}
+  }catch(e){console.error('compress error',e);alert('❌ '+((e&&e.message&&/[ก-๙]/.test(e.message))?e.message:'เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง'));}
 }
 function delNewFluidPhoto(idx){_fluNewPhotos.splice(idx,1);renderNewFluidPhotos();}
 function renderNewFluidPhotos(){
@@ -4605,41 +4609,27 @@ function showDocUploadToast(msg,ok=true){
   el.textContent=msg;
   setTimeout(()=>{ if(el)el.remove(); }, ok?2600:4200);
 }
-function compressMonthlyDocImage(file, maxSide=1280, quality=.78){
-  return new Promise((resolve,reject)=>{
-    const reader=new FileReader();
-    reader.onerror=()=>reject(new Error('อ่านไฟล์รูปภาพไม่สำเร็จ'));
-    reader.onload=()=>{
-      const raw=String(reader.result||'');
-      const img=new Image();
-      img.onload=()=>{
-        try{
-          let w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
-          if(!w||!h) return resolve(raw);
-          const scale=Math.min(1, maxSide/Math.max(w,h));
-          const cw=Math.max(1, Math.round(w*scale));
-          const ch=Math.max(1, Math.round(h*scale));
-          const canvas=document.createElement('canvas');
-          canvas.width=cw;canvas.height=ch;
-          const ctx=canvas.getContext('2d');
-          ctx.drawImage(img,0,0,cw,ch);
-          let out=canvas.toDataURL('image/jpeg', quality);
-          // ถ้ายังใหญ่เกินไป ลดขนาด/คุณภาพอีกรอบ เพื่อให้ Firebase RTDB บันทึกนิ่งขึ้นบนมือถือ
-          if(out.length>900000){
-            const scale2=Math.min(1, 950/Math.max(w,h));
-            canvas.width=Math.max(1,Math.round(w*scale2));
-            canvas.height=Math.max(1,Math.round(h*scale2));
-            canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-            out=canvas.toDataURL('image/jpeg', .68);
-          }
-          resolve(out);
-        }catch(e){reject(e);}
-      };
-      img.onerror=()=>reject(new Error('ไฟล์รูปนี้เปิดอ่านไม่ได้ กรุณาลองเลือกรูปใหม่'));
-      img.src=raw;
-    };
-    reader.readAsDataURL(file);
-  });
+async function compressMonthlyDocImage(file, maxSide=1280, quality=.78){
+  const d=await _decodeImage(file);
+  try{
+    const w=d.w,h=d.h;
+    if(!w||!h)throw new Error('ไฟล์รูปนี้เปิดอ่านไม่ได้ กรุณาลองเลือกรูปใหม่');
+    const scale=Math.min(1, maxSide/Math.max(w,h));
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.max(1,Math.round(w*scale));
+    canvas.height=Math.max(1,Math.round(h*scale));
+    canvas.getContext('2d').drawImage(d.src,0,0,canvas.width,canvas.height);
+    let out=canvas.toDataURL('image/jpeg', quality);
+    // ถ้ายังใหญ่เกินไป ลดขนาด/คุณภาพอีกรอบ เพื่อให้ Firebase RTDB บันทึกนิ่งขึ้นบนมือถือ
+    if(out.length>900000){
+      const scale2=Math.min(1, 950/Math.max(w,h));
+      canvas.width=Math.max(1,Math.round(w*scale2));
+      canvas.height=Math.max(1,Math.round(h*scale2));
+      canvas.getContext('2d').drawImage(d.src,0,0,canvas.width,canvas.height);
+      out=canvas.toDataURL('image/jpeg', .68);
+    }
+    return out;
+  }finally{d.close();}
 }
 async function handleMonthlyDocPhoto(ev){
   const input=ev&&ev.target;
