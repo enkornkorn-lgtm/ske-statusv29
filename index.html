@@ -96,6 +96,48 @@
   function normalizeEmployees(data) { return normalizeList(data); }
   window._normalizeEmployees = normalizeEmployees;
 
+  // ══ ตัวเขียน cache ลงเครื่องแบบไม่มีวันพัง ══
+  // ปัญหา: localStorage มีเพดาน ~5-10MB แต่แอพเก็บสำเนาข้อมูลทุกชุด "พร้อมรูป base64" ลงเครื่อง
+  // (รูปซ่อม 12 เดือน + รูปของเหลว + รูปเอกสารทุกคน + รูปโปรไฟล์) พอเต็มแล้วการเขียนใดๆ จะ throw
+  // "The quota has been exceeded" ทันที — ระเบิดกลางทางตอนพนักงานอัปโหลดเอกสาร ทั้งที่รูปขึ้น Firebase สำเร็จแล้ว
+  // ทางแก้: ถ้าเขียนเต็มไม่ได้ ให้ "ตัดรูปออกจาก cache ในเครื่อง" แล้วเขียนใหม่ (ข้อมูลจริง+รูปอยู่บน Firebase ครบ ไม่หายไปไหน
+  // เดี๋ยว realtime sync ก็ดึงกลับมาแสดงเอง) — cache ในเครื่องมีไว้แค่ให้เปิดแอพเร็วตอนเน็ตช้าเท่านั้น
+  const _SKE_CACHE_STRIP = {
+    ske_emp: list => (list || []).map(e => e ? { ...e, photo: null } : e),
+    ske_repairs: list => (list || []).map(r => r ? { ...r, photos: [], empPhotos: [] } : r),
+    ske_fluid: list => (list || []).map(f => f ? { ...f, photos: [] } : f),
+    ske_monthly_docs: list => (list || []).map(d => d ? { ...d, photo: null } : d)
+  };
+  function _skeCacheSet(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+    catch (e) {
+      try {
+        const strip = _SKE_CACHE_STRIP[key];
+        if (strip) {
+          localStorage.setItem(key, JSON.stringify(strip(value)));
+          console.warn('[SKE] พื้นที่เก็บในเครื่องเต็ม — เก็บ cache "' + key + '" แบบไม่รวมรูปแทน (ข้อมูลจริงอยู่บน Firebase ครบ)');
+          return true;
+        }
+      } catch (e2) { /* ยังเต็มอยู่ — ปล่อยไปลบทิ้งด้านล่าง */ }
+      try { localStorage.removeItem(key); } catch (e3) {}
+      console.error('[SKE] พื้นที่เก็บในเครื่องเต็มจนบันทึก cache ไม่ได้: ' + key);
+      return false;
+    }
+  }
+  window._skeCacheSet = _skeCacheSet;
+
+  // เช็คตอนเปิดแอพ: ถ้าพื้นที่เต็มอยู่แล้ว ให้ล้างรูปออกจาก cache ทุกชุดทันที เพื่อให้แอพกลับมาบันทึกอะไรก็ได้ตามปกติ
+  (function _lsHygiene() {
+    try { localStorage.setItem('ske_quota_canary', '1'); localStorage.removeItem('ske_quota_canary'); return; } catch (e) {}
+    console.warn('[SKE] ตรวจพบพื้นที่เก็บในเครื่องเต็ม — กำลังล้างรูปออกจาก cache เพื่อกู้พื้นที่');
+    Object.keys(_SKE_CACHE_STRIP).forEach(k => {
+      try {
+        const v = JSON.parse(localStorage.getItem(k) || 'null');
+        if (Array.isArray(v)) _skeCacheSet(k, v); // ถ้ายังเต็มจะถูก strip รูปให้อัตโนมัติ
+      } catch (e) { try { localStorage.removeItem(k); } catch (e2) {} }
+    });
+  })();
+
   // หา "คีย์จริง" ของรายการบน Firebase ก่อนเขียนแบบเจาะจงตำแหน่ง (กันแพตช์ลงผิดคน)
   // ปัญหา: Firebase เก็บ array เป็น object {0:..,1:..} — ถ้าบนเซิร์ฟเวอร์มีช่องว่าง (จากการลบ/เขียนพลาดในอดีต)
   // แล้วฝั่งเครื่อง normalize บีบลำดับใหม่ ตำแหน่งจะคลาดกัน → แพตช์ "จังหวัด/สถานะ" ไปลงคนข้างๆแทน
@@ -245,7 +287,7 @@
     Object.keys(patch).forEach(k => { updates[`employees/${key}/${k}`] = patch[k]; });
     await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:employees-update');
     employees = (employees || []).map(e => e && e.id === empId ? { ...e, ...patch } : e);
-    localStorage.setItem('ske_emp', JSON.stringify(employees));
+    _skeCacheSet('ske_emp', employees);
     _obClear('employees');
   };
 
@@ -307,7 +349,7 @@
     Object.keys(patch).forEach(k => { updates[`repairs/${key}/${k}`] = patch[k]; });
     await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs-update');
     repairs = (repairs || []).map(r => r && r.id === repairId ? { ...r, ...patch } : r);
-    localStorage.setItem('ske_repairs', JSON.stringify(repairs));
+    _skeCacheSet('ske_repairs', repairs);
     _obClear('repairs');
   };
 
@@ -327,7 +369,7 @@
     Object.keys(patch).forEach(k => { updates[`fluidLogs/${key}/${k}`] = patch[k]; });
     await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs-update');
     fluidLogs = (fluidLogs || []).map(f => f && f.id === fluidId ? { ...f, ...patch } : f);
-    localStorage.setItem('ske_fluid', JSON.stringify(fluidLogs));
+    _skeCacheSet('ske_fluid', fluidLogs);
     _obClear('fluidLogs');
   };
 
@@ -358,7 +400,7 @@
       const data = normalizeEmployees(snapshot.val());
       if (data && data.length > 0) {
         employees = data;
-        localStorage.setItem('ske_emp', JSON.stringify(employees));
+        _skeCacheSet('ske_emp', employees);
       }
       return get(ref(db, 'vehicles'));
     }).then(snapshot => {
@@ -389,7 +431,7 @@
       // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ (ไม่เขียนทับด้วยข้อมูลเครื่อง)
       const oldEmployees = employees;
       employees = data;
-      localStorage.setItem('ske_emp', JSON.stringify(employees));
+      _skeCacheSet('ske_emp', employees);
       if (_empSynced && typeof notifyNewlyAvailable === 'function') notifyNewlyAvailable(oldEmployees, employees);
       _empSynced = true;
       if (currentUser) {
@@ -457,7 +499,7 @@
     if (_obHasFresh('repairs')) { _firstSync.repairs = true; return; }
     if (data) {
       repairs = data;
-      localStorage.setItem('ske_repairs', JSON.stringify(repairs));
+      _skeCacheSet('ske_repairs', repairs);
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
       const m = document.getElementById('repairModal');
       if (m && !m.classList.contains('hidden') && typeof renderRepairList === 'function') renderRepairList();
@@ -480,7 +522,7 @@
     if (_obHasFresh('fluidLogs')) { _firstSync.fluidLogs = true; return; }
     if (data) {
       fluidLogs = data;
-      localStorage.setItem('ske_fluid', JSON.stringify(fluidLogs));
+      _skeCacheSet('ske_fluid', fluidLogs);
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
       const m = document.getElementById('fluidModal');
       if (m && !m.classList.contains('hidden') && typeof renderFluidList === 'function') renderFluidList();
@@ -558,7 +600,7 @@
         const d = normalizeList(s.val());
         if (d && d.length > 0) {
           employees = d;
-          localStorage.setItem('ske_emp', JSON.stringify(employees));
+          _skeCacheSet('ske_emp', employees);
           if (currentUser) { const f = employees.find(e => e.id === currentUser.id); if (f) { currentUser = {...currentUser, ...f}; saveU(); } }
           const dash = document.getElementById('dashboard');
           const admin = document.getElementById('admin');
@@ -576,7 +618,7 @@
     if (data && data.length > 0) {
       // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ
       employees = data;
-      localStorage.setItem('ske_emp', JSON.stringify(employees));
+      _skeCacheSet('ske_emp', employees);
     } else if (!_firstSync.employees) {
       // Firebase ว่างจริงๆ → อัพโหลดข้อมูลที่มีอยู่ในเครื่อง (default หรือ localStorage)
       window.fbSaveEmployees(employees);
@@ -613,7 +655,7 @@
     const data = normalizeList(snapshot.val());
     if (data) {
       repairs = data;
-      localStorage.setItem('ske_repairs', JSON.stringify(repairs));
+      _skeCacheSet('ske_repairs', repairs);
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
     } else if (!_firstSync.repairs && repairs.length > 0) {
       window.fbSaveRepairs(repairs);
@@ -625,7 +667,7 @@
     const data = normalizeList(snapshot.val());
     if (data) {
       fluidLogs = data;
-      localStorage.setItem('ske_fluid', JSON.stringify(fluidLogs));
+      _skeCacheSet('ske_fluid', fluidLogs);
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
     } else if (!_firstSync.fluidLogs && fluidLogs.length > 0) {
       window.fbSaveFluidLogs(fluidLogs);
@@ -680,7 +722,7 @@
     await _withTimeout(update(ref(db), { [`monthlyDocs/${key}`]: rec }), 30000, 'บันทึกไม่สำเร็จเพราะเน็ตช้า/หลุดระหว่างส่ง กรุณาลองส่งใหม่อีกครั้ง (รูปยังไม่ถูกบันทึก)');
     const exists = (monthlyDocs || []).some(x => x && x.id === rec.id);
     monthlyDocs = exists ? monthlyDocs.map(x => x && x.id === rec.id ? rec : x) : (monthlyDocs || []).concat([rec]);
-    localStorage.setItem('ske_monthly_docs', JSON.stringify(monthlyDocs));
+    _skeCacheSet('ske_monthly_docs', monthlyDocs);
     return monthlyDocs;
   };
 
@@ -693,7 +735,7 @@
     Object.keys(patch).forEach(k => { updates[`monthlyDocs/${key}/${k}`] = patch[k]; });
     await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:monthlyDocs-update');
     monthlyDocs = (monthlyDocs || []).map(d => d && d.id === docId ? { ...d, ...patch } : d);
-    localStorage.setItem('ske_monthly_docs', JSON.stringify(monthlyDocs));
+    _skeCacheSet('ske_monthly_docs', monthlyDocs);
   };
 
   window.fbGetMonthlyDocs = async function() {
@@ -705,7 +747,7 @@
     const data = normalizeList(snapshot.val());
     if (data) {
       monthlyDocs = data;
-      localStorage.setItem('ske_monthly_docs', JSON.stringify(data));
+      _skeCacheSet('ske_monthly_docs', data);
       const dash = document.getElementById('dashboard');
       const admin = document.getElementById('admin');
       if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
@@ -732,7 +774,7 @@
     const data = normalizeList(snapshot.val());
     if (data) {
       monthlyDocs = data;
-      localStorage.setItem('ske_monthly_docs', JSON.stringify(data));
+      _skeCacheSet('ske_monthly_docs', data);
     }
     _firstSync.monthlyDocs = true;
   }).catch(e => { _firstSync.monthlyDocs = true; console.error('fbGet monthlyDocs error', e); });
@@ -2277,6 +2319,27 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
+// ตัวเขียน cache ปลอดภัย — ใช้ตัวจริงจาก module (ตัดรูปอัตโนมัติเมื่อพื้นที่เต็ม) ถ้ายังโหลดไม่เสร็จใช้ fallback ที่ไม่ throw
+function _cacheSet(key,value){
+  if(window._skeCacheSet)return window._skeCacheSet(key,value);
+  try{localStorage.setItem(key,JSON.stringify(value));return true;}
+  catch(e){console.error('[SKE] พื้นที่เก็บในเครื่องเต็ม:',key);return false;}
+}
+
+// อัพเดทข้อมูลพนักงานรายคนขึ้น Firebase แบบกันพลาด:
+// 1) พยายามแพตช์เฉพาะฟิลด์ก่อน (เบา เร็ว ไม่แตะข้อมูลคนอื่น)
+// 2) ถ้าล้มเหลวค่อย fallback ส่งทั้งก้อน — แต่ต้อง "ใส่ patch กลับเข้าไปใหม่ก่อนส่งเสมอ"
+//    เพราะกว่าจะถึงตอน fallback ตัวแปร employees อาจถูก realtime ทับด้วยข้อมูลเก่า (ที่ยังไม่มีสถานะใหม่) ไปแล้ว
+//    ถ้าส่งทั้งก้อนโดยไม่ใส่ patch กลับ = สถานะที่พนักงานเพิ่งกดยืนยันจะหายถาวร (บั๊ก "สถานะเด้งกลับ")
+function fbPatchEmployee(empId,patch){
+  const reapply=()=>{employees=(employees||[]).map(e=>e&&e.id===empId?{...e,...patch}:e);_cacheSet('ske_emp',employees);};
+  if(window.fbUpdateEmployeeFields){
+    return window.fbUpdateEmployeeFields(empId,patch).catch(()=>{reapply();if(window.fbSaveEmployees)return window.fbSaveEmployees(employees);});
+  }
+  if(window.fbSaveEmployees){reapply();return window.fbSaveEmployees(employees);}
+  return Promise.resolve();
+}
+
 const _DEFAULT_EMP=[{"id": "emp001", "name": "นพการณ์ ขันทะ", "plate": "", "phone": "", "pin": "1111", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp002", "name": "อภิวัฒน์ กำทอง", "plate": "", "phone": "", "pin": "2222", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp003", "name": "ราม สุขจิตเกษม", "plate": "731744", "phone": "", "pin": "3333", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp004", "name": "ธีรนัย หมัดเด", "plate": "", "phone": "", "pin": "4444", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp005", "name": "อรรคพล มีแก้ว", "plate": "73-4296", "phone": "", "pin": "5555", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp006", "name": "วิชญาดา งามจันทร์", "plate": "", "phone": "", "pin": "6666", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp007", "name": "นิรุช ศรีภาชน์", "plate": "", "phone": "", "pin": "7777", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp008", "name": "ณัฎฐกฤต รักสุข", "plate": "73-1856", "phone": "", "pin": "8888", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp009", "name": "กฤษฎิ์ ชมชื่น", "plate": "73-4397", "phone": "", "pin": "9999", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp010", "name": "เจริญ ตั้งเสถียร", "plate": "73-4397", "phone": "", "pin": "1010", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp011", "name": "สำราญ สิงห์โต", "plate": "73-1854", "phone": "", "pin": "1112", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp012", "name": "ศราวุฒิ เมืองสอน", "plate": "73-4253", "phone": "", "pin": "1212", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp013", "name": "กอบชัย เสนาวัลย์", "plate": "73-1861", "phone": "", "pin": "1313", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp014", "name": "อนุรักษ์ เสยกระโทก", "plate": "73-1896", "phone": "", "pin": "1414", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp015", "name": "สิทธิโชค สระเสือ", "plate": "73-6521", "phone": "", "pin": "1515", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp016", "name": "วันชัย จันทร์คง", "plate": "73-1853", "phone": "", "pin": "1616", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp017", "name": "รัชชานนท์ กริบกระโทก", "plate": "73-1883", "phone": "", "pin": "1717", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}];
 let employees=(()=>{
   const stored=JSON.parse(localStorage.getItem('ske_emp')||'[]');
@@ -2340,7 +2403,7 @@ let _repNewPhotos=[]; // รูปที่พนักงานเลือก�
 let _fluNewPhotos=[]; // รูปที่พนักงานเลือกไว้ก่อนบันทึกการเปลี่ยนถ่ายของเหลว (ย่อแล้ว)
 
 function saveE(){
-  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  _cacheSet('ske_emp', employees);
   if(window.fbSaveEmployees) window.fbSaveEmployees(employees);
 }
 function saveU(){localStorage.setItem('ske_user',JSON.stringify(currentUser));}
@@ -2368,12 +2431,12 @@ async function setEmergencyCode(plainCode){
 function saveA(){localStorage.setItem('ske_admin',adminMode?'1':'0');}
 function saveAR(){if(adminRole)localStorage.setItem('ske_adminRole',adminRole);else localStorage.removeItem('ske_adminRole');}
 function saveRepairs(){
-  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  _cacheSet('ske_repairs', repairs);
   if(window.fbSaveRepairs) return window.fbSaveRepairs(repairs);
   return Promise.resolve();
 }
 function saveFluid(){
-  localStorage.setItem('ske_fluid',JSON.stringify(fluidLogs));
+  _cacheSet('ske_fluid', fluidLogs);
   if(window.fbSaveFluidLogs) return window.fbSaveFluidLogs(fluidLogs);
   return Promise.resolve();
 }
@@ -2404,7 +2467,7 @@ function saveLeaveLogs(){
   if(window.fbSaveLeaveLogs) window.fbSaveLeaveLogs(leaveLogs);
 }
 function saveMonthlyDocs(){
-  localStorage.setItem('ske_monthly_docs',JSON.stringify(monthlyDocs||[]));
+  _cacheSet('ske_monthly_docs', monthlyDocs||[]);
   if(window.fbSaveMonthlyDocs) return window.fbSaveMonthlyDocs(monthlyDocs||[]);
   return Promise.resolve();
 }
@@ -3192,8 +3255,8 @@ async function handleAvatarChange(input){
     const patch={photo:compressed};
     employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
     currentUser={...currentUser,...patch};
-    localStorage.setItem('ske_emp',JSON.stringify(employees));saveU();
-    if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+    _cacheSet('ske_emp', employees);saveU();
+    if(window.fbUpdateEmployeeFields)fbPatchEmployee(currentUser.id,patch);
     renderDashboard();
     const msg=document.getElementById('setMsg');
     if(msg){msg.textContent='✅ อัปเดตรูปโปรไฟล์แล้ว';msg.className='msg-ok';msg.classList.remove('hidden');setTimeout(()=>msg.classList.add('hidden'),2000);}
@@ -3210,8 +3273,8 @@ function removeAvatar(){
   const patch={photo:null};
   employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
   currentUser={...currentUser,...patch};
-  localStorage.setItem('ske_emp',JSON.stringify(employees));saveU();
-  if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+  _cacheSet('ske_emp', employees);saveU();
+  if(window.fbUpdateEmployeeFields)fbPatchEmployee(currentUser.id,patch);
   renderDashboard();
 }
 function closeEmpSettings(){
@@ -3232,9 +3295,9 @@ function doSaveProfile(){
   employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
   currentUser={...currentUser,...patch};
   saveU();
-  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  _cacheSet('ske_emp', employees);
   if(window.fbUpdateEmployeeFields){
-    window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+    fbPatchEmployee(currentUser.id,patch);
   } else if(window.fbSaveEmployees){
     window.fbSaveEmployees(employees);
   }
@@ -3261,9 +3324,9 @@ function doChangeMyPin(){
   employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
   currentUser={...currentUser,...patch};
   saveU();
-  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  _cacheSet('ske_emp', employees);
   if(window.fbUpdateEmployeeFields){
-    window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+    fbPatchEmployee(currentUser.id,patch);
   } else if(window.fbSaveEmployees){
     window.fbSaveEmployees(employees);
   }
@@ -3401,9 +3464,9 @@ function setLeaveApproval(empId,decision){
     const patch={onLeave:true,leaveFrom:e.leaveFrom||todayStr(),leaveTo:e.leaveTo||e.leaveFrom||todayStr(),leaveApproval:'approved'};
     employees=employees.map(x=>x.id===empId?{...x,...patch}:x);
     if(currentUser?.id===empId){currentUser={...currentUser,...patch};saveU();}
-    localStorage.setItem('ske_emp',JSON.stringify(employees));
+    _cacheSet('ske_emp', employees);
     if(window.fbUpdateEmployeeFields){
-      window.fbUpdateEmployeeFields(empId,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+      fbPatchEmployee(empId,patch);
     } else if(window.fbSaveEmployees){window.fbSaveEmployees(employees);}
     renderAdmin();
     return;
@@ -3414,9 +3477,9 @@ function setLeaveApproval(empId,decision){
     const patch={onLeave:false,leaveFrom:null,leaveTo:null,leaveNote:null,leaveApproval:null,leaveReply:null,leaveReplyAt:null};
     employees=employees.map(x=>x.id===empId?{...x,...patch}:x);
     if(currentUser?.id===empId){currentUser={...currentUser,...patch};saveU();}
-    localStorage.setItem('ske_emp',JSON.stringify(employees));
+    _cacheSet('ske_emp', employees);
     if(window.fbUpdateEmployeeFields){
-      window.fbUpdateEmployeeFields(empId,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+      fbPatchEmployee(empId,patch);
     } else if(window.fbSaveEmployees){
       window.fbSaveEmployees(employees);
     }
@@ -3427,9 +3490,9 @@ function setLeaveApproval(empId,decision){
   const patch={leaveApproval:decision};
   employees=employees.map(x=>x.id===empId?{...x,...patch}:x);
   if(currentUser?.id===empId){currentUser={...currentUser,...patch};saveU();}
-  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  _cacheSet('ske_emp', employees);
   if(window.fbUpdateEmployeeFields){
-    window.fbUpdateEmployeeFields(empId,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+    fbPatchEmployee(empId,patch);
   } else if(window.fbSaveEmployees){
     window.fbSaveEmployees(employees);
   }
@@ -3444,9 +3507,9 @@ function saveLeaveReply(empId){
   const patch={leaveReply:msg,leaveReplyAt:msg?now:null};
   employees=employees.map(e=>e.id===empId?{...e,...patch}:e);
   if(currentUser?.id===empId){currentUser={...currentUser,...patch};saveU();}
-  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  _cacheSet('ske_emp', employees);
   if(window.fbUpdateEmployeeFields){
-    window.fbUpdateEmployeeFields(empId,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+    fbPatchEmployee(empId,patch);
   } else if(window.fbSaveEmployees){
     window.fbSaveEmployees(employees);
   }
@@ -3487,7 +3550,7 @@ function _refreshOneRepairCard(id){
 function setRepairApproval(id,decision){
   const patch={approval:decision};
   repairs=repairs.map(r=>r.id===id?{...r,...patch}:r);
-  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  _cacheSet('ske_repairs', repairs);
   _patchRepair(id,patch);
   const adminPanel=document.getElementById('adminMaintPanel');
   if(adminPanel && !adminPanel.classList.contains('hidden')){
@@ -3504,7 +3567,7 @@ function saveRepairReply(id){
   const hasPhotos=cur&&cur.photos&&cur.photos.length;
   const patch={reply:msg,replyAt:(msg||hasPhotos)?now:null,replyRead:false};
   repairs=repairs.map(r=>r.id===id?{...r,...patch}:r);
-  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  _cacheSet('ske_repairs', repairs);
   _patchRepair(id,patch);refreshRepairViews();
   alert((msg||hasPhotos)?'✅ ส่งถึงพนักงานแล้ว':'🗑️ ลบข้อความแล้ว');
 }
@@ -3581,7 +3644,7 @@ async function addRepairPhotos(id,input){
     showDocUploadPopup('กำลังส่งรูป','กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้');
     const patch={photos:existing};
     repairs=repairs.map(x=>x.id===id?{...x,...patch}:x);
-    localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+    _cacheSet('ske_repairs', repairs);
     if(window.fbUpdateRepairFields){
       await window.fbUpdateRepairFields(id,patch).catch(async()=>{ if(window.fbSaveRepairs) await window.fbSaveRepairs(repairs).catch(()=>{}); });
     } else if(window.fbSaveRepairs){
@@ -3604,7 +3667,7 @@ function delRepairPhoto(id,idx,field){
   const arr=r[field].filter((_,i)=>i!==idx);
   const patch={[field]:arr};
   repairs=repairs.map(x=>x.id===id?{...x,...patch}:x);
-  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  _cacheSet('ske_repairs', repairs);
   _patchRepair(id,patch);refreshRepairViews();
   closePhotoViewer();
 }
@@ -3726,7 +3789,7 @@ function toggleRepairStatus(id){
   const cur=repairs.find(r=>r.id===id);
   const patch={status:(cur&&cur.status==='done')?'pending':'done'};
   repairs=repairs.map(r=>r.id===id?{...r,...patch}:r);
-  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  _cacheSet('ske_repairs', repairs);
   _patchRepair(id,patch);refreshRepairViews();
 }
 function doDelRepair(id){
@@ -4343,7 +4406,7 @@ function restoreRepair(id){
   if(!confirm('นำรายการนี้กลับมาที่แท็บซ่อมบำรุงเพื่อดำเนินการต่อ?'))return;
   const patch={status:'open',approval:r.approval==='rejected'?'pending':r.approval,updatedAt:new Date().toISOString()};
   repairs=repairs.map(x=>x.id===id?{...x,...patch}:x);
-  localStorage.setItem('ske_repairs',JSON.stringify(repairs));
+  _cacheSet('ske_repairs', repairs);
   _patchRepair(id,patch);refreshRepairViews();
 }
 
@@ -5074,9 +5137,9 @@ function adminClearLeaveToNormal(id){
   }
   const patch={onLeave:false,leaveFrom:null,leaveTo:null,leaveNote:null,leaveApproval:null,leaveReply:null,leaveReplyAt:null};
   employees=employees.map(e=>e.id===id?{...e,...patch}:e);
-  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  _cacheSet('ske_emp', employees);
   if(window.fbUpdateEmployeeFields){
-    window.fbUpdateEmployeeFields(id,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+    fbPatchEmployee(id,patch);
   }else if(window.fbSaveEmployees){
     window.fbSaveEmployees(employees);
   }
@@ -5102,9 +5165,9 @@ function doRequestLeave(){
   employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
   currentUser={...currentUser,...patch};
   saveU();leaveFormOpen=false;_selLeaveAt='';_selLeaveTo='';_selLeaveNote='';renderDashboard();
-  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  _cacheSet('ske_emp', employees);
   if(window.fbUpdateEmployeeFields){
-    window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+    fbPatchEmployee(currentUser.id,patch);
   } else if(window.fbSaveEmployees){
     window.fbSaveEmployees(employees);
   }
@@ -5116,9 +5179,9 @@ function doCancelLeave(){
   employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
   currentUser={...currentUser,...patch};
   saveU();renderDashboard();
-  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  _cacheSet('ske_emp', employees);
   if(window.fbUpdateEmployeeFields){
-    window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+    fbPatchEmployee(currentUser.id,patch);
   } else if(window.fbSaveEmployees){
     window.fbSaveEmployees(employees);
   }
@@ -5519,9 +5582,9 @@ function doSave(){
   currentUser={...currentUser,...patch};
   saveU();editOpen=false;closeStatusModal(false);renderDashboard();
   // อัพเดทเฉพาะข้อมูลของพนักงานคนนี้บน Firebase กันสถานะของคนอื่นที่เพิ่งอัพเดทไปหาย
-  localStorage.setItem('ske_emp',JSON.stringify(employees));
+  _cacheSet('ske_emp', employees);
   if(window.fbUpdateEmployeeFields){
-    window.fbUpdateEmployeeFields(currentUser.id,patch).catch(()=>{ if(window.fbSaveEmployees) window.fbSaveEmployees(employees); });
+    fbPatchEmployee(currentUser.id,patch);
   } else if(window.fbSaveEmployees){
     window.fbSaveEmployees(employees);
   }
@@ -6388,7 +6451,7 @@ function sdConfirmOwnerPick(){
   if(val==='__new__'){_sd.driverMode='newForm';_sd.ownerPickMarkNew=true;_sd.newName='';_sd.newPhone='';renderSwitchDriverModal();return;}
   employees=employees.map(e=>e.id===val?{...e,isOwner:true}:e);
   saveE();
-  if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(val,{isOwner:true}).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+  if(window.fbUpdateEmployeeFields)fbPatchEmployee(val,{isOwner:true});
   _sd.driverMode='owner';_sd.driverId=val;
   renderSwitchDriverModal();
 }
@@ -6433,7 +6496,7 @@ function sdConfirmSwitch(){
     const patch={plate};
     employees=employees.map(e=>e.id===finalId?{...e,...patch}:e);
     saveE();
-    if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(finalId,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+    if(window.fbUpdateEmployeeFields)fbPatchEmployee(finalId,patch);
     const e=employees.find(x=>x.id===finalId);finalName=e?e.name:'';
   }else if(_sd.driverMode==='new'){
     finalId=Date.now()+'';
@@ -6453,7 +6516,7 @@ function sdConfirmSwitch(){
     employees=employees.map(e=>swappedOutIds.includes(e.id)?{...e,...outPatch}:e);
     saveE();
     swappedOutIds.forEach(id=>{
-      if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(id,outPatch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+      if(window.fbUpdateEmployeeFields)fbPatchEmployee(id,outPatch);
     });
   }
   _sd.step=4;_sd.doneName=finalName;
@@ -6572,7 +6635,7 @@ async function handleAdminAvatarChange(input,id){
     employees=employees.map(x=>x.id===id?{...x,...patch}:x);
     if(currentUser&&currentUser.id===id)currentUser={...currentUser,...patch};
     saveE();saveU();
-    if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(id,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+    if(window.fbUpdateEmployeeFields)fbPatchEmployee(id,patch);
   }catch(err){console.error('admin avatar error',err);alert('อัปโหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง');}
   input.value='';
 }
@@ -6582,7 +6645,7 @@ function removeAdminAvatar(id){
   employees=employees.map(x=>x.id===id?{...x,...patch}:x);
   if(currentUser&&currentUser.id===id)currentUser={...currentUser,...patch};
   saveE();saveU();
-  if(window.fbUpdateEmployeeFields)window.fbUpdateEmployeeFields(id,patch).catch(()=>{if(window.fbSaveEmployees)window.fbSaveEmployees(employees);});
+  if(window.fbUpdateEmployeeFields)fbPatchEmployee(id,patch);
   const av=document.getElementById('aeav_'+id);
   const emp=employees.find(x=>x.id===id);
   if(av)av.innerHTML=esc((emp&&emp.name)?emp.name.charAt(0):'?');
@@ -6704,18 +6767,11 @@ async function doChangeEmergencyCode(){
 
 function fmt(iso){if(!iso)return'-';return new Date(iso).toLocaleString('th-TH',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'});}
 
-setInterval(()=>{
-  try{
-    const f=JSON.parse(localStorage.getItem('ske_emp')||'[]');
-    if(Array.isArray(f)&&f.length&&JSON.stringify(f)!==JSON.stringify(employees)){
-      employees=f;
-      const dash=document.getElementById('dashboard');
-      const admin=document.getElementById('admin');
-      if(dash&&!dash.classList.contains('hidden'))renderDashboard();
-      if(admin&&!admin.classList.contains('hidden'))renderAdmin();
-    }
-  }catch(e){console.warn('sync error',e);}
-},30000);
+// [ถอดออก] เดิมตรงนี้มี setInterval ทุก 30 วิ ที่อ่าน cache จาก localStorage มาทับตัวแปร employees ในหน่วยความจำ
+// เป็นโค้ดยุคก่อนมี Firebase realtime — ปัจจุบันมันคือ "ต้นเหตุสถานะเด้งกลับ":
+// 1) ถ้าเปิดแอพ 2 ที่ (PWA + แท็บเบราว์เซอร์) แท็บเก่าจะเขียน cache เวอร์ชันเก่า แล้ว interval ของอีกแท็บดูดค่าเก่ากลับมาทับสถานะที่เพิ่งบันทึก
+// 2) หลังเพิ่มระบบตัดรูปออกจาก cache เมื่อพื้นที่เต็ม cache จะไม่มีวันตรงกับข้อมูลจริง ทำให้ทับซ้ำทุก 30 วิ (รูปโปรไฟล์หาย/สถานะย้อน)
+// การซิงก์ข้ามเครื่อง/ข้ามแท็บมี onValue ของ Firebase ทำหน้าที่นี้อยู่แล้วแบบเรียลไทม์ ไม่ต้องใช้ตัวนี้
 </script>
 <script>
 /* เติมไอคอน SVG ให้องค์ประกอบสแตติก (แท็บบน, เมนูล่าง, ปุ่ม) ที่มี data-ic */
