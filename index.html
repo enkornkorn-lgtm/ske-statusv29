@@ -17,13 +17,13 @@
   import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 
   const firebaseConfig = {
-    apiKey: "AIzaSyDE1EAH7Uf2cVOkguXW7vfObisEH3NMvh4",
-    authDomain: "ske-status.firebaseapp.com",
-    databaseURL: "https://ske-status-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "ske-status",
-    storageBucket: "ske-status.firebasestorage.app",
-    messagingSenderId: "857120529855",
-    appId: "1:857120529855:web:002cd6e5eed5c90f47d50a"
+    apiKey: "AIzaSyDNx3pN0T_VKHMKfJOiuo5FmcZlVp73h8g",
+    authDomain: "ske-status-2.firebaseapp.com",
+    databaseURL: "https://ske-status-2-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "ske-status-2",
+    storageBucket: "ske-status-2.firebasestorage.app",
+    messagingSenderId: "170552278274",
+    appId: "1:170552278274:web:80f699b101cc1867c5161b"
   };
 
   const app = initializeApp(firebaseConfig);
@@ -31,7 +31,11 @@
 
   // ══ Firebase Cloud Messaging (FCM) — แจ้งเตือนเข้าโทรศัพท์แม้ปิดแอป ══
   // ⚠️ ต้องใส่ VAPID key จาก Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
-  const VAPID_KEY = "BNxlKeiYjYs8WoTZhSGP8oJkn7aF9aSNKj1tl2nylt1GHHuQFuXmgB0mF5DHZTIeufYSPSXAgLKc70mcy7K04qE";
+  // ⚠️ VAPID key นี้ผูกกับโปรเจกต์ Firebase เดิม (ske-status) ใช้กับโปรเจกต์ใหม่ (ske-status-2) ไม่ได้
+  // ต้องไปเอาอันใหม่จาก: Firebase Console (โปรเจกต์ ske-status-2) → ⚙️ Project settings
+  // → แท็บ Cloud Messaging → เลื่อนลงหา "Web configuration" → กด "Generate key pair" → copy มาแปะแทนบรรทัดนี้
+  // ถ้ายังไม่เปลี่ยน ระบบจะข้ามการลงทะเบียนแจ้งเตือนไปเฉยๆ (แอปหลักยังใช้งานได้ปกติทุกอย่าง ไม่กระทบ)
+  const VAPID_KEY = "PASTE_YOUR_VAPID_KEY_HERE";
   let _messaging = null;
 
   // ขอ permission + ลงทะเบียน FCM token ของเครื่องนี้ขึ้น Firebase
@@ -164,6 +168,23 @@
     return null;
   }
 
+  // ══ คลังรูปแยก (photo store) ══
+  // หัวใจของการลด bandwidth: ข้อมูลหลัก (employees/repairs/ฯลฯ) เก็บแค่ "รหัสรูป" (ph_...)
+  // ตัวรูป base64 จริงแยกเก็บที่โหนด photos/{id} ซึ่ง "ไม่มี listener" — จะโหลดก็ต่อเมื่อผู้ใช้เปิดดูเท่านั้น
+  // ผลลัพธ์: เปิดแอป/ซิงก์แต่ละครั้งโหลดแค่ข้อความไม่กี่ร้อย KB แทนที่จะเป็นรูปทั้งระบบหลาย MB ทุกรอบ
+  window.fbSavePhoto = function(photoId, dataUrl) {
+    return _withTimeout(update(ref(db), { ['photos/' + photoId]: dataUrl }), 30000, 'timeout:photo-save');
+  };
+  window.fbGetPhotoRemote = function(photoId) {
+    return _withTimeout(get(ref(db, 'photos/' + photoId)), 20000, 'timeout:photo-get').then(s => s.val() || null);
+  };
+  window.fbDeletePhotos = function(ids) {
+    const updates = {};
+    (ids || []).forEach(id => { if (id && !String(id).startsWith('data:')) updates['photos/' + id] = null; });
+    if (!Object.keys(updates).length) return Promise.resolve();
+    return update(ref(db), updates).catch(() => {});
+  };
+
   // ติดตามว่าแต่ละชุดข้อมูล sync ครั้งแรกเสร็จหรือยัง — ใช้กันบั๊ก "ข้อมูลที่ลบไปแล้วฟื้นคืนชีพ"
   // (เดิม: พอลบรายการจนหมด ข้อมูลเป็น null → listener เข้าใจผิดว่า Firebase ว่าง แล้วอัพโหลดข้อมูลเก่าในเครื่องกลับขึ้นไป)
   // หลักการใหม่: อัพโหลดข้อมูลเครื่องขึ้น Firebase ได้ "เฉพาะครั้งแรกสุด" เท่านั้น หลังจากนั้น null = ว่างจริง ให้เคารพค่าว่าง
@@ -178,6 +199,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
+  console.log('[SKE TRUCK] app version: v2026.07.08b');
   const SKE_OUTBOX_KEY = 'ske_outbox_v1';
   // งานค้างมีอายุจำกัด — เกินนี้ให้ "ทิ้ง" แทนที่จะส่งซ้ำ เพราะ payload เป็นข้อมูลทั้งชุด ณ เวลานั้น
   // ถ้าปล่อยให้คิวเก่าหลายนาที/ชั่วโมงส่งสำเร็จทีหลัง มันจะเอาข้อมูล "ทั้งก้อนเวอร์ชันเก่า" ทับขึ้นเซิร์ฟเวอร์
@@ -1440,7 +1462,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS</div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.08b</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -1448,7 +1470,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS</div>
+        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.08b</div>
       </div>
     </div>
 
@@ -1566,7 +1588,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS</div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.08b</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -1850,6 +1872,17 @@ select.inp option{background:#fff;color:#1a1a2e;}
 
     <!-- settings panel -->
     <div id="adminSettingsPanel" class="hidden">
+
+      <!-- accordion item: เครื่องมือระบบ (สำหรับอัพเกรดโครงสร้างคลังรูป) -->
+      <div class="acc-item" id="acc_systools">
+        <button class="acc-head" onclick="toggleAcc('systools')">
+          <span>🛠️ เครื่องมือระบบ</span><span class="acc-arrow">›</span>
+        </button>
+        <div class="acc-body hidden">
+          <p style="color:#888;font-size:12.5px;margin:0 0 12px;">หลังอัพเดทระบบคลังรูปใหม่ กดปุ่มนี้ <b>ครั้งเดียว</b> (แนะนำให้ทำบน WiFi) เพื่อย้ายรูปเก่าทั้งหมดออกจากข้อมูลหลักไปเก็บในคลังรูป — จะทำให้แอพเบาและประหยัดเน็ตลงมาก</p>
+          <button class="btn btn-orange btn-full" onclick="migratePhotosToStore()">📦 ย้ายรูปเก่าเข้าคลังรูปใหม่ (กดครั้งเดียว)</button>
+        </div>
+      </div>
 
       <!-- accordion item: พนักงาน -->
       <div class="acc-item" id="acc_emp">
@@ -2340,6 +2373,59 @@ function fbPatchEmployee(empId,patch){
   return Promise.resolve();
 }
 
+// ══ คลังรูปฝั่งแอป ══
+// รูปทุกใบอ้างอิงด้วยรหัส (ph_...) — โหลดจริงเฉพาะตอนต้องแสดง แล้ว cache ในเครื่องถาวร (รหัสรูปไม่มีวันเปลี่ยน)
+// รองรับรูปยุคเก่าที่ยังฝัง base64 มากับข้อมูล (ขึ้นต้น data:) ให้แสดงได้ตามปกติระหว่างที่ยังไม่ได้กดย้ายเข้าคลัง
+const _photoMem=new Map();
+function _newPhotoId(){return 'ph_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);}
+function resolvePhoto(v){
+  if(!v)return Promise.resolve(null);
+  v=String(v);
+  if(v.startsWith('data:'))return Promise.resolve(v);
+  if(_photoMem.has(v))return Promise.resolve(_photoMem.get(v));
+  try{const c=localStorage.getItem('ske_ph_'+v);if(c){_photoMem.set(v,c);return Promise.resolve(c);}}catch(e){}
+  if(!window.fbGetPhotoRemote)return Promise.resolve(null);
+  return window.fbGetPhotoRemote(v).then(d=>{
+    if(d){_photoMem.set(v,d);try{localStorage.setItem('ske_ph_'+v,d);}catch(e){/* พื้นที่เต็มก็แค่ไม่ cache โหลดใหม่ครั้งหน้า */}}
+    return d;
+  }).catch(()=>null);
+}
+async function uploadPhoto(dataUrl){
+  const id=_newPhotoId();
+  if(window.fbSavePhoto)await window.fbSavePhoto(id,dataUrl);
+  _photoMem.set(id,dataUrl);
+  try{localStorage.setItem('ske_ph_'+id,dataUrl);}catch(e){}
+  return id;
+}
+const _PH_PLACEHOLDER='data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72"><rect width="100%" height="100%" fill="#EEF1F6"/><text x="50%" y="56%" font-size="24" text-anchor="middle">🖼️</text></svg>');
+function _hydratePhotoEl(el){
+  const v=el.getAttribute('data-ph');
+  if(!v||el.getAttribute('data-ph-done'))return;
+  el.setAttribute('data-ph-done','1');
+  if(v.startsWith('data:')){el.src=v;return;}
+  el.src=_PH_PLACEHOLDER;
+  resolvePhoto(v).then(d=>{if(d)el.src=d;});
+}
+// เฝ้าดู DOM — ทุกครั้งที่มี <img data-ph="..."> ถูกวาดขึ้นจอ ให้ไปโหลดรูปมาใส่เองอัตโนมัติ
+// (จุด render ทั้ง 19 จุดในแอปไม่ต้องรู้จักระบบโหลดรูปเลย แค่ใส่ data-ph แทน src ก็พอ)
+new MutationObserver(muts=>{
+  muts.forEach(m=>{if(!m.addedNodes)return;m.addedNodes.forEach(n=>{
+    if(n.nodeType!==1)return;
+    if(n.matches&&n.matches('img[data-ph]'))_hydratePhotoEl(n);
+    if(n.querySelectorAll)n.querySelectorAll('img[data-ph]').forEach(_hydratePhotoEl);
+  });});
+}).observe(document.documentElement,{childList:true,subtree:true});
+
+// อัพโหลดรูปเป็นชุด (คืนรหัสรูปตามลำดับ) — ใช้ตอนแจ้งซ่อม/ของเหลวที่แนบหลายรูป
+async function uploadPhotos(dataUrls){
+  const ids=[];
+  for(const d of (dataUrls||[])){
+    // รายการที่เป็นรหัสอยู่แล้ว (เช่นกดเพิ่มรูปซ้ำ) ไม่ต้องอัพซ้ำ
+    ids.push(String(d).startsWith('data:')?await uploadPhoto(d):d);
+  }
+  return ids;
+}
+
 const _DEFAULT_EMP=[{"id": "emp001", "name": "นพการณ์ ขันทะ", "plate": "", "phone": "", "pin": "1111", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp002", "name": "อภิวัฒน์ กำทอง", "plate": "", "phone": "", "pin": "2222", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp003", "name": "ราม สุขจิตเกษม", "plate": "731744", "phone": "", "pin": "3333", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp004", "name": "ธีรนัย หมัดเด", "plate": "", "phone": "", "pin": "4444", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp005", "name": "อรรคพล มีแก้ว", "plate": "73-4296", "phone": "", "pin": "5555", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp006", "name": "วิชญาดา งามจันทร์", "plate": "", "phone": "", "pin": "6666", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp007", "name": "นิรุช ศรีภาชน์", "plate": "", "phone": "", "pin": "7777", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp008", "name": "ณัฎฐกฤต รักสุข", "plate": "73-1856", "phone": "", "pin": "8888", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp009", "name": "กฤษฎิ์ ชมชื่น", "plate": "73-4397", "phone": "", "pin": "9999", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp010", "name": "เจริญ ตั้งเสถียร", "plate": "73-4397", "phone": "", "pin": "1010", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp011", "name": "สำราญ สิงห์โต", "plate": "73-1854", "phone": "", "pin": "1112", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp012", "name": "ศราวุฒิ เมืองสอน", "plate": "73-4253", "phone": "", "pin": "1212", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp013", "name": "กอบชัย เสนาวัลย์", "plate": "73-1861", "phone": "", "pin": "1313", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp014", "name": "อนุรักษ์ เสยกระโทก", "plate": "73-1896", "phone": "", "pin": "1414", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp015", "name": "สิทธิโชค สระเสือ", "plate": "73-6521", "phone": "", "pin": "1515", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp016", "name": "วันชัย จันทร์คง", "plate": "73-1853", "phone": "", "pin": "1616", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp017", "name": "รัชชานนท์ กริบกระโทก", "plate": "73-1883", "phone": "", "pin": "1717", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}];
 let employees=(()=>{
   const stored=JSON.parse(localStorage.getItem('ske_emp')||'[]');
@@ -2515,13 +2601,18 @@ setInterval(pruneOldMaintenance,60*60*1000);
 function purgeOldPhotos(){
   const cutoff=_maintCutoffTime();
   let repChanged=false,fluChanged=false;
+  const purgedIds=[]; // รหัสรูปที่ถูกถอดออก — จะตามไปลบตัวรูปจริงในคลังด้วย ไม่ให้เป็นขยะค้าง
 
   // repairs: ลบ r.empPhotos และ r.photos ของรายการที่อายุเกิน 12 เดือน
   repairs=repairs.map(r=>{
     const t=new Date(r.createdAt||0).getTime();
     if(isFinite(t)&&t<cutoff){
       const hadPhotos=(r.empPhotos&&r.empPhotos.length)||(r.photos&&r.photos.length);
-      if(hadPhotos){repChanged=true;return{...r,empPhotos:[],photos:[]};}
+      if(hadPhotos){
+        repChanged=true;
+        (r.empPhotos||[]).concat(r.photos||[]).forEach(p=>purgedIds.push(p));
+        return{...r,empPhotos:[],photos:[]};
+      }
     }
     return r;
   });
@@ -2531,11 +2622,16 @@ function purgeOldPhotos(){
   fluidLogs=fluidLogs.map(f=>{
     const t=new Date(f.changedAt||f.createdAt||0).getTime();
     if(isFinite(t)&&t<cutoff){
-      if(f.photos&&f.photos.length){fluChanged=true;return{...f,photos:[]};}
+      if(f.photos&&f.photos.length){
+        fluChanged=true;
+        (f.photos||[]).forEach(p=>purgedIds.push(p));
+        return{...f,photos:[]};
+      }
     }
     return f;
   });
   if(fluChanged){saveFluid().catch(()=>{});console.log('[SKE] purgeOldPhotos: ลบรูปเก่าออกจาก fluidLogs แล้ว');}
+  if(purgedIds.length&&window.fbDeletePhotos)window.fbDeletePhotos(purgedIds);
 }
 
 // ── ย้ายข้อมูลเก่า: พนักงานที่เคยมี status==='leave' (ก่อนแยก "ลา" ออกจากสถานะทั่วไป) ──
@@ -2729,7 +2825,7 @@ function highlightAdminNav(btn){document.querySelectorAll('#admin .bottom-nav .n
 // คืน HTML ของรูปภายใน .avatar — ถ้ามี photo ใช้รูป ถ้าไม่มีใช้ตัวอักษร
 function avatarImg(emp, size){
   if(emp && emp.photo){
-    return `<img src="${emp.photo}" alt="${esc(emp.name)}" loading="lazy" decoding="async" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;display:block;">`;
+    return `<img data-ph="${emp.photo}" alt="${esc(emp.name)}" loading="lazy" decoding="async" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;display:block;">`;
   }
   return esc((emp && emp.name) ? emp.name.charAt(0) : '?');
 }
@@ -3234,7 +3330,7 @@ function _refreshSettingsAvatar(me){
   const removeBtn=document.getElementById('removeAvatarBtn');
   if(!av)return;
   if(me && me.photo){
-    av.innerHTML=`<img src="${me.photo}" style="width:80px;height:80px;object-fit:cover;border-radius:50%;display:block;">`;
+    av.innerHTML=`<img data-ph="${me.photo}" style="width:80px;height:80px;object-fit:cover;border-radius:50%;display:block;">`;
     if(removeBtn)removeBtn.classList.remove('hidden');
   } else {
     av.innerHTML=esc((me&&me.name)?me.name.charAt(0):'?');
@@ -3251,8 +3347,11 @@ async function handleAvatarChange(input){
     const av=document.getElementById('settingsAvatar');
     if(av)av.innerHTML=`<img src="${compressed}" style="width:80px;height:80px;object-fit:cover;border-radius:50%;display:block;">`;
     document.getElementById('removeAvatarBtn')?.classList.remove('hidden');
-    // บันทึกลง employee
-    const patch={photo:compressed};
+    // อัพรูปเข้าคลัง — ข้อมูลพนักงานเก็บแค่รหัสรูป (ลบรูปเก่าจากคลังทิ้งด้วย)
+    const oldPhoto=(employees.find(e=>e.id===currentUser.id)||{}).photo;
+    const photoId=await uploadPhoto(compressed);
+    if(oldPhoto&&window.fbDeletePhotos)window.fbDeletePhotos([oldPhoto]);
+    const patch={photo:photoId};
     employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
     currentUser={...currentUser,...patch};
     _cacheSet('ske_emp', employees);saveU();
@@ -3268,6 +3367,7 @@ function removeAvatar(){
   if(!currentUser)return;
   const av=document.getElementById('settingsAvatar');
   const me=employees.find(e=>e.id===currentUser.id)||currentUser;
+  if(me&&me.photo&&window.fbDeletePhotos)window.fbDeletePhotos([me.photo]);
   if(av)av.innerHTML=esc((me&&me.name)?me.name.charAt(0):'?');
   document.getElementById('removeAvatarBtn')?.classList.add('hidden');
   const patch={photo:null};
@@ -3400,22 +3500,31 @@ async function doAddRepair(){
   const issue=document.getElementById('repIssue').value.trim();
   if(!issue){document.getElementById('repIssue').focus();return;}
   const me=employees.find(e=>e.id===currentUser.id)||currentUser;
+  const hasPhotos=_repNewPhotos.length>0;
+  let photoIds=[];
+  if(hasPhotos){
+    showDocUploadPopup('กำลังส่งรูปแจ้งซ่อม','กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้');
+    try{
+      photoIds=await uploadPhotos(_repNewPhotos); // อัพรูปเข้าคลังก่อน — รายการเก็บแค่รหัส
+    }catch(e){
+      hideDocUploadPopup();
+      alert('❌ ส่งรูปไม่สำเร็จ (เน็ตช้า/หลุด) กรุณาลองใหม่อีกครั้ง — ข้อความและรูปที่เลือกไว้ยังอยู่ครบ');
+      return;
+    }
+  }
   const newRec={
     id:'rep_'+Date.now(),
     empId:me.id,empName:me.name,plate:me.plate||'',
     issue,urgency:_repUrgency,status:'pending',approval:'pending',
-    empPhotos:_repNewPhotos.slice(),
+    empPhotos:photoIds,
     createdAt:new Date().toISOString()
   };
-  const hasPhotos=newRec.empPhotos.length>0;
   repairs.unshift(newRec);
-  if(hasPhotos)showDocUploadPopup('กำลังส่งรูปแจ้งซ่อม','กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้');
   try{
     await saveRepairs();
     if(hasPhotos){hideDocUploadPopup();showDocUploadToast('✅ ส่งแจ้งซ่อมสำเร็จ',true);}
   }catch(e){
-    // เน็ตช้า/หลุด — ข้อมูลยังอยู่ในเครื่องและถูกคิวไว้ใน outbox แล้ว (_obMark ทำงานก่อนหน้านี้)
-    // ระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา ไม่ต้อง rollback/ให้กดส่งซ้ำ (กันรายการซ้ำ)
+    // เน็ตช้า/หลุด — ข้อมูล (ตอนนี้เบามาก เพราะไม่มีรูปฝัง) ถูกคิวไว้ใน outbox แล้ว ส่งซ้ำอัตโนมัติ
     console.warn('doAddRepair: บันทึกไม่สำเร็จในทันที รอคิวส่งซ้ำอัตโนมัติ',e);
     hideDocUploadPopup();
     showDocUploadToast('⚠️ เน็ตช้า/หลุดอยู่ — ระบบจะส่งข้อมูลนี้ต่อให้อัตโนมัติเมื่อสัญญาณกลับมา',false);
@@ -3637,19 +3746,15 @@ async function addRepairPhotos(id,input){
   const take=files.slice(0,room);
   if(files.length>room)alert(`⚠️ แนบได้อีก ${room} รูป (สูงสุด 3 รูป) จะเพิ่มให้เฉพาะ ${room} รูปแรก`);
   try{
+    showDocUploadPopup('กำลังส่งรูป','กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้');
     for(const f of take){
       const dataUrl=await _compressImage(f,900,0.6);
-      existing.push(dataUrl);
+      existing.push(await uploadPhoto(dataUrl)); // เข้าคลังรูป เก็บแค่รหัส
     }
-    showDocUploadPopup('กำลังส่งรูป','กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้');
     const patch={photos:existing};
     repairs=repairs.map(x=>x.id===id?{...x,...patch}:x);
     _cacheSet('ske_repairs', repairs);
-    if(window.fbUpdateRepairFields){
-      await window.fbUpdateRepairFields(id,patch).catch(async()=>{ if(window.fbSaveRepairs) await window.fbSaveRepairs(repairs).catch(()=>{}); });
-    } else if(window.fbSaveRepairs){
-      await window.fbSaveRepairs(repairs).catch(()=>{});
-    }
+    await _patchRepair(id,patch);
     hideDocUploadPopup();
     refreshRepairViews();
   }catch(e){
@@ -3664,6 +3769,8 @@ function delRepairPhoto(id,idx,field){
   field=field||'photos';
   if(!confirm('ลบรูปนี้?'))return;
   const r=repairs.find(x=>x.id===id);if(!r||!r[field])return;
+  const removed=r[field][idx];
+  if(removed&&window.fbDeletePhotos)window.fbDeletePhotos([removed]); // ลบตัวรูปจริงออกจากคลังด้วย
   const arr=r[field].filter((_,i)=>i!==idx);
   const patch={[field]:arr};
   repairs=repairs.map(x=>x.id===id?{...x,...patch}:x);
@@ -3685,7 +3792,7 @@ function viewRepairPhoto(id,idx,field){
   }
   // ผู้ดูแลลบได้ทุกรูป / พนักงานลบได้เฉพาะรูปที่ตัวเองแนบ (empPhotos) ของรายการตัวเอง
   const canDel=(typeof adminMode!=='undefined'&&adminMode)||(field==='empPhotos'&&currentUser&&r.empId===currentUser.id);
-  ov.innerHTML=`<img src="${r[field][idx]}" style="max-width:100%;max-height:78vh;border-radius:12px;object-fit:contain;">
+  ov.innerHTML=`<img data-ph="${r[field][idx]}" style="max-width:100%;max-height:78vh;border-radius:12px;object-fit:contain;">
     <div style="display:flex;gap:10px;">
       ${canDel?`<button class="btn btn-red btn-sm" onclick="delRepairPhoto('${id}',${idx},'${field}')">🗑️ ลบรูปนี้</button>`:''}
       <button class="btn btn-gray btn-sm" onclick="closePhotoViewer()">✕ ปิด</button>
@@ -3703,7 +3810,7 @@ function openPhotoViewer(src){
     ov.onclick=ev=>{if(ev.target===ov)closePhotoViewer();};
     document.body.appendChild(ov);
   }
-  ov.innerHTML=`<img src="${src}" style="max-width:100%;max-height:82vh;border-radius:12px;object-fit:contain;">
+  ov.innerHTML=`<img data-ph="${src}" style="max-width:100%;max-height:82vh;border-radius:12px;object-fit:contain;">
     <button class="btn btn-gray btn-sm" onclick="closePhotoViewer()">✕ ปิด</button>`;
   ov.style.display='flex';
 }
@@ -3720,7 +3827,7 @@ function viewFluidPhoto(id,idx){
   }
   // ผู้ดูแลลบได้ / พนักงานลบได้เฉพาะของตัวเอง
   const canDel=(typeof adminMode!=='undefined'&&adminMode)||(currentUser&&f.empId===currentUser.id);
-  ov.innerHTML=`<img src="${f.photos[idx]}" style="max-width:100%;max-height:78vh;border-radius:12px;object-fit:contain;">
+  ov.innerHTML=`<img data-ph="${f.photos[idx]}" style="max-width:100%;max-height:78vh;border-radius:12px;object-fit:contain;">
     <div style="display:flex;gap:10px;">
       ${canDel?`<button class="btn btn-red btn-sm" onclick="delFluidPhoto('${id}',${idx})">🗑️ ลบรูปนี้</button>`:''}
       <button class="btn btn-gray btn-sm" onclick="closePhotoViewer()">✕ ปิด</button>
@@ -3764,7 +3871,7 @@ function renderRepairList(loadMore){
       ${(r.empPhotos&&r.empPhotos.length)?`<div style="margin-top:10px;">
         <div style="font-size:11px;color:#F47920;font-weight:700;margin-bottom:5px;">📷 รูปที่คุณแนบ (${r.empPhotos.length})</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          ${r.empPhotos.map((p,i)=>`<img src="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i},'empPhotos')" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+          ${r.empPhotos.map((p,i)=>`<img data-ph="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i},'empPhotos')" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
         </div>
       </div>`:''}
       ${r.reply?`<div style="margin-top:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:10px 12px;">
@@ -3774,7 +3881,7 @@ function renderRepairList(loadMore){
       ${(r.photos&&r.photos.length)?`<div style="margin-top:10px;">
         <div style="font-size:11px;color:#1E90D6;font-weight:700;margin-bottom:5px;">📷 รูปจากผู้ดูแล (${r.photos.length})</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          ${r.photos.map((p,i)=>`<img src="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i})" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+          ${r.photos.map((p,i)=>`<img data-ph="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i})" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
         </div>
       </div>`:''}
       <div class="row-btns" style="margin-top:10px;">
@@ -3881,21 +3988,29 @@ async function doAddFluid(){
   const odo=document.getElementById('fluOdo').value.trim();
   const note=document.getElementById('fluNote').value.trim();
   const me=employees.find(e=>e.id===currentUser.id)||currentUser;
-  const newRec={
+  const hasPhotos=_fluNewPhotos.length>0;
+  let photoIds=[];
+  if(hasPhotos){
+    showDocUploadPopup('กำลังส่งรูป','กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้');
+    try{
+      photoIds=await uploadPhotos(_fluNewPhotos);
+    }catch(e){
+      hideDocUploadPopup();
+      alert('❌ ส่งรูปไม่สำเร็จ (เน็ตช้า/หลุด) กรุณาลองใหม่อีกครั้ง — ข้อมูลที่กรอกไว้ยังอยู่ครบ');
+      return;
+    }
+  }
+  fluidLogs.unshift({
     id:'flu_'+Date.now(),
     empId:me.id,empName:me.name,plate:me.plate||'',
     fluidType:type,changedAt:date,odometer:odo,note,
-    photos:_fluNewPhotos.slice(),
+    photos:photoIds,
     createdAt:new Date().toISOString()
-  };
-  const hasPhotos=newRec.photos.length>0;
-  fluidLogs.unshift(newRec);
-  if(hasPhotos)showDocUploadPopup('กำลังส่งรูป','กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้');
+  });
   try{
     await saveFluid();
     if(hasPhotos){hideDocUploadPopup();showDocUploadToast('✅ บันทึกสำเร็จ',true);}
   }catch(e){
-    // เน็ตช้า/หลุด — ข้อมูลถูกคิวไว้ใน outbox แล้ว ระบบจะส่งซ้ำอัตโนมัติ ไม่ต้อง rollback
     console.warn('doAddFluid: บันทึกไม่สำเร็จในทันที รอคิวส่งซ้ำอัตโนมัติ',e);
     hideDocUploadPopup();
     showDocUploadToast('⚠️ เน็ตช้า/หลุดอยู่ — ระบบจะส่งข้อมูลนี้ต่อให้อัตโนมัติเมื่อสัญญาณกลับมา',false);
@@ -3925,7 +4040,7 @@ function renderFluidList(){
       ${f.odometer?`<div style="color:#888;font-size:12px;margin-top:6px;">🧭 เลขไมล์: ${esc(f.odometer)} กม.</div>`:''}
       ${f.note?`<div style="color:#666;font-size:12px;margin-top:4px;">${skeIcon('note')} ${esc(f.note)}</div>`:''}
       ${(f.photos&&f.photos.length)?`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-        ${f.photos.map((p,i)=>`<img src="${p}" onclick="viewFluidPhoto('${f.id}',${i})" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+        ${f.photos.map((p,i)=>`<img data-ph="${p}" onclick="viewFluidPhoto('${f.id}',${i})" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
       </div>`:''}
       <div style="display:flex;align-items:center;justify-content:flex-end;margin-top:10px;">
         <span style="color:#16A34A;font-size:11px;font-weight:700;">✅ บันทึกแล้ว — เปลี่ยนถ่ายเรียบร้อย</span>
@@ -4223,7 +4338,7 @@ function _repairCardHTML(r){
       ${(r.empPhotos&&r.empPhotos.length)?`<div style="padding:12px 14px 0;">
         <div style="font-size:11px;color:#F47920;font-weight:900;margin-bottom:7px;">📷 รูปจากพนักงาน</div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;">
-          ${r.empPhotos.map((p,i)=>`<img src="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i},'empPhotos')" style="width:70px;height:70px;object-fit:cover;border-radius:10px;border:1px solid #FED7AA;cursor:pointer;">`).join('')}
+          ${r.empPhotos.map((p,i)=>`<img data-ph="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i},'empPhotos')" style="width:70px;height:70px;object-fit:cover;border-radius:10px;border:1px solid #FED7AA;cursor:pointer;">`).join('')}
         </div>
       </div>`:''}
       ${r.reply?`<div style="margin:12px 14px 0;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:10px 12px;">
@@ -4231,7 +4346,7 @@ function _repairCardHTML(r){
         <div style="font-size:13px;color:#1a1a2e;line-height:1.55;white-space:pre-wrap;">${esc(r.reply)}</div>
       </div>`:''}
       ${(r.photos&&r.photos.length)?`<div style="padding:12px 14px 0;display:flex;gap:7px;flex-wrap:wrap;">
-        ${r.photos.map((p,i)=>`<img src="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i})" style="width:70px;height:70px;object-fit:cover;border-radius:10px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+        ${r.photos.map((p,i)=>`<img data-ph="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i})" style="width:70px;height:70px;object-fit:cover;border-radius:10px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
       </div>`:''}
       <div style="padding:12px 14px;">
         <textarea class="inp" id="rep_reply_${r.id}" rows="2" placeholder="ส่งข้อความถึงพนักงาน เช่น นำรถเข้าศูนย์วันจันทร์ / สั่งอะไหล่แล้ว..." style="font-size:12.5px;margin-bottom:8px;">${esc(r.reply||'')}</textarea>
@@ -4379,14 +4494,14 @@ function renderAdminHistory(){
         return`<div class="maint-card fixed" style="margin-bottom:8px;opacity:.95;">
           <div style="color:#1a1a2e;font-size:13px;font-weight:600;line-height:1.5;">${esc(r.issue)}</div>
           ${(r.empPhotos&&r.empPhotos.length)?`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-            ${r.empPhotos.map((p,i)=>`<img src="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i},'empPhotos')" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #FED7AA;cursor:pointer;">`).join('')}
+            ${r.empPhotos.map((p,i)=>`<img data-ph="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i},'empPhotos')" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #FED7AA;cursor:pointer;">`).join('')}
           </div>`:''}
           ${r.reply?`<div style="margin-top:8px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:10px;padding:8px 10px;">
             <div style="font-size:10.5px;color:#475569;font-weight:700;margin-bottom:2px;">💬 ข้อความถึงพนักงาน</div>
             <div style="font-size:12.5px;color:#1a1a2e;line-height:1.5;white-space:pre-wrap;">${esc(r.reply)}</div>
           </div>`:''}
           ${(r.photos&&r.photos.length)?`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-            ${r.photos.map((p,i)=>`<img src="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i})" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+            ${r.photos.map((p,i)=>`<img data-ph="${p}" loading="lazy" decoding="async" onclick="viewRepairPhoto('${r.id}',${i})" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
           </div>`:''}
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
             <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};">${pill.text}</span>
@@ -4470,7 +4585,7 @@ function renderAdminFluidHistory(){
         ${f.odometer?`<div style="color:#888;font-size:12px;margin-top:5px;">🧭 เลขไมล์: <b>${esc(f.odometer)}</b> กม.</div>`:''}
         ${f.note?`<div style="color:#666;font-size:12px;margin-top:4px;">${skeIcon('note')} ${esc(f.note)}</div>`:''}
         ${(f.photos&&f.photos.length)?`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-          ${f.photos.map((p,i)=>`<img src="${p}" onclick="viewFluidPhoto('${f.id}',${i})" style="width:68px;height:68px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
+          ${f.photos.map((p,i)=>`<img data-ph="${p}" onclick="viewFluidPhoto('${f.id}',${i})" style="width:68px;height:68px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`).join('')}
         </div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px;">
           <span style="color:#aaa;font-size:10.5px;">บันทึกเมื่อ ${fmt(f.createdAt)}</span>
@@ -4638,7 +4753,7 @@ function renderMonthlyDocAlert(me){
   // วันที่ 16 เป็นต้นไปจะไม่ขึ้นแถบแจ้งเตือนในหน้าพนักงาน
   if(!isMonthlyDocWindowOpen()) return '';
   const pill=_docStatusPill(status);
-  const img=rec?.photo?`<div style="margin-top:8px;"><img src="${rec.photo}" alt="รูปหลักฐานการส่งเอกสาร" style="max-width:100%;max-height:190px;border-radius:10px;border:1px solid ${pill.bd};object-fit:cover;"></div>`:'';
+  const img=rec?.photo?`<div style="margin-top:8px;"><img data-ph="${rec.photo}" alt="รูปหลักฐานการส่งเอกสาร" style="max-width:100%;max-height:190px;border-radius:10px;border:1px solid ${pill.bd};object-fit:cover;"></div>`:'';
   if(status==='approved'){
     // อนุมัติแล้ว — ไม่ต้องเตือน/โชว์การ์ดซ้ำอีก ให้หายไปจากหน้าพนักงานเลย
     return '';
@@ -4739,12 +4854,15 @@ async function handleMonthlyDocPhoto(ev){
 
     showDocUploadPopup('กำลังเตรียมรูปเอกสาร','กำลังบีบอัดรูปให้เหมาะกับการบันทึก');
     const photoData=await compressMonthlyDocImage(file);
-    updateDocUploadPopup('กำลังบันทึกลงระบบ','กำลังส่งข้อมูลไป Firebase กรุณารอสักครู่');
+    updateDocUploadPopup('กำลังส่งรูปขึ้นคลัง','กำลังส่งรูปไป Firebase กรุณารอสักครู่');
+    const photoId=await uploadPhoto(photoData); // เข้าคลังรูป — ข้อมูลหลักเก็บแค่รหัส
+    updateDocUploadPopup('กำลังบันทึกลงระบบ','อีกนิดเดียว กรุณารอสักครู่');
 
     const monthKey=_docMonthKey();
     const id=_docId(me.id,monthKey);
     const old=getMonthlyDocSubmission(me.id,monthKey)||{};
-    const rec={...old,id,empId:me.id,empName:me.name||'',plate:me.plate||'',phone:me.phone||'',lineId:me.lineId||'',monthKey,photo:photoData,photoSize:photoData.length,submittedAt:Date.now(),status:'pending',reviewedAt:null,reviewedBy:null,rejectReason:''};
+    const oldPhoto=old.photo; // รูปรอบก่อน (กรณีส่งซ้ำ/ถูกตีกลับ) — เดี๋ยวลบทิ้งจากคลังหลังบันทึกใหม่สำเร็จ
+    const rec={...old,id,empId:me.id,empName:me.name||'',plate:me.plate||'',phone:me.phone||'',lineId:me.lineId||'',monthKey,photo:photoId,photoSize:photoData.length,submittedAt:Date.now(),status:'pending',reviewedAt:null,reviewedBy:null,rejectReason:''};
 
     if(window.fbUpsertMonthlyDoc){
       monthlyDocs=await window.fbUpsertMonthlyDoc(rec);
@@ -4752,6 +4870,7 @@ async function handleMonthlyDocPhoto(ev){
       monthlyDocs=(monthlyDocs||[]).filter(x=>x&&x.id!==id).concat([rec]);
       await saveMonthlyDocs();
     }
+    if(oldPhoto&&oldPhoto!==photoId&&window.fbDeletePhotos)window.fbDeletePhotos([oldPhoto]);
 
     hideDocUploadPopup();
     showDocUploadToast('✅ อัปโหลดสำเร็จ รอส่วนกลางตรวจสอบ', true);
@@ -5593,6 +5712,50 @@ function doSave(){
   startAlertTimer();
 }
 
+// ══ เครื่องมือย้ายรูปเก่าเข้าคลังรูปใหม่ (รันครั้งเดียวโดยผู้ดูแล หลังอัพเดทระบบ) ══
+// เดินไล่ทุกรายการที่ยังฝังรูป base64 อยู่ในข้อมูลหลัก → อัพรูปเข้าคลัง photos/ → แทนที่ด้วยรหัส
+// จบแล้วบันทึกข้อมูลหลัก (ตอนนี้เหลือแต่ข้อความ เบามาก) ขึ้น Firebase หนึ่งรอบ
+async function migratePhotosToStore(){
+  if(!confirm('ย้ายรูปทั้งหมดไปคลังรูปแบบใหม่?\n\n• ใช้ครั้งเดียวหลังอัพเดทระบบ\n• แนะนำให้ทำบน WiFi\n• ห้ามปิดแอพระหว่างทำ'))return;
+  showDocUploadPopup('กำลังย้ายรูปเข้าคลังใหม่','ห้ามปิดหน้านี้จนกว่าจะเสร็จ');
+  let moved=0;
+  const conv=async v=>{
+    if(v&&String(v).startsWith('data:')){
+      const pid=await uploadPhoto(v);
+      moved++;
+      updateDocUploadPopup('กำลังย้ายรูปเข้าคลังใหม่','ย้ายแล้ว '+moved+' รูป...');
+      return pid;
+    }
+    return v;
+  };
+  try{
+    for(const e of employees){ if(e&&e.photo)e.photo=await conv(e.photo); }
+    for(const r of repairs){
+      if(!r)continue;
+      if(Array.isArray(r.photos))for(let i=0;i<r.photos.length;i++)r.photos[i]=await conv(r.photos[i]);
+      if(Array.isArray(r.empPhotos))for(let i=0;i<r.empPhotos.length;i++)r.empPhotos[i]=await conv(r.empPhotos[i]);
+    }
+    for(const f of fluidLogs){ if(f&&Array.isArray(f.photos))for(let i=0;i<f.photos.length;i++)f.photos[i]=await conv(f.photos[i]); }
+    for(const d of (monthlyDocs||[])){ if(d&&d.photo)d.photo=await conv(d.photo); }
+    updateDocUploadPopup('กำลังบันทึกข้อมูลหลัก','ย้ายรูปครบ '+moved+' รูป — กำลังบันทึกโครงสร้างใหม่');
+    _cacheSet('ske_emp',employees);
+    _cacheSet('ske_repairs',repairs);
+    _cacheSet('ske_fluid',fluidLogs);
+    _cacheSet('ske_monthly_docs',monthlyDocs||[]);
+    if(window.fbSaveEmployees)await window.fbSaveEmployees(employees);
+    if(window.fbSaveRepairs)await window.fbSaveRepairs(repairs);
+    if(window.fbSaveFluidLogs)await window.fbSaveFluidLogs(fluidLogs);
+    if(window.fbSaveMonthlyDocs)await window.fbSaveMonthlyDocs(monthlyDocs||[]);
+    hideDocUploadPopup();
+    alert('✅ เสร็จเรียบร้อย! ย้ายรูปเข้าคลังใหม่แล้ว '+moved+' รูป\nตั้งแต่ตอนนี้แอพจะโหลดเบาลงและประหยัดเน็ตมาก');
+    location.reload();
+  }catch(e){
+    console.error('migrate error',e);
+    hideDocUploadPopup();
+    alert('❌ ย้ายไม่สำเร็จ: '+(e&&e.message?e.message:'เน็ตอาจหลุดกลางทาง')+'\n\nกดปุ่มเดิมเพื่อทำต่อได้เลย — รูปที่ย้ายไปแล้ว ('+moved+' รูป) จะไม่ถูกย้ายซ้ำ');
+  }
+}
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 function goAdmin(){show('admin');renderAdmin();switchAdminTab('summary');applyAdminRoleUI();startAdminAlertTimer();}
 function goBack(){
@@ -5669,7 +5832,7 @@ function renderAdminDocPanel(){
         <div style="font-size:11px;color:#888;margin-top:2px;">ส่งเมื่อ: ${fmt(d.submittedAt||d.at)}</div></div>
         <span style="font-size:11px;font-weight:900;padding:4px 8px;border-radius:999px;background:${st.bg};color:${st.color};border:1px solid ${st.bd};white-space:nowrap;">${st.text.replace('ส่วนกลางตรวจสอบเอกสารเรียบร้อยแล้ว','อนุมัติแล้ว').replace('เอกสารถูกไม่อนุมัติ กรุณาแนบรูปส่งใหม่','ไม่อนุมัติ').replace('รอส่วนกลางตรวจสอบเอกสาร','รอตรวจ')}</span>
       </div>
-      ${d.photo?`<div style="margin-top:9px;"><img src="${d.photo}" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px;border:1px solid #E5E7EB;" onclick="openPhotoViewer('${d.photo}')"></div>`:''}
+      ${d.photo?`<div style="margin-top:9px;"><img data-ph="${d.photo}" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px;border:1px solid #E5E7EB;" onclick="openPhotoViewer('${d.photo}')"></div>`:''}
       ${d.rejectReason?`<div style="font-size:12px;color:#991B1B;margin-top:6px;background:#FEF2F2;border-radius:8px;padding:7px;">เหตุผลไม่อนุมัติ: ${esc(d.rejectReason)}</div>`:''}
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button class="btn btn-green" style="flex:1;font-size:12px;" onclick="approveMonthlyDoc('${d.id}')">✅ อนุมัติ</button>
@@ -6631,7 +6794,10 @@ async function handleAdminAvatarChange(input,id){
     const av=document.getElementById('aeav_'+id);
     if(av)av.innerHTML=`<img src="${compressed}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;">`;
     document.getElementById('aeavatarrm_'+id)?.classList.remove('hidden');
-    const patch={photo:compressed};
+    const oldPhoto=(employees.find(x=>x.id===id)||{}).photo;
+    const photoId=await uploadPhoto(compressed);
+    if(oldPhoto&&window.fbDeletePhotos)window.fbDeletePhotos([oldPhoto]);
+    const patch={photo:photoId};
     employees=employees.map(x=>x.id===id?{...x,...patch}:x);
     if(currentUser&&currentUser.id===id)currentUser={...currentUser,...patch};
     saveE();saveU();
@@ -6641,6 +6807,8 @@ async function handleAdminAvatarChange(input,id){
 }
 function removeAdminAvatar(id){
   if(!confirm('ลบรูปโปรไฟล์ของพนักงานคนนี้?'))return;
+  const cur=employees.find(x=>x.id===id);
+  if(cur&&cur.photo&&window.fbDeletePhotos)window.fbDeletePhotos([cur.photo]);
   const patch={photo:''};
   employees=employees.map(x=>x.id===id?{...x,...patch}:x);
   if(currentUser&&currentUser.id===id)currentUser={...currentUser,...patch};
