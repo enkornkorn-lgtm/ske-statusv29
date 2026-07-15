@@ -188,7 +188,7 @@
   // ติดตามว่าแต่ละชุดข้อมูล sync ครั้งแรกเสร็จหรือยัง — ใช้กันบั๊ก "ข้อมูลที่ลบไปแล้วฟื้นคืนชีพ"
   // (เดิม: พอลบรายการจนหมด ข้อมูลเป็น null → listener เข้าใจผิดว่า Firebase ว่าง แล้วอัพโหลดข้อมูลเก่าในเครื่องกลับขึ้นไป)
   // หลักการใหม่: อัพโหลดข้อมูลเครื่องขึ้น Firebase ได้ "เฉพาะครั้งแรกสุด" เท่านั้น หลังจากนั้น null = ว่างจริง ให้เคารพค่าว่าง
-  const _firstSync = { employees:false, vehicles:false, repairs:false, fluidLogs:false, cashRequests:false, leaveLogs:false, runLogs:false, monthlyDocs:false };
+  const _firstSync = { employees:false, vehicles:false, repairs:false, fluidLogs:false, cashRequests:false, leaveLogs:false, runLogs:false, monthlyDocs:false, jobPlan:false };
 
   // ══ ระบบกันบันทึกหาย (Offline-safe save queue / outbox) ═══════════════════════
   // ปัญหาเดิม: ถ้าเน็ตหลุด/อ่อนตอนกำลังบันทึก (เปลี่ยนสถานะ, อัปโหลดรูป, แจ้งซ่อม, เบิกเงิน, ลา ฯลฯ)
@@ -199,7 +199,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.08p');
+  console.log('[SKE TRUCK] app version: v2026.07.09e');
   const SKE_OUTBOX_KEY = 'ske_outbox_v1';
   // งานค้างมีอายุจำกัด — เกินนี้ให้ "ทิ้ง" แทนที่จะส่งซ้ำ เพราะ payload เป็นข้อมูลทั้งชุด ณ เวลานั้น
   // ถ้าปล่อยให้คิวเก่าหลายนาที/ชั่วโมงส่งสำเร็จทีหลัง มันจะเอาข้อมูล "ทั้งก้อนเวอร์ชันเก่า" ทับขึ้นเซิร์ฟเวอร์
@@ -254,6 +254,7 @@
       else if (key === 'cashRequests' && window.fbSaveCashRequests) window.fbSaveCashRequests(entry.payload);
       else if (key === 'leaveLogs' && window.fbSaveLeaveLogs) window.fbSaveLeaveLogs(entry.payload);
       else if (key === 'monthlyDocs' && window.fbSaveMonthlyDocs) window.fbSaveMonthlyDocs(entry.payload);
+      else if (key === 'jobPlan' && window.fbSaveJobPlan) window.fbSaveJobPlan(entry.payload);
     });
   }
   setInterval(() => { if (Object.keys(_obLoad()).length > 0) _obFlushAll(); }, 8000);
@@ -800,6 +801,45 @@
     }
     _firstSync.monthlyDocs = true;
   }).catch(e => { _firstSync.monthlyDocs = true; console.error('fbGet monthlyDocs error', e); });
+
+  // ══ แผนงาน (จ่ายงาน) — jobPlan ══
+  window.fbSaveJobPlan = function(list) {
+    const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object') : [];
+    _obMark('jobPlan', clean);
+    return _withTimeout(set(ref(db, 'jobPlan'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:jobPlan')
+      .then(() => { _obClear('jobPlan'); })
+      .catch(e => { console.error('fbSaveJobPlan error', e); throw e; });
+  };
+  onValue(ref(db, 'jobPlan'), (snapshot) => {
+    const data = normalizeList(snapshot.val());
+    if (data) {
+      jobPlanRows = data;
+      _skeCacheSet('ske_jobplan', data);
+      const admin = document.getElementById('admin');
+      if (admin && !admin.classList.contains('hidden') && typeof renderJobPlan === 'function') renderJobPlan();
+    } else if (!_firstSync.jobPlan) {
+      const cache = (()=>{try{return JSON.parse(localStorage.getItem('ske_jobplan')||'[]');}catch(e){return [];}})();
+      if (Array.isArray(cache) && cache.length) set(ref(db, 'jobPlan'), cache).catch(e=>console.error('fb seed jobPlan error', e));
+      else {
+        jobPlanRows = [];
+        localStorage.setItem('ske_jobplan', '[]');
+      }
+    } else {
+      jobPlanRows = [];
+      localStorage.setItem('ske_jobplan', '[]');
+      const admin = document.getElementById('admin');
+      if (admin && !admin.classList.contains('hidden') && typeof renderJobPlan === 'function') renderJobPlan();
+    }
+    _firstSync.jobPlan = true;
+  });
+  get(ref(db, 'jobPlan')).then(snapshot => {
+    const data = normalizeList(snapshot.val());
+    if (data) {
+      jobPlanRows = data;
+      _skeCacheSet('ske_jobplan', data);
+    }
+    _firstSync.jobPlan = true;
+  }).catch(e => { _firstSync.jobPlan = true; console.error('fbGet jobPlan error', e); });
 
 </script>
 <style>
@@ -1461,7 +1501,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.08p</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.09e</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -1469,7 +1509,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.08p</div>
+        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.09e</div>
       </div>
     </div>
 
@@ -1587,7 +1627,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.08p</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.09e</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -1800,7 +1840,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div style="font-size:11px;color:#aaa;">v2026.07.08p</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div style="font-size:11px;color:#aaa;">v2026.07.09e</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -1849,6 +1889,38 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <div id="adminDocPanel" class="hidden">
       <div id="adminDocStats"></div>
       <div id="adminDocList"></div>
+    </div>
+
+    <!-- job plan (แผนงาน) panel -->
+    <div id="adminJobPlanPanel" class="hidden">
+      <div style="background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:12px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#1E40AF;">
+        📌 เลือกชื่อพนักงานในตาราง → สถานะเปลี่ยนเป็น "ได้งานแล้ว" ทันที กรอกครบแล้วกด "จ่ายงาน" ด้านล่างเพื่อยืนยันส่งงานให้ทุกคนพร้อมกัน
+      </div>
+      <div class="card" style="padding:12px;margin-bottom:16px;">
+        <div class="inp-label">➕ เพิ่มวันที่ใหม่</div>
+        <div style="display:flex;gap:8px;">
+          <select class="inp" id="jpNewDateSel" style="flex:1;"></select>
+          <button class="btn btn-blue" style="white-space:nowrap;padding:0 16px;" onclick="addNewDateGroup()">+ เพิ่ม</button>
+        </div>
+        <div class="inp-label" style="margin-top:8px;">คัดลอกเส้นทางทั้งหมดจากวันที่ (เลือกได้อิสระ ไม่คัดลอกคนขับ)</div>
+        <select class="inp" id="jpCopyFromSel"></select>
+      </div>
+      <div id="jobPlanList" style="display:flex;flex-direction:column;"></div>
+      <button class="btn btn-blue btn-full" style="margin-top:14px;font-size:15px;padding:14px;" onclick="dispatchJobPlan()">🚀 จ่ายงาน</button>
+    </div>
+
+    <!-- modal: คัดลอกเส้นทางเดี่ยวไปวันอื่น (สำหรับเส้นทางที่ซ้ำแค่บางวัน ไม่ต้องคัดลอกทั้งวัน) -->
+    <div id="jpCopyRouteModal" class="hidden" onclick="if(event.target===this)closeJpCopyRouteModal()" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.45);">
+      <div style="background:#fff;border-radius:22px 22px 0 0;padding:18px 16px max(18px,env(safe-area-inset-bottom));max-width:480px;width:100%;box-shadow:0 -6px 30px rgba(0,0,0,.22);">
+        <div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:4px;">📋 คัดลอกเส้นทางนี้ไปวันอื่น</div>
+        <div id="jpCopyRouteLabel" style="font-size:12.5px;color:#888;margin-bottom:12px;"></div>
+        <div class="inp-label">คัดลอกไปวันที่</div>
+        <select class="inp" id="jpCopyRouteDateSel"></select>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="btn btn-gray" style="flex:1;" onclick="closeJpCopyRouteModal()">ยกเลิก</button>
+          <button class="btn btn-blue" style="flex:1;" onclick="confirmCopyRouteToDate()">✓ คัดลอก</button>
+        </div>
+      </div>
     </div>
 
 
@@ -2056,6 +2128,9 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <button class="nav-btn active" id="navAdminSum" onclick="switchAdminTab('summary')" style="position:relative;">
       <span class="nav-icon" data-ic="overview"></span><span>ภาพรวม</span>
       <span id="navStaleNavBadge" class="nav-bottom-badge hidden">0</span>
+    </button>
+    <button class="nav-btn" id="navAdminJobPlan" onclick="openJobPlan()" style="position:relative;">
+      <span class="nav-icon">📋</span><span>แผนงาน</span>
     </button>
     <button class="nav-btn" id="navAdminMaint" onclick="switchAdminTab('maint')" style="position:relative;">
       <span class="nav-icon" data-ic="wrench"></span><span>ซ่อมบำรุง</span>
@@ -2357,7 +2432,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.08p';
+const SKE_APP_VERSION='v2026.07.09e';
 // ตัวเขียน cache ปลอดภัย — ใช้ตัวจริงจาก module (ตัดรูปอัตโนมัติเมื่อพื้นที่เต็ม) ถ้ายังโหลดไม่เสร็จใช้ fallback ที่ไม่ throw
 function _cacheSet(key,value){
   if(window._skeCacheSet)return window._skeCacheSet(key,value);
@@ -2490,6 +2565,7 @@ let leaveLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_leaveLogs')
 // ประวัติเที่ยววิ่งงาน — บันทึกถาวรทุกครั้งที่มีเที่ยวใหม่ (ไม่ขึ้นกับสถานะปัจจุบันของพนักงานอีกต่อไป)
 let runLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_runlogs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let monthlyDocs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_monthly_docs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
+let jobPlanRows=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_jobplan')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let _repUrgency='normal';
 let _repNewPhotos=[]; // รูปที่พนักงานเลือกไว้ก่อนกดส่งแจ้งซ่อม (ย่อแล้ว)
 let _fluNewPhotos=[]; // รูปที่พนักงานเลือกไว้ก่อนบันทึกการเปลี่ยนถ่ายของเหลว (ย่อแล้ว)
@@ -6219,7 +6295,7 @@ function closeAdminMoreMenu(){
 }
 
 function switchAdminTab(t){
-  if(adminRole==='viewer'&&t!=='summary'&&t!=='leave'&&t!=='leaveHistory')t='summary';
+  if(adminRole==='viewer'&&t!=='summary'&&t!=='leave'&&t!=='leaveHistory'&&t!=='jobPlan')t='summary';
   document.getElementById('adminEmpPanel').classList.add('hidden');
   document.getElementById('adminVehiclePanel')?.classList.add('hidden');
   document.getElementById('adminLeaveHistoryPanel')?.classList.add('hidden');
@@ -6232,6 +6308,7 @@ function switchAdminTab(t){
   document.getElementById('adminCashPanel').classList.toggle('hidden',t!=='cash');
   document.getElementById('adminLeavePanel').classList.toggle('hidden',t!=='leave');
   document.getElementById('adminDocPanel')?.classList.toggle('hidden',t!=='doc');
+  document.getElementById('adminJobPlanPanel')?.classList.toggle('hidden',t!=='jobPlan');
   document.getElementById('adminSettingsPanel').classList.toggle('hidden',t!=='settings');
   if(t==='leaveHistory')document.getElementById('adminLeaveHistoryPanel')?.classList.remove('hidden');
   document.getElementById('tabSummaryTop')?.classList.toggle('active',t==='summary');
@@ -6239,8 +6316,9 @@ function switchAdminTab(t){
   document.getElementById('tabCashTop')?.classList.toggle('active',t==='cash');
   document.getElementById('tabLeaveTop')?.classList.toggle('active',t==='leave');
   document.getElementById('tabSettings')?.classList.toggle('active',t==='settings'||t==='history'||t==='leaveHistory'||t==='fluidHistory');
-  ['navAdminSum','navAdminMaint','navAdminCash','navAdminDoc','navAdminMore'].forEach(id=>{document.getElementById(id)?.classList.remove('active');});
+  ['navAdminSum','navAdminJobPlan','navAdminMaint','navAdminCash','navAdminDoc','navAdminMore'].forEach(id=>{document.getElementById(id)?.classList.remove('active');});
   if(t==='summary')document.getElementById('navAdminSum')?.classList.add('active');
+  if(t==='jobPlan')document.getElementById('navAdminJobPlan')?.classList.add('active');
   if(t==='maint')document.getElementById('navAdminMaint')?.classList.add('active');
   if(t==='cash')document.getElementById('navAdminCash')?.classList.add('active');
   if(t==='leave'||(t==='leaveHistory'&&adminRole==='viewer'))document.getElementById('navAdminMore')?.classList.add('active');
@@ -6252,6 +6330,7 @@ function switchAdminTab(t){
   if(t==='cash'){renderAdminCashList();markSeenCash();}
   if(t==='leave'){const el=document.getElementById('adminLeaveContent');if(el)el.innerHTML=buildLeaveHTML();markSeenLeave();}
   if(t==='doc'){renderAdminDocPanel();}
+  if(t==='jobPlan'){const sel=document.getElementById('jpNewDateSel');if(sel)sel.innerHTML=jobPlanDateOptionsHTML('');const fsel=document.getElementById('jpCopyFromSel');if(fsel)fsel.innerHTML=jpExistingDateOptionsHTML('');renderJobPlan();}
   if(t==='history')renderAdminHistory();
   if(t==='fluidHistory')renderAdminFluidHistory();
   if(t==='leaveHistory')renderLeaveHistory();
@@ -6535,6 +6614,266 @@ function needsVehicleTracking(e){
   if(OFFICE_POSITIONS.includes(e.position))return false;
   if(!e.plate)return false;
   return true;
+}
+
+// ══ แผนงาน (จ่ายงาน) ══════════════════════════════════════════════════════
+function openJobPlan(){switchAdminTab('jobPlan');}
+function closeJobPlan(){switchAdminTab('summary');}
+
+function todayStrJP(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+
+const THAI_DOW_JP=['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
+function fmtJobDateFull(dateStr){
+  if(!dateStr)return'ไม่ระบุวันที่';
+  const d=new Date(dateStr+'T00:00:00');
+  if(isNaN(d.getTime()))return dateStr;
+  return THAI_DOW_JP[d.getDay()]+' '+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+function jobPlanDateOptionsHTML(cur){
+  const opts=['<option value="">-- เลือกวันที่ --</option>'];
+  const now=new Date();
+  for(let i=0;i<30;i++){
+    const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+i);
+    const val=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    let label=THAI_DOW_JP[d.getDay()]+' '+d.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'});
+    if(i===0)label+=' (วันนี้)';else if(i===1)label+=' (พรุ่งนี้)';
+    opts.push(`<option value="${val}" ${cur===val?'selected':''}>${label}</option>`);
+  }
+  return opts.join('');
+}
+function jobPlanTimeOptionsHTML(cur){
+  const opts=['<option value="">-- เวลา --</option>'];
+  for(let h=0;h<24;h++){
+    for(let m=0;m<60;m+=30){
+      const val=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+      opts.push(`<option value="${val}" ${cur===val?'selected':''}>${val} น.</option>`);
+    }
+  }
+  return opts.join('');
+}
+function jobPlanEmpOptionsHTML(cur){
+  const list=employees.filter(e=>needsVehicleTracking(e)).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'th'));
+  const opts=['<option value="">-- เลือกพนักงาน --</option>'];
+  list.forEach(e=>{opts.push(`<option value="${e.id}" ${cur===e.id?'selected':''}>${esc(e.name)}</option>`);});
+  return opts.join('');
+}
+function fmtJobDate(dateStr){
+  if(!dateStr)return'';
+  const d=new Date(dateStr+'T00:00:00');
+  if(isNaN(d.getTime()))return dateStr;
+  return d.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'});
+}
+function buildJobNoteText(row){
+  const parts=[];
+  if(row.route)parts.push(row.route);
+  if(row.workDate)parts.push('วันที่ '+fmtJobDate(row.workDate));
+  if(row.standbyTime)parts.push('เวลา '+row.standbyTime+' น.');
+  if(row.remark)parts.push('หมายเหตุ: '+row.remark);
+  return parts.join(' · ')||'ได้รับมอบหมายงาน';
+}
+
+function saveJobPlan(){
+  _cacheSet('ske_jobplan',jobPlanRows);
+  if(window.fbSaveJobPlan)return window.fbSaveJobPlan(jobPlanRows).catch(()=>{});
+  return Promise.resolve();
+}
+
+function renderJobPlanRowTR(row){
+  const hasRemark=!!(row.remark&&row.remark.trim());
+  const unassigned=!row.empId;
+  const bg=hasRemark?'#FEE2E2':(unassigned?'#FDF2F8':'#fff');
+  return `<tr style="background:${bg};border-bottom:1px solid #F1F5F9;">
+    <td style="padding:6px;min-width:150px;">
+      <input value="${esc(row.route||'')}" placeholder="พิมพ์เส้นทาง..." oninput="updateJobPlanField('${row.id}','route',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;font-weight:${hasRemark?'700':'500'};color:${hasRemark?'#B91C1C':'#1a1a2e'};">
+    </td>
+    <td style="padding:6px;min-width:88px;">
+      <select onchange="updateJobPlanField('${row.id}','standbyTime',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;">${jobPlanTimeOptionsHTML(row.standbyTime)}</select>
+    </td>
+    <td style="padding:6px;min-width:150px;">
+      <select onchange="onJobPlanEmpChange('${row.id}',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;font-weight:700;color:${unassigned?'#DB2777':'#1a1a2e'};">${jobPlanEmpOptionsHTML(row.empId)}</select>
+    </td>
+    <td style="padding:6px;min-width:85px;color:#475569;font-size:11.5px;white-space:nowrap;">${esc(row.plate||'-')}</td>
+    <td style="padding:6px;min-width:100px;color:#475569;font-size:11.5px;white-space:nowrap;">${esc(row.phone||'-')}</td>
+    <td style="padding:6px;min-width:140px;">
+      <input value="${esc(row.remark||'')}" placeholder="หมายเหตุ..." oninput="updateJobPlanField('${row.id}','remark',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;color:#B91C1C;">
+    </td>
+    <td style="padding:6px;text-align:center;min-width:52px;white-space:nowrap;">
+      <button onclick="copyRouteToDate('${row.id}')" title="คัดลอกเส้นทางนี้ไปวันอื่น" style="background:none;border:none;color:#1E90D6;font-size:14px;cursor:pointer;">📋</button>
+      ${row.dispatched?'<span title="จ่ายงานแล้ว">✅</span>':`<button onclick="delJobPlanRow('${row.id}')" style="background:none;border:none;color:#DC2626;font-size:14px;cursor:pointer;">🗑️</button>`}
+    </td>
+  </tr>`;
+}
+
+function renderJobPlanDateGroup(date,rows){
+  return `<div style="margin-bottom:18px;">
+    <div style="background:linear-gradient(90deg,#F97316,#FB923C);color:#fff;font-weight:800;font-size:13px;padding:9px 14px;border-radius:10px 10px 0 0;">
+      📅 แผนงานวันที่ ${fmtJobDateFull(date)}
+    </div>
+    <div style="overflow-x:auto;border:1px solid #E8EAF0;border-top:none;border-radius:0 0 10px 10px;background:#fff;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:#EFF6FF;">
+          <th style="padding:8px 6px;text-align:left;color:#1E40AF;font-weight:700;font-size:11px;border-bottom:2px solid #BFDBFE;">เส้นทาง</th>
+          <th style="padding:8px 6px;text-align:left;color:#1E40AF;font-weight:700;font-size:11px;border-bottom:2px solid #BFDBFE;">เวลาสแตนบาย</th>
+          <th style="padding:8px 6px;text-align:left;color:#1E40AF;font-weight:700;font-size:11px;border-bottom:2px solid #BFDBFE;">ชื่อ-สกุล</th>
+          <th style="padding:8px 6px;text-align:left;color:#1E40AF;font-weight:700;font-size:11px;border-bottom:2px solid #BFDBFE;">ทะเบียน</th>
+          <th style="padding:8px 6px;text-align:left;color:#1E40AF;font-weight:700;font-size:11px;border-bottom:2px solid #BFDBFE;">เบอร์โทร</th>
+          <th style="padding:8px 6px;text-align:left;color:#1E40AF;font-weight:700;font-size:11px;border-bottom:2px solid #BFDBFE;">หมายเหตุ</th>
+          <th style="padding:8px 6px;border-bottom:2px solid #BFDBFE;"></th>
+        </tr></thead>
+        <tbody>${rows.map(r=>renderJobPlanRowTR(r)).join('')}</tbody>
+      </table>
+    </div>
+    <button class="btn btn-gray btn-sm" style="margin-top:6px;font-size:11.5px;" onclick="addJobPlanRow('${date}')">+ เพิ่มเส้นทางในวันนี้</button>
+  </div>`;
+}
+
+function renderJobPlan(){
+  const el=document.getElementById('jobPlanList');
+  if(!el)return;
+  const fsel=document.getElementById('jpCopyFromSel');
+  if(fsel)fsel.innerHTML=jpExistingDateOptionsHTML(fsel.value);
+  if(!jobPlanRows.length){
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">ยังไม่มีแผนงาน เลือกวันที่ด้านบนแล้วกด "+ เพิ่ม" เพื่อเริ่มต้น</div></div>';
+    return;
+  }
+  const byDate={};
+  jobPlanRows.forEach(r=>{const k=r.workDate||'ไม่ระบุวันที่';if(!byDate[k])byDate[k]=[];byDate[k].push(r);});
+  const dates=Object.keys(byDate).sort();
+  el.innerHTML=dates.map(d=>renderJobPlanDateGroup(d,byDate[d])).join('');
+}
+
+function addJobPlanRow(workDate){
+  const d=workDate||todayStrJP();
+  jobPlanRows=jobPlanRows.concat([{id:'jp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),workDate:d,route:'',standbyTime:'',empId:'',empName:'',plate:'',phone:'',remark:'',dispatched:false}]);
+  saveJobPlan();renderJobPlan();
+}
+
+// เพิ่มวันที่ใหม่ทั้งกลุ่ม — เลือกได้เองว่าจะคัดลอกเส้นทางทั้งหมดจาก "วันไหน" (ไม่บังคับต้องเป็นวันล่าสุด)
+// ไม่คัดลอกคนขับ กันมอบงานซ้ำโดยไม่ตั้งใจ — ถ้าเส้นทางซ้ำแค่บางส่วน ใช้ปุ่ม 📋 ต่อแถวแทน (คัดลอกทีละเส้นทาง)
+function addNewDateGroup(){
+  const sel=document.getElementById('jpNewDateSel');
+  const date=sel?sel.value:'';
+  if(!date){alert('⚠️ กรุณาเลือกวันที่ก่อน');return;}
+  if(jobPlanRows.some(r=>r.workDate===date)){
+    alert('มีแผนงานวันที่นี้อยู่แล้ว เลื่อนลงไปดู/เพิ่มเส้นทางในตารางของวันนั้นได้เลย');
+    renderJobPlan();
+    return;
+  }
+  const source=document.getElementById('jpCopyFromSel')?.value||'';
+  if(source){
+    const srcRows=jobPlanRows.filter(r=>r.workDate===source);
+    const newRows=srcRows.map(r=>({id:'jp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6)+Math.random(),workDate:date,route:r.route,standbyTime:r.standbyTime,empId:'',empName:'',plate:'',phone:'',remark:'',dispatched:false}));
+    jobPlanRows=jobPlanRows.concat(newRows);
+    saveJobPlan();renderJobPlan();
+    return;
+  }
+  addJobPlanRow(date);
+}
+
+function jpExistingDateOptionsHTML(cur){
+  const dates=[...new Set(jobPlanRows.map(r=>r.workDate).filter(Boolean))].sort();
+  if(!dates.length)return '<option value="">-- ยังไม่มีวันที่ในระบบ --</option>';
+  return '<option value="">-- ไม่คัดลอก (เริ่มว่างเปล่า) --</option>'+dates.map(d=>`<option value="${d}" ${cur===d?'selected':''}>${fmtJobDateFull(d)}</option>`).join('');
+}
+
+// คัดลอก "เฉพาะเส้นทางเดียว" ไปอีกวันหนึ่ง — ใช้เมื่อเส้นทางซ้ำแค่บางวัน ไม่ใช่ทุกวัน (ไม่ต้องคัดลอกทั้งวันทิ้งของที่ไม่ตรง)
+let _jpCopySourceId=null;
+function copyRouteToDate(rowId){
+  const row=jobPlanRows.find(r=>r.id===rowId);
+  if(!row)return;
+  _jpCopySourceId=rowId;
+  document.getElementById('jpCopyRouteLabel').textContent=row.route?('เส้นทาง: '+row.route):'(ยังไม่ได้กรอกเส้นทาง)';
+  document.getElementById('jpCopyRouteDateSel').innerHTML=jobPlanDateOptionsHTML('');
+  document.getElementById('jpCopyRouteModal').classList.remove('hidden');
+}
+function closeJpCopyRouteModal(){
+  document.getElementById('jpCopyRouteModal').classList.add('hidden');
+  _jpCopySourceId=null;
+}
+function confirmCopyRouteToDate(){
+  const row=jobPlanRows.find(r=>r.id===_jpCopySourceId);
+  const date=document.getElementById('jpCopyRouteDateSel')?.value;
+  if(!row||!date){alert('⚠️ กรุณาเลือกวันที่ปลายทาง');return;}
+  const newRow={id:'jp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),workDate:date,route:row.route,standbyTime:row.standbyTime,empId:'',empName:'',plate:'',phone:'',remark:'',dispatched:false};
+  jobPlanRows=jobPlanRows.concat([newRow]);
+  saveJobPlan();
+  closeJpCopyRouteModal();
+  renderJobPlan();
+  showDocUploadToast('✅ คัดลอกเส้นทางไปวันที่ '+fmtJobDateFull(date)+' แล้ว',true);
+}
+
+async function delJobPlanRow(id){
+  const row=jobPlanRows.find(r=>r.id===id);
+  if(!row)return;
+  if(!confirm('ลบเส้นทางนี้?'))return;
+  if(row.empId){
+    if(confirm(`เส้นทางนี้มอบหมายให้ "${row.empName}" อยู่ — ต้องการคืนสถานะพนักงานคนนี้เป็นสแตนบายด้วยไหม?`)){
+      await revertJobAssignment(row.empId);
+    }
+  }
+  jobPlanRows=jobPlanRows.filter(r=>r.id!==id);
+  saveJobPlan();renderJobPlan();
+}
+
+function updateJobPlanField(id,field,value){
+  jobPlanRows=jobPlanRows.map(r=>r.id===id?{...r,[field]:value}:r);
+  saveJobPlan();
+  const row=jobPlanRows.find(r=>r.id===id);
+  if(row&&row.empId)syncJobNoteToEmployee(row);
+}
+
+async function syncJobNoteToEmployee(row){
+  if(!row||!row.empId)return;
+  const patch={status:'got_job',note:buildJobNoteText(row),province:'',updatedAt:new Date().toISOString()};
+  employees=employees.map(e=>e.id===row.empId?{...e,...patch}:e);
+  _cacheSet('ske_emp',employees);
+  try{ await fbPatchEmployee(row.empId,patch); }catch(e){console.warn('sync job note error',e);}
+  const dash=document.getElementById('dashboard');
+  if(dash&&!dash.classList.contains('hidden'))renderDashboard();
+}
+async function revertJobAssignment(empId){
+  const patch={status:'standby',note:'',updatedAt:new Date().toISOString()};
+  employees=employees.map(e=>e.id===empId?{...e,...patch}:e);
+  _cacheSet('ske_emp',employees);
+  try{ await fbPatchEmployee(empId,patch); }catch(e){console.warn('revert job error',e);}
+}
+
+async function onJobPlanEmpChange(id,empId){
+  const row=jobPlanRows.find(r=>r.id===id);
+  if(!row)return;
+  if(!empId){
+    if(row.empId&&confirm(`ยกเลิกงานที่มอบให้ "${row.empName}" และคืนสถานะเป็นสแตนบาย?`)){
+      await revertJobAssignment(row.empId);
+    }
+    jobPlanRows=jobPlanRows.map(r=>r.id===id?{...r,empId:'',empName:'',plate:'',phone:''}:r);
+    saveJobPlan();renderJobPlan();
+    return;
+  }
+  const emp=employees.find(e=>e.id===empId);
+  if(!emp)return;
+  jobPlanRows=jobPlanRows.map(r=>r.id===id?{...r,empId:emp.id,empName:emp.name,plate:emp.plate||'',phone:emp.phone||''}:r);
+  saveJobPlan();
+  renderJobPlan();
+  await syncJobNoteToEmployee(jobPlanRows.find(r=>r.id===id));
+}
+
+async function dispatchJobPlan(){
+  const assigned=jobPlanRows.filter(r=>r.empId&&!r.dispatched);
+  if(!assigned.length){alert('⚠️ ยังไม่มีเส้นทางที่มอบหมายพนักงานไว้ (หรือจ่ายงานไปครบหมดแล้ว)');return;}
+  const ready=assigned.filter(r=>r.route&&r.workDate&&r.standbyTime);
+  const incomplete=assigned.length-ready.length;
+  if(!ready.length){alert('⚠️ กรุณากรอกเส้นทาง/เวลาสแตนบาย ให้ครบก่อนจ่ายงาน');return;}
+  if(incomplete>0&&!confirm(`มี ${incomplete} เส้นทางที่กรอกไม่ครบ จะข้ามไปก่อน — ยืนยันจ่ายงานให้พนักงาน ${ready.length} คนที่กรอกครบแล้วหรือไม่?`))return;
+  if(incomplete===0&&!confirm(`ยืนยันจ่ายงานให้พนักงาน ${ready.length} คน?`))return;
+  showDocUploadPopup('กำลังจ่ายงาน','กรุณารอสักครู่ อย่าเพิ่งปิดหน้านี้');
+  for(const row of ready){
+    await syncJobNoteToEmployee(row);
+    jobPlanRows=jobPlanRows.map(r=>r.id===row.id?{...r,dispatched:true,dispatchedAt:new Date().toISOString()}:r);
+  }
+  await saveJobPlan();
+  renderJobPlan();
+  hideDocUploadPopup();
+  alert(`✅ จ่ายงานให้พนักงาน ${ready.length} คนเรียบร้อยแล้ว — สถานะของทุกคนเปลี่ยนเป็น "ได้งานแล้ว" แล้ว`);
 }
 
 function doAddEmp(){
