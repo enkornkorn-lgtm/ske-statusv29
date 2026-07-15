@@ -199,7 +199,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.08n');
+  console.log('[SKE TRUCK] app version: v2026.07.08o');
   const SKE_OUTBOX_KEY = 'ske_outbox_v1';
   // งานค้างมีอายุจำกัด — เกินนี้ให้ "ทิ้ง" แทนที่จะส่งซ้ำ เพราะ payload เป็นข้อมูลทั้งชุด ณ เวลานั้น
   // ถ้าปล่อยให้คิวเก่าหลายนาที/ชั่วโมงส่งสำเร็จทีหลัง มันจะเอาข้อมูล "ทั้งก้อนเวอร์ชันเก่า" ทับขึ้นเซิร์ฟเวอร์
@@ -1461,7 +1461,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.08n</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.08o</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -1469,7 +1469,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.08n</div>
+        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.08o</div>
       </div>
     </div>
 
@@ -1587,7 +1587,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.08n</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.08o</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -1800,7 +1800,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div style="font-size:11px;color:#aaa;">v2026.07.08n</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div style="font-size:11px;color:#aaa;">v2026.07.08o</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -2176,7 +2176,9 @@ function _dedupByPlate(list){
   });
   return list.filter(e=>{
     const p=(e.plate||'').trim();
-    if(!p)return true; // ไม่มีทะเบียน ไม่เข้าเงื่อนไขชนกัน แสดงตามปกติ
+    // ไม่มีทะเบียนรถ = พนักงานออฟฟิศ/ตำแหน่งที่ไม่ได้ผูกกับรถ — ไม่นับรวมในภาพรวม "สถานะรถ" ของแดชบอร์ด
+    // (ใช้ฟังก์ชันนี้เฉพาะจุดสรุป/แสดงกลุ่มสถานะรถ 6 จุดเท่านั้น ไม่กระทบระบบอื่น เช่น จัดการพนักงาน/ลา/เบิกเงิน)
+    if(!p)return false;
     return latestByPlate[p]===e;
   });
 }
@@ -2361,7 +2363,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.08n';
+const SKE_APP_VERSION='v2026.07.08o';
 // ตัวเขียน cache ปลอดภัย — ใช้ตัวจริงจาก module (ตัดรูปอัตโนมัติเมื่อพื้นที่เต็ม) ถ้ายังโหลดไม่เสร็จใช้ fallback ที่ไม่ throw
 function _cacheSet(key,value){
   if(window._skeCacheSet)return window._skeCacheSet(key,value);
@@ -5678,7 +5680,7 @@ function openStatusModal(){
         <button type="button" class="status-opt ${_selStatus===st.id?'sel':''}" id="sopt_${st.id}"
           style="border-color:${_selStatus===st.id?st.color:'#E8EAF0'};color:${_selStatus===st.id?st.color:'#888'};background:${_selStatus===st.id?st.bg:'#F5F6FA'};"
           onclick="selStat('${st.id}')"><span class="status-emoji" style="color:${st.color}">${skeIcon(st.ic)}</span><br>${st.label}</button>`).join('')}</div>
-      <div id="provWrap">${provHTML(_selStatus,_selProv)}</div>
+      <div id="provWrap">${me.plate?provHTML(_selStatus,_selProv):'<div style="font-size:11.5px;color:#94A3B8;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:8px 10px;">📍 ไม่ต้องระบุจังหวัดสแตนบาย (พนักงานออฟฟิศ ไม่มีทะเบียนรถ)</div>'}</div>
       <div class="inp-label" style="margin-top:10px;">หมายเหตุ</div>
       <textarea id="noteInp" rows="2" class="inp" style="width:100%;" placeholder="หมายเหตุ (ไม่บังคับ)">${esc(me.note||'')}</textarea>
       <button class="btn btn-blue btn-full" style="margin-top:12px;" onclick="doSave()">✓ บันทึกสถานะ</button>
@@ -5731,13 +5733,19 @@ function selStat(id){
     b.style.color=id===st.id?st.color:'#888';
     b.style.background=id===st.id?st.bg:'#F5F6FA';
   });
-  const w=document.getElementById('provWrap');if(w)w.innerHTML=provHTML(id,(id==='standby'||id==='traveling'||id==='returning'||id==='done')?_selProv:'');
+  const w=document.getElementById('provWrap');
+  if(w){
+    const isOffice=!(currentUser&&currentUser.plate);
+    w.innerHTML=isOffice?'<div style="font-size:11.5px;color:#94A3B8;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:8px 10px;">📍 ไม่ต้องระบุจังหวัดสแตนบาย (พนักงานออฟฟิศ ไม่มีทะเบียนรถ)</div>':provHTML(id,(id==='standby'||id==='traveling'||id==='returning'||id==='done')?_selProv:'');
+  }
 }
 
 async function doSave(){
   const note=document.getElementById('noteInp')?.value||'';
   const provSel=document.getElementById('provSel');
-  const needProv=_selStatus==='standby'||_selStatus==='traveling'||_selStatus==='returning'||_selStatus==='done';
+  // พนักงานที่ไม่มีทะเบียนรถผูกอยู่ (เช่น แผนกออฟฟิศ) ไม่ต้องเลือกจังหวัดสแตนบาย — ไม่ใช่รถ ไม่มีตำแหน่งที่ตั้งให้ระบุ
+  const isOffice=!(currentUser&&currentUser.plate);
+  const needProv=!isOffice&&(_selStatus==='standby'||_selStatus==='traveling'||_selStatus==='returning'||_selStatus==='done');
   const prov=needProv?(provSel?provSel.value:_selProv)||'':'';
   if(needProv&&!prov){
     alert('⚠️ กรุณาเลือกจังหวัดก่อนบันทึกสถานะ');
@@ -6847,7 +6855,7 @@ function renderAdminEmpList(){
         <div class="status-grid">${STATUSES.map(st=>`<button class="status-opt" id="aes_${e.id}_${st.id}"
           style="border-color:${e.status===st.id?st.color:'#E8EAF0'};color:${e.status===st.id?st.color:'#888'};background:${e.status===st.id?st.bg:'#F5F6FA'};"
           onclick="aSelStat('${e.id}','${st.id}')"><span class="status-emoji" style="color:${st.color}">${skeIcon(st.ic)}</span><br>${st.label}</button>`).join('')}</div>
-        <div id="aprv_${e.id}">${provHTML(e.status,e.province||'')}</div>
+        <div id="aprv_${e.id}">${e.plate?provHTML(e.status,e.province||''):'<div style="font-size:11.5px;color:#94A3B8;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:8px 10px;">📍 พนักงานออฟฟิศ (ไม่มีทะเบียนรถ) — ไม่ต้องระบุจังหวัดสแตนบาย</div>'}</div>
         <div><div class="inp-label">หมายเหตุ</div><textarea class="inp" id="aen2_${e.id}" rows="2">${esc(e.note||'')}</textarea></div>
         <div style="border-top:1px solid #E8EAF0;padding-top:11px;">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#475569;cursor:pointer;">
@@ -6932,7 +6940,10 @@ function aSelStat(eid,sid){
   const curProv=curSel?curSel.value:(needProv?(emp?.province||''):'');
   _aSel[eid]=sid;
   STATUSES.forEach(st=>{const b=document.getElementById(`aes_${eid}_${st.id}`);if(!b)return;b.style.borderColor=sid===st.id?st.color:'#E8EAF0';b.style.color=sid===st.id?st.color:'#888';b.style.background=sid===st.id?st.bg:'#F5F6FF';});
-  if(wrap)wrap.innerHTML=provHTML(sid,curProv);
+  if(wrap){
+    const curPlate=document.getElementById('aep_'+eid)?.value.trim()||'';
+    wrap.innerHTML=curPlate?provHTML(sid,curProv):'<div style="font-size:11.5px;color:#94A3B8;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:8px 10px;">📍 พนักงานออฟฟิศ (ไม่มีทะเบียนรถ) — ไม่ต้องระบุจังหวัดสแตนบาย</div>';
+  }
 }
 function doSaveAEdit(id){
   const name=document.getElementById('aen_'+id).value.trim();
@@ -6943,7 +6954,9 @@ function doSaveAEdit(id){
   const note=document.getElementById('aen2_'+id).value;
   const newPin=document.getElementById('aepin_'+id)?.value.trim()||'';
   const status=_aSel[id]||'standby';
-  const needProv=status==='standby'||status==='traveling'||status==='returning'||status==='done';
+  // ไม่มีทะเบียนรถ (เช่น แผนกออฟฟิศ) = ไม่ต้องบังคับเลือกจังหวัดสแตนบาย
+  const isOffice=!plate;
+  const needProv=!isOffice&&(status==='standby'||status==='traveling'||status==='returning'||status==='done');
   const wrap=document.getElementById('aprv_'+id);
   const prov=needProv?(wrap?.querySelector('.province-sel')?.value||''):'';
   if(needProv&&!prov){
