@@ -199,7 +199,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.09m');
+  console.log('[SKE TRUCK] app version: v2026.07.09o');
   const SKE_OUTBOX_KEY = 'ske_outbox_v1';
   // งานค้างมีอายุจำกัด — เกินนี้ให้ "ทิ้ง" แทนที่จะส่งซ้ำ เพราะ payload เป็นข้อมูลทั้งชุด ณ เวลานั้น
   // ถ้าปล่อยให้คิวเก่าหลายนาที/ชั่วโมงส่งสำเร็จทีหลัง มันจะเอาข้อมูล "ทั้งก้อนเวอร์ชันเก่า" ทับขึ้นเซิร์ฟเวอร์
@@ -1541,7 +1541,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.09m</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.09o</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -1549,7 +1549,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.09m</div>
+        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.09o</div>
       </div>
     </div>
 
@@ -1667,7 +1667,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.09m</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.09o</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -1880,7 +1880,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div style="font-size:11px;color:#aaa;">v2026.07.09m</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div style="font-size:11px;color:#aaa;">v2026.07.09o</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -2486,7 +2486,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.09m';
+const SKE_APP_VERSION='v2026.07.09o';
 // ตัวเขียน cache ปลอดภัย — ใช้ตัวจริงจาก module (ตัดรูปอัตโนมัติเมื่อพื้นที่เต็ม) ถ้ายังโหลดไม่เสร็จใช้ fallback ที่ไม่ throw
 function _cacheSet(key,value){
   if(window._skeCacheSet)return window._skeCacheSet(key,value);
@@ -6751,7 +6751,7 @@ function renderJobPlanRowTR(row){
   const bg=hasRemark?'#FEE2E2':(unassigned?'#FDF2F8':'#fff');
   return `<tr style="background:${bg};border-bottom:1px solid #F1F5F9;">
     <td style="padding:6px;min-width:150px;">
-      <input value="${esc(row.route||'')}" placeholder="พิมพ์เส้นทาง..." oninput="updateJobPlanField('${row.id}','route',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;font-weight:${hasRemark?'700':'500'};color:${hasRemark?'#B91C1C':'#1a1a2e'};">
+      <input value="${esc(row.route||'')}" placeholder="พิมพ์เส้นทาง..." onblur="updateJobPlanField('${row.id}','route',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;font-weight:${hasRemark?'700':'500'};color:${hasRemark?'#B91C1C':'#1a1a2e'};">
     </td>
     <td style="padding:6px;min-width:88px;">
       <select onchange="updateJobPlanField('${row.id}','standbyTime',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;">${jobPlanTimeOptionsHTML(row.standbyTime)}</select>
@@ -6762,7 +6762,7 @@ function renderJobPlanRowTR(row){
     <td style="padding:6px;min-width:85px;color:#475569;font-size:11.5px;white-space:nowrap;">${esc(row.plate||'-')}</td>
     <td style="padding:6px;min-width:100px;color:#475569;font-size:11.5px;white-space:nowrap;">${esc(row.phone||'-')}</td>
     <td style="padding:6px;min-width:140px;">
-      <input value="${esc(row.remark||'')}" placeholder="หมายเหตุ..." oninput="updateJobPlanField('${row.id}','remark',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;color:#B91C1C;">
+      <input value="${esc(row.remark||'')}" placeholder="หมายเหตุ..." onblur="updateJobPlanField('${row.id}','remark',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;color:#B91C1C;">
     </td>
     <td style="padding:6px;text-align:center;min-width:52px;white-space:nowrap;position:sticky;right:0;background:${bg};box-shadow:-4px 0 6px -4px rgba(0,0,0,.15);">
       <button onclick="copyRouteToDate('${row.id}')" title="คัดลอกเส้นทางนี้ไปวันอื่น" style="background:none;border:none;color:#1E90D6;font-size:14px;cursor:pointer;">📋</button>
@@ -6895,7 +6895,7 @@ async function delJobPlanRow(id){
   if(!confirm('ลบเส้นทางนี้?'))return;
   if(row.empId){
     if(confirm(`เส้นทางนี้มอบหมายให้ "${row.empName}" อยู่ — ต้องการคืนสถานะพนักงานคนนี้เป็นสแตนบายด้วยไหม?`)){
-      await revertJobAssignment(row.empId);
+      await revertJobAssignment(row.empId,id);
     }
   }
   jobPlanRows=jobPlanRows.filter(r=>r.id!==id);
@@ -6918,7 +6918,14 @@ async function syncJobNoteToEmployee(row){
   const dash=document.getElementById('dashboard');
   if(dash&&!dash.classList.contains('hidden'))renderDashboard();
 }
-async function revertJobAssignment(empId){
+// คืนสถานะพนักงานเมื่อถูกถอด/สลับออกจากแถวหนึ่ง — แต่ก่อนรีเซ็ตเป็นสแตนบาย เช็คก่อนว่า "ยังมีงานอื่นค้างอยู่ไหม"
+// (เผื่อคนคนเดียวถูกมอบหมายมากกว่า 1 เส้นทาง/วัน) ถ้ามีงานอื่นค้าง ให้คงสถานะ "ได้งานแล้ว" ไว้ตามงานที่เหลือแทน ไม่รีเซ็ตทับ
+async function revertJobAssignment(empId,excludeRowId){
+  const otherRow=jobPlanRows.find(r=>r.id!==excludeRowId&&r.empId===empId);
+  if(otherRow){
+    await syncJobNoteToEmployee(otherRow);
+    return;
+  }
   const patch={status:'standby',note:'',updatedAt:new Date().toISOString()};
   employees=employees.map(e=>e.id===empId?{...e,...patch}:e);
   _cacheSet('ske_emp',employees);
@@ -6928,9 +6935,10 @@ async function revertJobAssignment(empId){
 async function onJobPlanEmpChange(id,empId){
   const row=jobPlanRows.find(r=>r.id===id);
   if(!row)return;
+  const prevEmpId=row.empId;
   if(!empId){
-    if(row.empId&&confirm(`ยกเลิกงานที่มอบให้ "${row.empName}" และคืนสถานะเป็นสแตนบาย?`)){
-      await revertJobAssignment(row.empId);
+    if(prevEmpId&&confirm(`ยกเลิกงานที่มอบให้ "${row.empName}" และคืนสถานะเป็นสแตนบาย?`)){
+      await revertJobAssignment(prevEmpId,id);
     }
     jobPlanRows=jobPlanRows.map(r=>r.id===id?{...r,empId:'',empName:'',plate:'',phone:''}:r);
     saveJobPlan();renderJobPlan();
@@ -6938,6 +6946,11 @@ async function onJobPlanEmpChange(id,empId){
   }
   const emp=employees.find(e=>e.id===empId);
   if(!emp)return;
+  // สลับจากคนเดิมเป็นคนใหม่ในแถวเดียวกัน — ต้องคืนสถานะ "คนเดิม" กลับเป็นสแตนบายก่อนเสมอ
+  // ไม่งั้นคนเดิมจะยังเห็นรายละเอียดงานนี้ค้างอยู่ในแดชบอร์ดตัวเอง ทั้งที่ถูกเปลี่ยนตัวไปแล้ว
+  if(prevEmpId&&prevEmpId!==empId){
+    await revertJobAssignment(prevEmpId,id);
+  }
   jobPlanRows=jobPlanRows.map(r=>r.id===id?{...r,empId:emp.id,empName:emp.name,plate:emp.plate||'',phone:emp.phone||''}:r);
   saveJobPlan();
   renderJobPlan();
