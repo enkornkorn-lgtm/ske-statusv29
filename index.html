@@ -220,7 +220,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.10f');
+  console.log('[SKE TRUCK] app version: v2026.07.10g');
   const SKE_OUTBOX_KEY = 'ske_outbox_v1';
   // งานค้างมีอายุจำกัด — เกินนี้ให้ "ทิ้ง" แทนที่จะส่งซ้ำ เพราะ payload เป็นข้อมูลทั้งชุด ณ เวลานั้น
   // ถ้าปล่อยให้คิวเก่าหลายนาที/ชั่วโมงส่งสำเร็จทีหลัง มันจะเอาข้อมูล "ทั้งก้อนเวอร์ชันเก่า" ทับขึ้นเซิร์ฟเวอร์
@@ -1602,7 +1602,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.10f</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.10g</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -1610,7 +1610,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.10f</div>
+        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.10g</div>
       </div>
     </div>
 
@@ -1728,7 +1728,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.10f</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.10g</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -1760,6 +1760,11 @@ select.inp option{background:#fff;color:#1a1a2e;}
         <div class="quick-card-title" style="margin-top:0;">เบิกเงินพนักงาน</div>
         <div class="quick-card-sub" id="cashSub">ยังไม่มีรายการ</div>
       </div>
+    </button>
+    <button class="quick-card" onclick="openFeedbackModal()">
+      <div class="quick-card-icon">💬</div>
+      <div class="quick-card-title">ความคิดเห็น/ข้อเสนอแนะ</div>
+      <div class="quick-card-sub">บอกอะไรบริษัทได้ที่นี่</div>
     </button>
   </div>
   </div>
@@ -1817,9 +1822,18 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div id="myPinMsg" class="msg-ok hidden"></div>
       <button class="btn btn-purple btn-full" onclick="doChangeMyPin()">🔑 บันทึก PIN ใหม่</button>
     </div>
-    <!-- ความคิดเห็น/ข้อเสนอแนะที่มีต่อบริษัท — เลือกได้ว่าจะระบุชื่อหรือไม่ระบุชื่อ -->
-    <div class="card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px;">
-      <div style="color:#059669;font-weight:700;font-size:14px;">💬 ความคิดเห็น / ข้อเสนอแนะที่มีต่อบริษัท</div>
+    <button class="btn btn-red btn-full" onclick="doLogout()">🚪 ออกจากระบบ</button>
+  </div>
+</div>
+
+<!-- ══ FEEDBACK MODAL — ความคิดเห็น/ข้อเสนอแนะที่มีต่อบริษัท ══ -->
+<div id="feedbackModal" class="hidden" style="position:fixed;inset:0;z-index:9998;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5);">
+  <div style="background:#fff;border-radius:22px 22px 0 0;padding:18px 16px max(18px,env(safe-area-inset-bottom));max-width:480px;width:100%;box-shadow:0 -6px 30px rgba(0,0,0,.2);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:17px;font-weight:800;color:#1a1a2e;">💬 ความคิดเห็น / ข้อเสนอแนะ</div>
+      <button onclick="closeFeedbackModal()" style="background:#F0F2F8;border:none;border-radius:50%;width:34px;height:34px;font-size:17px;color:#555;">✕</button>
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;">
       <div style="background:#ECFDF5;border:1px solid #6EE7B7;border-radius:8px;padding:8px 11px;font-size:11.5px;color:#065F46;line-height:1.5;">
         แจ้งเรื่องอะไรก็ได้ที่อยากบอกบริษัท เช่น ปัญหาที่เจอ ข้อเสนอแนะ หรือติชม — เลือกได้ว่าจะระบุชื่อหรือไม่ระบุชื่อก็ได้
       </div>
@@ -1831,7 +1845,6 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div id="fbMsg" class="msg-ok hidden"></div>
       <button class="btn btn-green btn-full" onclick="doSendFeedback()">✓ ส่งความคิดเห็น</button>
     </div>
-    <button class="btn btn-red btn-full" onclick="doLogout()">🚪 ออกจากระบบ</button>
   </div>
 </div>
 
@@ -1955,7 +1968,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div style="font-size:11px;color:#aaa;">v2026.07.10f</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div style="font-size:11px;color:#aaa;">v2026.07.10g</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -2582,7 +2595,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.10f';
+const SKE_APP_VERSION='v2026.07.10g';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -3763,6 +3776,14 @@ function saveFeedbacks(){
   if(window.fbSaveFeedbacks)return window.fbSaveFeedbacks(companyFeedbacks).catch(()=>{});
   return Promise.resolve();
 }
+function openFeedbackModal(){
+  const m=document.getElementById('fbMsg');
+  if(m)m.classList.add('hidden');
+  document.getElementById('feedbackModal')?.classList.remove('hidden');
+}
+function closeFeedbackModal(){
+  document.getElementById('feedbackModal')?.classList.add('hidden');
+}
 function doSendFeedback(){
   const m=document.getElementById('fbMsg');
   const showErr=(t)=>{if(m){m.textContent=t;m.className='msg-err';m.classList.remove('hidden');}};
@@ -3783,7 +3804,7 @@ function doSendFeedback(){
   document.getElementById('fbText').value='';
   document.getElementById('fbAnon').checked=false;
   if(m){m.textContent='✅ ส่งความคิดเห็นเรียบร้อยแล้ว ขอบคุณสำหรับข้อเสนอแนะ';m.className='msg-ok';m.classList.remove('hidden');}
-  setTimeout(()=>{if(m)m.classList.add('hidden');},3200);
+  setTimeout(()=>{closeFeedbackModal();if(m)m.classList.add('hidden');},1800);
 }
 
 // ── หน้าแอดมิน: ดูความคิดเห็น/ข้อเสนอแนะที่พนักงานส่งมาทั้งหมด ──
