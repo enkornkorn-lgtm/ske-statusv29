@@ -222,7 +222,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.10p');
+  console.log('[SKE TRUCK] app version: v2026.07.10q');
   const SKE_OUTBOX_KEY = 'ske_outbox_v1';
   // งานค้างมีอายุจำกัด — เกินนี้ให้ "ทิ้ง" แทนที่จะส่งซ้ำ เพราะ payload เป็นข้อมูลทั้งชุด ณ เวลานั้น
   // ถ้าปล่อยให้คิวเก่าหลายนาที/ชั่วโมงส่งสำเร็จทีหลัง มันจะเอาข้อมูล "ทั้งก้อนเวอร์ชันเก่า" ทับขึ้นเซิร์ฟเวอร์
@@ -1604,7 +1604,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.10p</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.10q</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -1612,7 +1612,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.10p</div>
+        <div style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.10q</div>
       </div>
     </div>
 
@@ -1730,7 +1730,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.10p</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span style="opacity:.7">v2026.07.10q</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -1930,11 +1930,10 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div><div class="inp-label">จำนวนเงิน (บาท) *</div><input class="inp" id="tollAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="เช่น 150"></div>
       <div><div class="inp-label">เส้นทาง/รายละเอียด (ไม่บังคับ)</div><input class="inp" id="tollReason" placeholder="เช่น ด่านบางปะอิน"></div>
       <div>
-        <div class="inp-label">แนบรูปบิล/ใบเสร็จค่าทางด่วน * (บังคับ)</div>
-        <div id="tollPhotoPreviewWrap" class="hidden" style="margin-bottom:8px;">
-          <img id="tollPhotoPreview" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;border:1.5px solid #7DD3FC;">
-        </div>
-        <label class="btn btn-gray btn-full" style="display:block;text-align:center;cursor:pointer;">📎 เลือกรูปบิล/ใบเสร็จ<input type="file" id="tollPhotoInput" accept="image/*" style="display:none;" onchange="handleTollPhoto(event)"></label>
+        <div class="inp-label">แนบรูปบิล/ใบเสร็จค่าทางด่วน * (บังคับ อย่างน้อย 1 รูป · สูงสุด 5 รูป)</div>
+        <input type="file" id="tollPhotoInput" accept="image/*" multiple style="display:none;" onchange="addNewTollPhotos(this)">
+        <button type="button" class="btn btn-gray btn-full" onclick="document.getElementById('tollPhotoInput').click()">📎 เลือกรูปบิล/ใบเสร็จ</button>
+        <div id="tollPhotoPreviewWrap" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
       </div>
       <button class="btn btn-full" style="background:#0284C7;color:#fff;" onclick="doAddTollCash()">✓ ส่งคำขอเบิกค่าทางด่วน</button>
     </div>
@@ -1987,7 +1986,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div style="font-size:11px;color:#aaa;">v2026.07.10p</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div style="font-size:11px;color:#aaa;">v2026.07.10q</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -2615,7 +2614,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.10p';
+const SKE_APP_VERSION='v2026.07.10q';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -4487,6 +4486,14 @@ function nextCashDateLabel(){
 }
 // ── แจ้งลาพนักงาน — กรอกคำขอได้ทุกเมื่อ แต่วันที่ลาต้องอยู่ในช่วง 16-25 ของเดือนเท่านั้น (ตรวจใน doRequestLeave/_isLeaveDayAllowed) ──
 function fmtBaht(n){const num=Number(n)||0;return num.toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:2});}
+// แสดงรูปบิลที่แนบไว้ในคำขอเบิกเงิน — รองรับทั้งแบบหลายรูป (s.photos array แบบใหม่) และรูปเดียว (s.photo แบบเก่าก่อนอัปเดต)
+function _cashPhotosHTML(s,maxH){
+  const ids=Array.isArray(s.photos)&&s.photos.length?s.photos:(s.photo?[s.photo]:[]);
+  if(!ids.length)return'';
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">${ids.map(id=>
+    `<img data-ph="${esc(id)}" onclick="openPhotoViewer('${esc(id)}')" style="width:${maxH}px;height:${maxH}px;object-fit:cover;border-radius:8px;border:1px solid #E8EAF0;cursor:pointer;">`
+  ).join('')}</div>`;
+}
 function openCashModal(){
   if(!currentUser)return;
   document.getElementById('cashForm').classList.add('hidden');
@@ -4496,8 +4503,8 @@ function openCashModal(){
   document.getElementById('tollAmount').value='';
   document.getElementById('tollReason').value='';
   document.getElementById('tollPhotoInput').value='';
-  document.getElementById('tollPhotoPreviewWrap').classList.add('hidden');
-  _tollPhotoData=null;
+  _tollNewPhotos=[];
+  renderNewTollPhotos();
   renderCashDayNotice();
   renderCashList();
   const m=document.getElementById('cashModal');
@@ -4545,45 +4552,61 @@ function doAddCash(){
   toggleCashForm();
   refreshCashViews();
 }
-// เก็บรูปบิลค่าทางด่วนที่เลือกไว้ชั่วคราว (ยังไม่อัพโหลดจนกว่าจะกดส่งจริง กันอัพรูปทิ้งเปล่าถ้าไม่ได้ส่งคำขอ)
-let _tollPhotoData=null;
-async function handleTollPhoto(ev){
-  const input=ev&&ev.target;
-  const file=input?.files?.[0];
-  if(!file)return;
-  if(!file.type||!file.type.startsWith('image/')){alert('กรุณาแนบไฟล์รูปภาพเท่านั้น');if(input)input.value='';return;}
-  if(file.size>12*1024*1024){alert('รูปภาพมีขนาดใหญ่เกินไป กรุณาเลือกรูปไม่เกิน 12 MB');if(input)input.value='';return;}
-  try{
-    _tollPhotoData=await compressMonthlyDocImage(file);
-    const prev=document.getElementById('tollPhotoPreview');
-    const wrap=document.getElementById('tollPhotoPreviewWrap');
-    if(prev)prev.src=_tollPhotoData;
-    if(wrap)wrap.classList.remove('hidden');
-  }catch(e){alert('เตรียมรูปไม่สำเร็จ ลองใหม่อีกครั้ง');}
+// เก็บรูปบิลค่าทางด่วนที่เลือกไว้ชั่วคราว (ยังไม่อัพโหลดจนกว่าจะกดส่งจริง กันอัพรูปทิ้งเปล่าถ้าไม่ได้ส่งคำขอ) — แนบได้หลายรูป สูงสุด 5
+let _tollNewPhotos=[];
+async function addNewTollPhotos(input){
+  const files=Array.from(input.files||[]);
+  input.value='';
+  if(!files.length)return;
+  const room=5-_tollNewPhotos.length;
+  if(room<=0){alert('⚠️ แนบได้สูงสุด 5 รูป');return;}
+  const take=files.slice(0,room);
+  if(files.length>room)alert(`⚠️ แนบได้อีก ${room} รูป (สูงสุด 5 รูป)`);
+  for(const f of take){
+    if(!f.type||!f.type.startsWith('image/')){alert('กรุณาแนบไฟล์รูปภาพเท่านั้น');continue;}
+    if(f.size>12*1024*1024){alert('รูปภาพมีขนาดใหญ่เกินไป กรุณาเลือกรูปไม่เกิน 12 MB');continue;}
+    try{
+      const dataUrl=await compressMonthlyDocImage(f);
+      _tollNewPhotos.push(dataUrl);
+    }catch(e){alert('เตรียมรูปไม่สำเร็จ ลองใหม่อีกครั้ง');}
+  }
+  renderNewTollPhotos();
 }
-// เบิกค่าทางด่วน — แยกประเภทจากเบิกเงินทั่วไป เบิกได้ทุกเมื่อ ไม่ผูกกับวันที่ 15 แต่บังคับต้องแนบรูปบิลก่อนถึงจะส่งได้
+function delNewTollPhoto(idx){
+  _tollNewPhotos.splice(idx,1);
+  renderNewTollPhotos();
+}
+function renderNewTollPhotos(){
+  const box=document.getElementById('tollPhotoPreviewWrap');
+  if(!box)return;
+  box.innerHTML=_tollNewPhotos.map((p,i)=>`<div style="position:relative;">
+    <img src="${p}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1.5px solid #7DD3FC;">
+    <button type="button" onclick="delNewTollPhoto(${i})" style="position:absolute;top:-6px;right:-6px;background:#EF4444;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;line-height:1;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3);">✕</button>
+  </div>`).join('');
+}
+// เบิกค่าทางด่วน — แยกประเภทจากเบิกเงินทั่วไป เบิกได้ทุกเมื่อ ไม่ผูกกับวันที่ 15 แต่บังคับต้องแนบรูปบิลอย่างน้อย 1 รูปก่อนถึงจะส่งได้
 async function doAddTollCash(){
   if(!currentUser)return;
   const amount=parseFloat(document.getElementById('tollAmount').value);
   const reason=document.getElementById('tollReason').value.trim();
   if(!amount||amount<=0){document.getElementById('tollAmount').focus();return;}
-  if(!_tollPhotoData){alert('⚠️ กรุณาแนบรูปบิล/ใบเสร็จค่าทางด่วนก่อนส่งคำขอ');return;}
+  if(!_tollNewPhotos.length){alert('⚠️ กรุณาแนบรูปบิล/ใบเสร็จค่าทางด่วนอย่างน้อย 1 รูปก่อนส่งคำขอ');return;}
   if(window._fbConnected===false){alert('⚠️ ตอนนี้เน็ตหลุดอยู่ กรุณาเช็คสัญญาณอินเทอร์เน็ตก่อนส่งคำขอ');return;}
   const me=employees.find(e=>e.id===currentUser.id)||currentUser;
-  showDocUploadPopup('กำลังส่งคำขอเบิกค่าทางด่วน','กำลังอัปโหลดรูปบิล กรุณารอสักครู่');
-  const photoId=await uploadPhoto(_tollPhotoData);
+  showDocUploadPopup('กำลังส่งคำขอเบิกค่าทางด่วน',`กำลังอัปโหลดรูปบิล ${_tollNewPhotos.length} รูป กรุณารอสักครู่`);
+  const photoIds=await uploadPhotos(_tollNewPhotos);
   cashRequests.unshift({
     id:'cash_'+Date.now(),
     empId:me.id,empName:me.name,plate:me.plate||'',
-    amount,reason:reason?('🛣️ ค่าทางด่วน: '+reason):'🛣️ ค่าทางด่วน',status:'pending',requestType:'toll',photo:photoId,
+    amount,reason:reason?('🛣️ ค่าทางด่วน: '+reason):'🛣️ ค่าทางด่วน',status:'pending',requestType:'toll',photos:photoIds,
     createdAt:new Date().toISOString()
   });
   saveCash();
   document.getElementById('tollAmount').value='';
   document.getElementById('tollReason').value='';
   document.getElementById('tollPhotoInput').value='';
-  document.getElementById('tollPhotoPreviewWrap').classList.add('hidden');
-  _tollPhotoData=null;
+  _tollNewPhotos=[];
+  renderNewTollPhotos();
   refreshCashViews();
   hideDocUploadPopup();
   alert('✅ ส่งคำขอเบิกค่าทางด่วนแล้ว รอแอดมินอนุมัติ');
@@ -4604,7 +4627,7 @@ function renderCashList(){
         <div style="color:#F47920;font-size:19px;font-weight:900;">฿${fmtBaht(s.amount)}</div>
       </div>
       <div style="color:#666;font-size:12.5px;margin-top:4px;line-height:1.6;white-space:pre-wrap;">${esc(s.reason)}</div>
-      ${s.photo?`<img data-ph="${esc(s.photo)}" style="width:100%;max-height:160px;object-fit:cover;border-radius:8px;margin-top:8px;border:1px solid #E8EAF0;">`:''}
+      ${_cashPhotosHTML(s,84)}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
         <span class="pill" style="background:${done?'#ECFDF5':'#FFFBEB'};color:${done?'#065F46':'#92400E'};border:1px solid ${done?'#6EE7B7':'#FCD34D'};">${done?'✅ จ่ายแล้ว':'⏳ รอดำเนินการ'}</span>
         <span style="color:#aaa;font-size:11px;">${fmt(s.createdAt)}</span>
@@ -5099,7 +5122,7 @@ function renderCashHistory(){
         <div style="font-weight:700;color:#1a1a2e;font-size:13px;">${esc(s.empName||'-')} <span style="color:#888;font-weight:400;">· 🚛 ${esc(s.plate||'-')}</span></div>
         <div style="color:#F47920;font-size:16px;font-weight:900;margin-top:2px;">฿${fmtBaht(s.amount)}</div>
         <div style="color:#666;font-size:12px;margin-top:3px;line-height:1.6;white-space:pre-wrap;">${esc(s.reason)}</div>
-        ${s.photo?`<img data-ph="${esc(s.photo)}" onclick="openPhotoViewer('${esc(s.photo)}')" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:6px;border:1px solid #E8EAF0;cursor:pointer;">`:''}
+        ${_cashPhotosHTML(s,72)}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
           <span class="pill" style="background:#ECFDF5;color:#065F46;border:1px solid #6EE7B7;">✅ จ่ายแล้ว</span>
           <span style="color:#aaa;font-size:10.5px;">${fmt(s.createdAt)}</span>
@@ -5113,11 +5136,11 @@ function renderCashHistory(){
 // ลบรูปบิล/ใบเสร็จที่แนบไว้ในคำขอเบิกเงินทั้งหมดทีเดียว — ใช้หลังตรวจสอบแล้ว เพื่อประหยัดพื้นที่เก็บรูป
 // ไม่ลบตัวรายการเบิกเงินออก แค่ลบรูปที่แนบออกจากคลังรูปเท่านั้น ข้อมูลจำนวนเงิน/เหตุผล/สถานะยังอยู่ครบ
 async function doDeleteAllCashPhotos(){
-  const withPhoto=cashRequests.filter(r=>r.photo);
+  const withPhoto=cashRequests.filter(r=>r.photo||(Array.isArray(r.photos)&&r.photos.length));
   if(!withPhoto.length){alert('ไม่มีรูปบิลที่แนบไว้ในระบบตอนนี้');return;}
-  if(!confirm(`ลบรูปบิล/ใบเสร็จที่แนบไว้ทั้งหมด ${withPhoto.length} รูป? (ข้อมูลรายการเบิกเงินยังอยู่ครบ ลบแค่รูปเท่านั้น ย้อนกลับไม่ได้)`))return;
-  const photoIds=withPhoto.map(r=>r.photo);
-  cashRequests=cashRequests.map(r=>r.photo?{...r,photo:''}:r);
+  const photoIds=withPhoto.flatMap(r=>[...(r.photo?[r.photo]:[]),...(Array.isArray(r.photos)?r.photos:[])]);
+  if(!confirm(`ลบรูปบิล/ใบเสร็จที่แนบไว้ทั้งหมด ${photoIds.length} รูป (จาก ${withPhoto.length} รายการ)? (ข้อมูลรายการเบิกเงินยังอยู่ครบ ลบแค่รูปเท่านั้น ย้อนกลับไม่ได้)`))return;
+  cashRequests=cashRequests.map(r=>(r.photo||(Array.isArray(r.photos)&&r.photos.length))?{...r,photo:'',photos:[]}:r);
   saveCash();
   if(window.fbDeletePhotos)window.fbDeletePhotos(photoIds);
   renderAdminCashList();
@@ -5172,7 +5195,7 @@ function renderAdminCashList(){
         return`<div class="maint-card" style="margin-bottom:8px;">
           <div style="color:#F47920;font-size:17px;font-weight:900;">฿${fmtBaht(s.amount)}</div>
           <div style="color:#666;font-size:12.5px;margin-top:3px;line-height:1.6;white-space:pre-wrap;">${esc(s.reason)}</div>
-          ${s.photo?`<img data-ph="${esc(s.photo)}" onclick="openPhotoViewer('${esc(s.photo)}')" style="width:100%;max-height:160px;object-fit:cover;border-radius:8px;margin-top:8px;border:1px solid #E8EAF0;cursor:pointer;">`:''}
+          ${_cashPhotosHTML(s,84)}
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
             <span class="pill" style="background:#FFFBEB;color:#92400E;border:1px solid #FCD34D;">⏳ รอดำเนินการ</span>
             <span style="color:#aaa;font-size:10.5px;">${fmt(s.createdAt)}</span>
