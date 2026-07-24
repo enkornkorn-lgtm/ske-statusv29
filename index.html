@@ -56,81 +56,139 @@
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
 
-  // ── ตัวควบคุมการเชื่อมต่อ V2 ─────────────────────────────────────────────
-  // หลักการ: ไม่ตัด WebSocket ทุกครั้งที่กลับเข้าแอป ให้ Firebase ฟื้นตัวเองก่อน
-  // การ goOffline/goOnline ใช้เฉพาะเมื่อผู้ใช้แตะปุ่มลองใหม่ และ connection หลุดจริงเท่านั้น
+  // ── ตัวควบคุมการเชื่อมต่อ V4: Network Switch Recovery ─────────────────────
+  // เป้าหมาย: แก้อาการอินเทอร์เน็ตใช้งานได้ แต่ Firebase realtime ค้างเป็น false
+  // หลังสลับ Wi‑Fi/เน็ตมือถือ โดยไม่สั่ง goOffline/goOnline รัว ๆ
   let _reconnecting = false;
-  let _lastHardReconnectAt = 0;
-  const HARD_RECONNECT_COOLDOWN_MS = 15000;
+  let _recoveryTimer = null;
+  let _recoveryRunId = 0;
+  const V4_RELOAD_KEY = 'ske_v4_last_recovery_reload';
+  const V4_RELOAD_COOLDOWN_MS = 60000; // กัน reload วน: ไม่เกิน 1 ครั้งต่อนาที
+
+  function _v4Log(type, msg) {
+    if (typeof window._skeDebugLog === 'function') window._skeDebugLog(type, msg);
+  }
 
   function _finishReconnect(result) {
     _reconnecting = false;
-    if (typeof window._skeDebugLog === 'function') window._skeDebugLog('Reconnect', 'ผลลัพธ์: ' + result);
+    _v4Log('Reconnect', 'ผลลัพธ์: ' + result);
     if (typeof window._setReconnecting === 'function') window._setReconnecting(false);
   }
 
-  window.forceReconnectNow = function(source){
-    if (_reconnecting) return;
-    if (!navigator.onLine) {
-      if (typeof window._skeDebugLog === 'function') window._skeDebugLog('Reconnect', 'ยกเลิก: navigator.onLine=false');
-      return;
+  function _canRecoveryReload() {
+    try {
+      const last = Number(sessionStorage.getItem(V4_RELOAD_KEY) || 0);
+      return Date.now() - last >= V4_RELOAD_COOLDOWN_MS;
+    } catch (e) {
+      return true;
     }
+  }
 
-    _reconnecting = true;
+  function _markRecoveryReload() {
+    try { sessionStorage.setItem(V4_RELOAD_KEY, String(Date.now())); } catch (e) {}
+  }
+
+  function _reloadForFreshNetwork(reason) {
+    if (!_canRecoveryReload()) {
+      _finishReconnect('ยังไม่ต่อ และเพิ่ง reload ไป — งด reload ซ้ำเพื่อกันวน');
+      return false;
+    }
+    _markRecoveryReload();
+    _v4Log('Network Recovery', 'รีโหลดหน้า 1 ครั้งเพื่อสร้าง Firebase connection บนเครือข่ายใหม่: ' + reason);
     if (typeof window._setReconnecting === 'function') window._setReconnecting(true);
-    if (typeof window._skeDebugLog === 'function') window._skeDebugLog('Reconnect', source === 'resume' ? 'soft refresh หลังกลับเข้าแอป' : 'ผู้ใช้แตะลองเชื่อมต่อใหม่');
+    setTimeout(() => location.reload(), 250);
+    return true;
+  }
 
-    const safetyTimer = setTimeout(() => _finishReconnect('timeout หลัง 15 วินาที'), 15000);
-    const finish = (msg) => { clearTimeout(safetyTimer); _finishReconnect(msg); };
+  // ตรวจแบบหลายจังหวะ เพราะ get() ผ่าน HTTPS อาจสำเร็จ แต่ realtime transport ยังไม่กลับมา
+  window.skeRecoverConnection = function(source, options = {}) {
+    const allowReload = options.allowReload !== false;
+    const delayMs = Number.isFinite(options.delayMs) ? options.delayMs : 2500;
 
-    // ตอน resume ทำแค่ดึงข้อมูลใหม่ ห้ามตัด connection เดิม
-    if (source === 'resume') {
-      if (!window.fbForceRefresh) { finish('ไม่มี fbForceRefresh'); return; }
-      window.fbForceRefresh(ok => finish(ok ? 'soft refresh สำเร็จ' : 'soft refresh ไม่สำเร็จ — รอ SDK ต่อเอง'));
-      return;
-    }
+    clearTimeout(_recoveryTimer);
+    const runId = ++_recoveryRunId;
 
-    // ปุ่มลองใหม่: ลองอ่านข้อมูลก่อน ถ้าอ่านได้ก็ไม่ต้อง reset socket
-    const softThenHard = () => {
-      if (!window.fbForceRefresh) { hardReconnect(); return; }
-      window.fbForceRefresh(ok => {
-        if (ok && window._fbConnected === true) { finish('เชื่อมต่ออยู่แล้ว'); return; }
-        hardReconnect();
-      });
-    };
+    _recoveryTimer = setTimeout(() => {
+      if (runId !== _recoveryRunId) return;
+      if (_reconnecting) return;
 
-    const hardReconnect = () => {
-      const now = Date.now();
-      if (now - _lastHardReconnectAt < HARD_RECONNECT_COOLDOWN_MS) {
-        finish('เว้นช่วง hard reconnect เพื่อไม่ให้ตัดต่อรัว');
+      if (!navigator.onLine) {
+        _v4Log('Network Recovery', source + ': navigator.onLine=false — รอ online event');
         return;
       }
-      _lastHardReconnectAt = now;
-      try {
-        goOffline(db);
-        setTimeout(() => {
-          goOnline(db);
-          // รอ SDK handshake แล้วตรวจ connection; ไม่ reload หน้าอัตโนมัติ
-          let checks = 0;
-          const timer = setInterval(() => {
-            checks++;
-            if (window._fbConnected === true) {
-              clearInterval(timer);
-              if (window.fbForceRefresh) window.fbForceRefresh(() => finish('hard reconnect สำเร็จ'));
-              else finish('hard reconnect สำเร็จ');
-            } else if (checks >= 8) {
-              clearInterval(timer);
-              finish('ยังเชื่อมไม่ได้ — กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
-            }
-          }, 1000);
-        }, 600);
-      } catch(e) {
-        console.error('forceReconnectNow error', e);
-        finish('exception: ' + (e.message || e));
-      }
-    };
 
-    softThenHard();
+      // ถ้าต่อกลับมาเองแล้ว ไม่ต้องทำอะไร
+      if (window._fbConnected === true) {
+        _v4Log('Network Recovery', source + ': Firebase ต่อกลับมาเองแล้ว');
+        return;
+      }
+
+      _reconnecting = true;
+      if (typeof window._setReconnecting === 'function') window._setReconnecting(true);
+      _v4Log('Network Recovery', source + ': เริ่ม soft refresh หลังรอเครือข่ายนิ่ง');
+
+      const safety = setTimeout(() => {
+        if (runId !== _recoveryRunId) return;
+        if (allowReload && navigator.onLine && window._fbConnected !== true) {
+          _reloadForFreshNetwork(source + ' / timeout');
+        } else {
+          _finishReconnect('timeout และยังเชื่อมไม่ได้');
+        }
+      }, 15000);
+
+      const afterSoftRefresh = (ok) => {
+        if (runId !== _recoveryRunId) {
+          clearTimeout(safety);
+          return;
+        }
+
+        _v4Log('Network Recovery', source + ': soft refresh ' + (ok ? 'สำเร็จ' : 'ไม่สำเร็จ'));
+
+        // ให้ Firebase SDK มีเวลาสร้าง realtime transport ใหม่เอง
+        let checks = 0;
+        const checkTimer = setInterval(() => {
+          checks++;
+          if (runId !== _recoveryRunId) {
+            clearInterval(checkTimer);
+            clearTimeout(safety);
+            return;
+          }
+
+          if (window._fbConnected === true) {
+            clearInterval(checkTimer);
+            clearTimeout(safety);
+            _finishReconnect('สำเร็จ — realtime connection กลับมาแล้ว');
+            return;
+          }
+
+          if (checks >= 6) { // รอเพิ่มประมาณ 6 วินาทีหลัง get()
+            clearInterval(checkTimer);
+            clearTimeout(safety);
+            if (allowReload && navigator.onLine) {
+              _reloadForFreshNetwork(source + (ok ? ' / HTTPS ผ่านแต่ realtime ยังไม่ติด' : ' / soft refresh ล้มเหลว'));
+            } else {
+              _finishReconnect('ยังเชื่อมไม่ได้');
+            }
+          }
+        }, 1000);
+      };
+
+      if (typeof window.fbForceRefresh === 'function') {
+        window.fbForceRefresh(afterSoftRefresh);
+      } else {
+        afterSoftRefresh(false);
+      }
+    }, delayMs);
+  };
+
+  // ปุ่มแบนเนอร์แดงใช้ recovery เดียวกัน ไม่ตัด socket ด้วย goOffline/goOnline
+  window.forceReconnectNow = function(source) {
+    if (_reconnecting) return;
+    _v4Log('Reconnect', source === 'resume' ? 'ระบบเรียกหลังกลับเข้าแอป' : 'ผู้ใช้แตะลองเชื่อมต่อใหม่');
+    window.skeRecoverConnection(source === 'resume' ? 'resume' : 'manual', {
+      delayMs: source === 'resume' ? 1800 : 200,
+      allowReload: true
+    });
   };
 
   // ══ ระบบเก็บ log ปัญหาจริงในเครื่อง — ดูได้จากในแอพเลย ไม่ต้องต่อคอมพิวเตอร์/USB debugging ══
@@ -390,7 +448,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.24-connection-v3.1-rollback');
+  console.log('[SKE TRUCK] app version: v2026.07.25-connection-v4');
   const SKE_OUTBOX_KEY = 'ske_outbox_v1';
   // งานค้างมีอายุจำกัด — เกินนี้ให้ "ทิ้ง" แทนที่จะส่งซ้ำ เพราะ payload เป็นข้อมูลทั้งชุด ณ เวลานั้น
   // ถ้าปล่อยให้คิวเก่าหลายนาที/ชั่วโมงส่งสำเร็จทีหลัง มันจะเอาข้อมูล "ทั้งก้อนเวอร์ชันเก่า" ทับขึ้นเซิร์ฟเวอร์
@@ -549,8 +607,17 @@
 
     // navigator.onLine เชื่อถือได้เรื่อง "เน็ตเครื่องหลุดจริงไหม" — ใช้เสริมเป็นสัญญาณแม่นสุด
     if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => window._setOnlineDot(window._fbConnected));
-      window.addEventListener('offline', () => { clearTimeout(disconnectTimer); clearTimeout(reconnectTimer); setOfflineNow(true); });
+      window.addEventListener('online', () => {
+        window._setOnlineDot(window._fbConnected);
+        if (window._skeDebugLog) window._skeDebugLog('Network', 'online event — รอเครือข่ายนิ่งแล้วเริ่ม V4 recovery');
+        if (window.skeRecoverConnection) window.skeRecoverConnection('online-event', { delayMs: 3000, allowReload: true });
+      });
+      window.addEventListener('offline', () => {
+        clearTimeout(disconnectTimer);
+        clearTimeout(reconnectTimer);
+        setOfflineNow(true);
+        if (window._skeDebugLog) window._skeDebugLog('Network', 'offline event');
+      });
     }
 
     if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', ()=>{ ensureBanner(); });
@@ -1873,7 +1940,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.24-connection-v3.1-rollback</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.25-connection-v4</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -1881,7 +1948,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.24-connection-v3.1-rollback</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.25-connection-v4</div>
       </div>
     </div>
 
@@ -1999,7 +2066,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.24-connection-v3.1-rollback</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.25-connection-v4</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -2255,7 +2322,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.24-connection-v3.1-rollback</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.25-connection-v4</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -2883,7 +2950,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.24-connection-v3.1-rollback';
+const SKE_APP_VERSION='v2026.07.25-connection-v4';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -3393,31 +3460,47 @@ if(document.readyState==='loading'){
   skeInitApp();
 }
 
-// ── กลับเข้าแอปจาก background: soft refresh เท่านั้น ───────────────────────
-// ไม่สั่ง goOffline/goOnline อัตโนมัติ เพราะการเข้า–ออกถี่จะทำให้ socket ถูกตัดต่อซ้อนกัน
-let _lastVisibleRefresh=0;
-let _resumeRefreshTimer=null;
-document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState!=='visible')return;
-  const now=Date.now();
-  if(now-_lastVisibleRefresh<3000)return;
-  _lastVisibleRefresh=now;
-  clearTimeout(_resumeRefreshTimer);
-  _resumeRefreshTimer=setTimeout(()=>{
-    if(!navigator.onLine){
-      if(window._skeDebugLog)window._skeDebugLog('Resume','เครื่องยัง offline — รอ event online');
-      return;
-    }
-    if(window._skeDebugLog)window._skeDebugLog('Resume','กลับเข้าแอป — soft refresh โดยไม่ตัด connection');
-    if(window.forceReconnectNow) window.forceReconnectNow('resume');
-    const dash=document.getElementById('dashboard');
-    const admin=document.getElementById('admin');
-    setTimeout(()=>{
-      if(dash&&!dash.classList.contains('hidden')&&typeof renderDashboard==='function')renderDashboard();
-      if(admin&&!admin.classList.contains('hidden')&&typeof renderAdmin==='function')renderAdmin();
-    },500);
-  },700);
+// ── V4: กลับเข้าแอป/สลับเครือข่าย ─────────────────────────────────────────
+// รอให้ Android/Chrome ผูก network interface ใหม่ก่อน แล้วค่อยตรวจ Firebase
+let _lastVisibleRecovery = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  const now = Date.now();
+  if (now - _lastVisibleRecovery < 2500) return;
+  _lastVisibleRecovery = now;
+
+  if (window._skeDebugLog) {
+    window._skeDebugLog('Resume', 'กลับเข้าแอป — V4 รอเครือข่ายนิ่งก่อนตรวจ realtime');
+  }
+  if (window.skeRecoverConnection) {
+    window.skeRecoverConnection('resume-visible', { delayMs: 3000, allowReload: true });
+  }
+
+  const dash = document.getElementById('dashboard');
+  const admin = document.getElementById('admin');
+  setTimeout(() => {
+    if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
+    if (admin && !admin.classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
+  }, 700);
 });
+
+// Network Information API ช่วยจับการสลับ Wi‑Fi ↔ cellular แม้บางครั้งไม่เกิด offline/online
+try {
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (conn && typeof conn.addEventListener === 'function') {
+    conn.addEventListener('change', () => {
+      const detail = 'type=' + (conn.type || 'unknown') +
+        ', effectiveType=' + (conn.effectiveType || 'unknown') +
+        ', downlink=' + (conn.downlink ?? 'unknown');
+      if (window._skeDebugLog) window._skeDebugLog('Network Change', detail);
+      if (window.skeRecoverConnection) {
+        window.skeRecoverConnection('network-information-change', { delayMs: 3500, allowReload: true });
+      }
+    });
+  }
+} catch (e) {
+  if (window._skeDebugLog) window._skeDebugLog('Network Change Error', e.message || e);
+}
 
 // ── Nav helpers ───────────────────────────────────────────────────────────────
 function show(id){['splash','login','dashboard','admin'].forEach(s=>document.getElementById(s).classList.add('hidden'));document.getElementById(id).classList.remove('hidden');}
