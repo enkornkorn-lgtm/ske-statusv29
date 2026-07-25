@@ -1,12 +1,11 @@
-V8.3 แก้เฉพาะหน้าดำ/ความเร็วตอนเปิดแอป ไม่เปลี่ยน Firebase reconnect ของ V8.2
+ชุดกู้ระบบจากไฟล์ V8.3 ที่ผู้ใช้ยืนยันว่าเคยใช้งานได้
 
-อัปไฟล์เหล่านี้ทับที่ root ของ SKE_TRUCK_DEV:
+แก้เพียงจุดโครงสร้างเดียว: ปิด window.fbForceRefresh ให้ถูกต้อง
+สาเหตุเดิมไม่ใช่ syntax grammar error แต่เป็น function nesting ผิด ทำให้โค้ด Firebase ส่วนถัดไปไม่ทำงานจนกว่าจะเรียก fbForceRefresh
+
+อัปทับที่ root:
 - index.html
-- app.js
-- firebase.js
 - sw.js
 - manifest.json
 
-ไม่ต้องอัปไฟล์ ZIP หรือไฟล์ TXT
-เวอร์ชันที่ต้องเห็น: v2026.07.25-connection-v8.3-startup-screen-fix
-หลัง Deploy: ปิด PWA จาก Recent Apps แล้วเปิดใหม่หนึ่งครั้ง
+เวอร์ชันที่ต้องเห็น: v2026.07.25-connection-v8.3-restored-exact
