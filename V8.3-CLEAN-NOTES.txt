@@ -1,0 +1,5 @@
+ฐาน: V8.3 startup black screen fix เดิม
+แก้เพียงจุดเดียว:
+- เติม callback และ }; ปิด window.fbForceRefresh ให้ถูกต้อง
+
+ไม่มีการนำ logic จาก V8.3.2 หรือ V8.3.1.1 เข้ามา

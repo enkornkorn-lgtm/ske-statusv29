@@ -291,7 +291,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.25-connection-v8.3.1.1-reconnect-banner-clear-fix');
+  console.log('[SKE TRUCK] app version: v2026.07.25-connection-v8.3-clean-syntax-only');
   const SKE_OUTBOX_KEY = 'ske_outbox_v1';
   // งานค้างมีอายุจำกัด — เกินนี้ให้ "ทิ้ง" แทนที่จะส่งซ้ำ เพราะ payload เป็นข้อมูลทั้งชุด ณ เวลานั้น
   // ถ้าปล่อยให้คิวเก่าหลายนาที/ชั่วโมงส่งสำเร็จทีหลัง มันจะเอาข้อมูล "ทั้งก้อนเวอร์ชันเก่า" ทับขึ้นเซิร์ฟเวอร์
@@ -616,12 +616,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
   };
 
   // ดึงข้อมูลล่าสุดจาก Firebase ทันที (สำหรับปุ่มรีเฟรชของผู้ดูแล)
-  // V8: ตัด startup get() ที่ซ้ำกับ realtime onValue() ออกทั้งหมด ลด burst read ตอนเปิดแอปและตอน connection กลับมา
-  // ไม่มี async work เหลือแล้ว แค่ mark ready แล้วเรียก callback ทันที (sync) กันโค้ดฝั่งที่รอ callback ค้าง
   window.fbForceRefresh = function(cb) {
-    window._fbReady = true;
-    if (typeof cb === 'function') cb(true);
-  };
+    // V8: ตัด startup get() ที่ซ้ำกับ realtime onValue() ออกทั้งหมด
+  // ลด burst read ตอนเปิดแอปและตอน connection กลับมา
+  window._fbReady = true;
+
 
   // ══ Monthly document submissions — realtime Firebase sync ══
   // คืนค่า Promise เสมอ เพื่อให้ฝั่งอัปโหลดรอจน Firebase บันทึกสำเร็จจริงก่อนแจ้งผล
