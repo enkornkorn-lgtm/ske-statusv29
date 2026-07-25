@@ -1,12 +1,10 @@
-Production rollback/stable package: V8.3.1 critical fix
+V8.3.1.1 แก้บั๊กแถบสีส้มค้างหลังแตะแถบ reconnect
+
+สาเหตุ: reconnecting=true แต่เดิมไม่มีจุดล้างกลับเป็น false เมื่อ Firebase connected=true
 
 อัปทับไฟล์หลัก:
 - index.html
 - sw.js
 - manifest.json
 
-ไฟล์ app.js และ firebase.js ไม่ได้ถูก index.html เรียกใช้ในโครงสร้างปัจจุบัน
-จึงไม่จำเป็นต้องอัปเพื่อให้ Production ทำงาน
-
-เวอร์ชันที่ต้องเห็น: v2026.07.25-connection-v8.3.1-critical-fix
-หลัง Deploy: ปิด PWA จาก Recent Apps แล้วเปิดใหม่หนึ่งครั้ง
+เวอร์ชันที่ต้องเห็น: v2026.07.25-connection-v8.3.1.1-reconnect-banner-clear-fix
