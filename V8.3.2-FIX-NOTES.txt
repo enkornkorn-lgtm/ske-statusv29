@@ -1,0 +1,5 @@
+แก้เฉพาะ UI สถานะการเชื่อมต่อ ไม่เปลี่ยน Firebase reconnect ของ V8.2/V8.3.1
+- แดง: อินเทอร์เน็ตระดับเครื่องหลุดจริง (navigator.onLine=false)
+- ส้ม: เครื่องยังมีเน็ต แต่ Firebase WebSocket กำลัง reconnect
+- ซ่อน: .info/connected=true
+- เมื่อ event online กลับมา จะยกเลิกแถบแดงทันที
