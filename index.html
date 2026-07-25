@@ -35,7 +35,7 @@
 <meta name="apple-mobile-web-app-title" content="SKE TRUCK">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#000000">
-<link rel="manifest" href="manifest.json?v=8.3">
+<link rel="manifest" href="manifest.json?v=8.3-diagnostic">
 <title>SKE TRUCK</title>
 <!-- Firebase SDK -->
 <script type="module">
@@ -55,6 +55,44 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
+
+  // ── V8.3 Diagnostic: เก็บสถานะจริงตอนแบนเนอร์ขึ้น โดยไม่เปลี่ยน reconnect logic ──
+  window._skeConnDiag = {
+    firebaseConnected: null,
+    navigatorOnline: navigator.onLine,
+    visibility: document.visibilityState,
+    lastFirebaseTrueAt: 0,
+    lastFirebaseFalseAt: 0,
+    lastOnlineEventAt: 0,
+    lastOfflineEventAt: 0,
+    restReachable: null,
+    restStatus: '',
+    restCheckedAt: 0
+  };
+
+  async function skeProbeRest(){
+    const d = window._skeConnDiag;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    try{
+      // HTTP status ใด ๆ จาก RTDB ถือว่า network path ถึง server แล้ว
+      const url = firebaseConfig.databaseURL + '/.json?shallow=true&_ske=' + Date.now();
+      const res = await fetch(url, {cache:'no-store', signal:controller.signal});
+      d.restReachable = true;
+      d.restStatus = String(res.status);
+    }catch(e){
+      d.restReachable = false;
+      d.restStatus = e && e.name === 'AbortError' ? 'timeout' : (e && e.message ? e.message : 'fetch-error');
+    }finally{
+      clearTimeout(timer);
+      d.restCheckedAt = Date.now();
+      if(typeof window._skeRefreshConnDiag === 'function') window._skeRefreshConnDiag();
+      if(typeof window._skeDebugLog === 'function'){
+        window._skeDebugLog('REST probe', 'reachable=' + d.restReachable + ' status=' + d.restStatus);
+      }
+    }
+  }
+  window._skeProbeRest = skeProbeRest;
 
   // ── ตัวควบคุมการเชื่อมต่อ V8 ─────────────────────────────────────────────
   // ไม่ตัด socket, ไม่ reload, ไม่ล้าง cache และไม่ยิง read ซ้ำระหว่าง reconnect
@@ -103,6 +141,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
       'เวลาเปิดดู: ' + new Date().toLocaleString('th-TH'),
       'navigator.onLine: ' + navigator.onLine,
       'Firebase .info/connected: ' + window._fbConnected,
+      'visibilityState: ' + document.visibilityState,
+      'REST reachable: ' + (window._skeConnDiag ? window._skeConnDiag.restReachable : 'n/a'),
+      'REST status: ' + (window._skeConnDiag ? window._skeConnDiag.restStatus : 'n/a'),
+      'Firebase true ล่าสุด: ' + (window._skeConnDiag && window._skeConnDiag.lastFirebaseTrueAt ? new Date(window._skeConnDiag.lastFirebaseTrueAt).toLocaleString('th-TH') : '-'),
+      'Firebase false ล่าสุด: ' + (window._skeConnDiag && window._skeConnDiag.lastFirebaseFalseAt ? new Date(window._skeConnDiag.lastFirebaseFalseAt).toLocaleString('th-TH') : '-'),
       'User Agent: ' + navigator.userAgent
     ].join('\n');
     const logText = log.length
@@ -332,7 +375,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.25-connection-v8.3-clean-syntax-only');
+  console.log('[SKE TRUCK] app version: v2026.07.25-connection-v8.3-diagnostic');
   const SKE_OUTBOX_KEY = 'ske_outbox_v1';
   // งานค้างมีอายุจำกัด — เกินนี้ให้ "ทิ้ง" แทนที่จะส่งซ้ำ เพราะ payload เป็นข้อมูลทั้งชุด ณ เวลานั้น
   // ถ้าปล่อยให้คิวเก่าหลายนาที/ชั่วโมงส่งสำเร็จทีหลัง มันจะเอาข้อมูล "ทั้งก้อนเวอร์ชันเก่า" ทับขึ้นเซิร์ฟเวอร์
@@ -418,14 +461,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
         if (now - _lastTap < 800) return; // กันแตะรัว/กัน touchend+click ยิงซ้อนกัน
         _lastTap = now;
         if (ev && ev.type === 'touchend') ev.preventDefault();
-        // ให้ผลตอบรับทันทีแบบ sync ก่อน ไม่ต้องรอผล reconnect เพื่อให้รู้ว่าแตะติดแล้ว
-        if (typeof window._setReconnecting === 'function') window._setReconnecting(true);
-        if (typeof window.forceReconnectNow === 'function') {
-          window.forceReconnectNow();
-        } else {
-          // เผื่อกรณีร้ายแรงที่ฟังก์ชันยังไม่พร้อมด้วยเหตุผลใดก็ตาม — รีโหลดหน้าเป็นทางสำรองสุดท้าย
-          setTimeout(() => location.reload(), 300);
-        }
+        if (typeof window._skeProbeRest === 'function') window._skeProbeRest();
+        if (typeof window.showSkeDebugLog === 'function') window.showSkeDebugLog();
       };
       el.addEventListener('touchend', handleTap, {passive:false});
       el.addEventListener('click', handleTap);
@@ -441,7 +478,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
       } else if (offline) {
         el.dataset.offline = '1';
         el.style.display='flex'; el.style.background='#DC2626'; el.style.cursor='pointer';
-        el.textContent = '📡 เน็ตหลุดอยู่ — แตะตรงนี้เพื่อลองเชื่อมต่อใหม่';
+        const d = window._skeConnDiag || {};
+        const rest = d.restReachable === null ? '?' : (d.restReachable ? 'OK/' + (d.restStatus || '') : 'FAIL/' + (d.restStatus || ''));
+        el.textContent = '📡 Firebase หลุด — NET:' + (navigator.onLine ? 'ON' : 'OFF') +
+          ' FB:' + (window._fbConnected === true ? 'ON' : 'OFF') +
+          ' REST:' + rest + ' VIS:' + document.visibilityState +
+          ' — แตะเพื่อเปิดรายละเอียด';
         // ปิดการเด้ง debug log อัตโนมัติแล้ว (เลือกใช้แบบแตะเวอร์ชัน 5 ครั้งเองแทน ตามที่ผู้ใช้ต้องการ)
       } else {
         delete el.dataset.offline;
@@ -484,18 +526,40 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
         } else {
           // websocket Firebase สะดุดเฉยๆ รอดูก่อนว่า reconnect เองไหม
           disconnectTimer = setTimeout(() => {
-            if (window._fbConnected === false) setOfflineNow(true);
+            if (window._fbConnected === false) {
+              setOfflineNow(true);
+              if(typeof window._skeProbeRest === 'function') window._skeProbeRest();
+            }
           }, DISCONNECT_DEBOUNCE_MS);
         }
       }
     };
     window._setSyncPending = function(isPending){ pending = !!isPending; render(); };
     window._setReconnecting = function(isReconnecting){ reconnecting = !!isReconnecting; render(); };
+    window._skeRefreshConnDiag = function(){ render(); };
 
     // navigator.onLine เชื่อถือได้เรื่อง "เน็ตเครื่องหลุดจริงไหม" — ใช้เสริมเป็นสัญญาณแม่นสุด
     if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => window._setOnlineDot(window._fbConnected));
-      window.addEventListener('offline', () => { clearTimeout(disconnectTimer); clearTimeout(reconnectTimer); setOfflineNow(true); });
+      window.addEventListener('online', () => {
+        if(window._skeConnDiag){
+          window._skeConnDiag.navigatorOnline = true;
+          window._skeConnDiag.lastOnlineEventAt = Date.now();
+        }
+        if(typeof window._skeDebugLog === 'function') window._skeDebugLog('Navigator', 'online event');
+        window._setOnlineDot(window._fbConnected);
+      });
+      window.addEventListener('offline', () => {
+        if(window._skeConnDiag){
+          window._skeConnDiag.navigatorOnline = false;
+          window._skeConnDiag.lastOfflineEventAt = Date.now();
+        }
+        if(typeof window._skeDebugLog === 'function') window._skeDebugLog('Navigator', 'offline event');
+        clearTimeout(disconnectTimer); clearTimeout(reconnectTimer); setOfflineNow(true);
+      });
+      document.addEventListener('visibilitychange', () => {
+        if(window._skeConnDiag) window._skeConnDiag.visibility = document.visibilityState;
+        if(typeof window._skeDebugLog === 'function') window._skeDebugLog('Visibility', document.visibilityState);
+      });
     }
 
     if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', ()=>{ ensureBanner(); });
@@ -513,6 +577,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
     ref(db, '.info/connected'),
     (snapshot) => {
       const connected = snapshot.val() === true;
+      const d = window._skeConnDiag;
+      if(d){
+        d.firebaseConnected = connected;
+        d.navigatorOnline = navigator.onLine;
+        d.visibility = document.visibilityState;
+        if(connected) d.lastFirebaseTrueAt = Date.now();
+        else d.lastFirebaseFalseAt = Date.now();
+      }
       if (connected) _fbConnectedAt = Date.now();
       if (typeof window._setOnlineDot === 'function') {
         window._setOnlineDot(connected);
@@ -1461,7 +1533,7 @@ html,body{background:#F5F6FA!important;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.25-connection-v8.3-clean-syntax-only</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.25-connection-v8.3-diagnostic</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -1469,7 +1541,7 @@ html,body{background:#F5F6FA!important;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.25-connection-v8.3-clean-syntax-only</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.25-connection-v8.3-diagnostic</div>
       </div>
     </div>
 
@@ -1587,7 +1659,7 @@ html,body{background:#F5F6FA!important;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.25-connection-v8.3-clean-syntax-only</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.25-connection-v8.3-diagnostic</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -1843,7 +1915,7 @@ html,body{background:#F5F6FA!important;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.25-connection-v8.3-clean-syntax-only</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.25-connection-v8.3-diagnostic</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -2471,7 +2543,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.25-connection-v8.3-clean-syntax-only';
+const SKE_APP_VERSION='v2026.07.25-connection-v8.3-diagnostic';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด

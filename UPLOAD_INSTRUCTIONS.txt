@@ -1,11 +1,11 @@
-V8.3 CLEAN — ใช้ V8.3 เดิมทุกอย่าง และแก้เฉพาะ syntax ของ fbForceRefresh
+V8.3 DIAGNOSTIC — ไม่แก้ reconnect เพิ่ม แต่แสดงสถานะจริงตอนปัญหาเกิด
 
-ไม่ได้เพิ่ม/แก้ logic แถบแดง แถบส้ม reconnect listener หรือ Firebase ใด ๆ
-
-อัปทับไฟล์หลัก:
+อัปทับ:
 - index.html
 - sw.js
 - manifest.json
 
-เวอร์ชันที่ต้องเห็น: v2026.07.25-connection-v8.3-clean-syntax-only
-หลัง Deploy ให้ปิด PWA จาก Recent Apps แล้วเปิดใหม่หนึ่งครั้ง
+เวอร์ชัน: v2026.07.25-connection-v8.3-diagnostic
+
+เมื่อแถบแดงขึ้น ให้ถ่ายภาพหน้าจอทั้งแถบ หรือแตะแถบแดงแล้วถ่ายหน้า Debug Log
+ค่าที่สำคัญ: NET, FB, REST, VIS
