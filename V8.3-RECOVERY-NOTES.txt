@@ -1,2 +1,0 @@
-ใช้ goOffline(db) และ goOnline(db) กับ Database instance เดิม
-ไม่ reload หน้า ไม่ล้าง cache ไม่สร้าง Firebase app/database ซ้ำ
