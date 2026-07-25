@@ -1,11 +1,19 @@
-ชุดกู้ระบบจากไฟล์ V8.3 ที่ผู้ใช้ยืนยันว่าเคยใช้งานได้
+SKE TRUCK v8.3.1-critical-fix
 
-แก้เพียงจุดโครงสร้างเดียว: ปิด window.fbForceRefresh ให้ถูกต้อง
-สาเหตุเดิมไม่ใช่ syntax grammar error แต่เป็น function nesting ผิด ทำให้โค้ด Firebase ส่วนถัดไปไม่ทำงานจนกว่าจะเรียก fbForceRefresh
+แก้บั๊กร้ายแรง: fbForceRefresh ไม่มีวงเล็บปิดฟังก์ชัน ทำให้ไฟล์เดิม (v8.3-startup-screen-fix)
+เป็น syntax error จริง เปิดแอพไม่ขึ้นเลย (ตรวจสอบด้วย acorn parser ยืนยันแล้ว)
 
-อัปทับที่ root:
-- index.html
+อัปไฟล์เหล่านี้ทับที่ root ของ SKE_TRUCK_DEV:
+- index.html   (ไฟล์หลัก แก้บั๊กแล้ว ใช้ตัวนี้)
 - sw.js
 - manifest.json
+- firebase.js  (ยังไม่ได้ใช้งานจริงจาก index.html แต่แก้บั๊กเดียวกันไว้เผื่ออนาคต)
+- app.js       (ยังไม่ได้ใช้งานจริงจาก index.html)
 
-เวอร์ชันที่ต้องเห็น: v2026.07.25-connection-v8.3-restored-exact
+ไม่ต้องอัปไฟล์ ZIP หรือไฟล์ TXT
+
+เวอร์ชันที่ต้องเห็นหลัง deploy: v2026.07.25-connection-v8.3.1-critical-fix
+หลัง Deploy: ปิด PWA จาก Recent Apps แล้วเปิดใหม่หนึ่งครั้ง
+
+หมายเหตุ: ถ้าตอนนี้เครื่องรันอยู่เวอร์ชัน "v8.3-restored-exact" (คนละไฟล์กับที่นี่)
+แนะนำให้ deploy ทับด้วยชุดนี้ไปเลย เพื่อให้แน่ใจว่าไม่มี syntax error หลงเหลือ
