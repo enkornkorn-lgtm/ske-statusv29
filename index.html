@@ -570,6 +570,55 @@
     return null;
   }
 
+  // ══ เพิกถอนบัญชีพนักงานแบบถาวร ══════════════════════════════════════════════
+  // เก็บ tombstone แยกจาก employees เพื่อให้เครื่องที่เคยล็อกอิน/มี cache เก่า
+  // รู้ว่า ID นี้ถูกลบแล้ว และห้ามข้อมูลเก่าเขียนบัญชีกลับเข้าระบบอีก
+  const SKE_DELETED_EMPLOYEE_CACHE_KEY = 'ske_deleted_employee_ids_v1';
+  const _deletedEmployeeIds = new Set((() => {
+    try {
+      const ids = JSON.parse(localStorage.getItem(SKE_DELETED_EMPLOYEE_CACHE_KEY) || '[]');
+      return Array.isArray(ids) ? ids.map(String) : [];
+    } catch (e) { return []; }
+  })());
+  function _employeeRevocationKey(empId) {
+    return String(empId || '').replace(/[.#$\[\]\/]/g, ch => '_' + ch.charCodeAt(0).toString(16) + '_');
+  }
+  function _isEmployeeDeleted(empId) {
+    return !!empId && _deletedEmployeeIds.has(String(empId));
+  }
+  function _activeEmployeeList(list) {
+    return (Array.isArray(list) ? list : []).filter(emp => emp && !_isEmployeeDeleted(emp.id));
+  }
+  function _saveDeletedEmployeeCache() {
+    try { localStorage.setItem(SKE_DELETED_EMPLOYEE_CACHE_KEY, JSON.stringify([..._deletedEmployeeIds])); } catch (e) {}
+  }
+  function _notifyDeletedEmployee(empId, reason) {
+    if (typeof window.skeHandleDeletedEmployee === 'function') {
+      window.skeHandleDeletedEmployee(String(empId), reason || 'บัญชีนี้ถูกลบโดยผู้ดูแล');
+    }
+  }
+  function _scrubEmployeeFromOutbox(empId) {
+    const id = String(empId);
+    const ob = _obLoad();
+    let changed = false;
+    const removeFromList = key => {
+      const entry = ob[key];
+      if (!entry || !Array.isArray(entry.payload)) return;
+      const clean = entry.payload.filter(row => !row || String(row.empId || row.id || '') !== id);
+      if (clean.length !== entry.payload.length) { entry.payload = clean; entry.ts = Date.now(); changed = true; }
+    };
+    ['employees','repairs','fluidLogs','cashRequests','leaveLogs','runLogs','monthlyDocs','feedbacks'].forEach(removeFromList);
+    const jp = ob.jobPlan;
+    if (jp && Array.isArray(jp.payload)) {
+      const clean = jp.payload.map(row => row && String(row.empId || '') === id
+        ? { ...row, empId:'', empName:'', plate:'', phone:'', dispatched:false, dispatchedAt:null }
+        : row);
+      if (JSON.stringify(clean) !== JSON.stringify(jp.payload)) { jp.payload = clean; jp.ts = Date.now(); changed = true; }
+    }
+    if (changed) _obSaveAll(ob);
+  }
+  window.skeIsEmployeeDeleted = _isEmployeeDeleted;
+
   // ══ คลังรูปแยก (photo store) ══
   // หัวใจของการลด bandwidth: ข้อมูลหลัก (employees/repairs/ฯลฯ) เก็บแค่ "รหัสรูป" (ph_...)
   // ตัวรูป base64 จริงแยกเก็บที่โหนด photos/{id} ซึ่ง "ไม่มี listener" — จะโหลดก็ต่อเมื่อผู้ใช้เปิดดูเท่านั้น
@@ -601,7 +650,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.26-dev-v3.2.2-transport-fix');
+  console.log('[SKE TRUCK] app version: v2026.07.27-dev-v3.2.2.1-employee-delete-fix');
   const SKE_OUTBOX_KEY = 'ske_outbox_v1';
   // งานค้างมีอายุจำกัด — เกินนี้ให้ "ทิ้ง" แทนที่จะส่งซ้ำ เพราะ payload เป็นข้อมูลทั้งชุด ณ เวลานั้น
   // ถ้าปล่อยให้คิวเก่าหลายนาที/ชั่วโมงส่งสำเร็จทีหลัง มันจะเอาข้อมูล "ทั้งก้อนเวอร์ชันเก่า" ทับขึ้นเซิร์ฟเวอร์
@@ -771,8 +820,9 @@
 
   // บันทึกข้อมูลพนักงานทั้งหมดขึ้น Firebase
   window.fbSaveEmployees = function(emps) {
-    _obMark('employees', emps);
-    return _withTimeout(set(ref(db, 'employees'), emps), SKE_WRITE_TIMEOUT_MS, 'timeout:employees')
+    const clean = _activeEmployeeList(emps);
+    _obMark('employees', clean);
+    return _withTimeout(set(ref(db, 'employees'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:employees')
       .then(() => { _obClear('employees'); })
       .catch(e => console.error('fbSave error', e));
   };
@@ -781,6 +831,7 @@
   // ป้องกันปัญหาเขียนทับทั้งรายชื่อแล้วทำสถานะของพนักงานคนอื่นที่เพิ่งอัพเดทไปหายโดยไม่ได้ตั้งใจ
   // ครอบด้วย timeout กันเคสเน็ตช้า/หลุดกลางทางแล้วค้างรอไม่มีกำหนด (จุดที่ .catch fallback ของทุกจุดเรียกจะยังทำงานได้)
   window.fbUpdateEmployeeFields = async function(empId, patch) {
+    if (_isEmployeeDeleted(empId)) throw new Error('employee account was deleted');
     const key = await _findServerKey('employees', empId, employees);
     if (key == null) throw new Error('employee not found');
     const updates = {};
@@ -789,6 +840,93 @@
     employees = (employees || []).map(e => e && e.id === empId ? { ...e, ...patch } : e);
     _skeCacheSet('ske_emp', employees);
     _obClear('employees');
+  };
+
+  // ลบพนักงานและข้อมูลที่ผูกกับพนักงานคนนั้นจาก Firebase ใน update เดียว
+  // พร้อมสร้าง tombstone เพื่อบังคับออกจากระบบทุกเครื่องและกัน cache เก่าฟื้นบัญชีกลับมา
+  window.fbDeleteEmployeePermanently = async function(empId) {
+    const id = String(empId || '');
+    if (!id) throw new Error('invalid employee id');
+    const deletedAt = new Date().toISOString();
+    const revocationKey = _employeeRevocationKey(id);
+    const paths = ['employees','repairs','fluidLogs','cashRequests','leaveLogs','runLogs','monthlyDocs','feedbacks','jobPlan'];
+    const snapshots = await _withTimeout(
+      Promise.all(paths.map(path => get(ref(db, path)))),
+      30000,
+      'timeout:employee-delete-read'
+    );
+    const updates = {
+      [`deletedEmployees/${revocationKey}`]: { id, deletedAt, reason:'deleted-by-admin' }
+    };
+    const photoIds = new Set();
+    const removedByPath = {};
+    const addPhoto = value => {
+      const id = String(value || '');
+      if (id && !id.startsWith('data:') && !/[.#$\[\]\/]/.test(id)) photoIds.add(id);
+    };
+    const collectPhotos = row => {
+      if (!row || typeof row !== 'object') return;
+      addPhoto(row.photo);
+      (Array.isArray(row.photos) ? row.photos : []).forEach(addPhoto);
+      (Array.isArray(row.empPhotos) ? row.empPhotos : []).forEach(addPhoto);
+    };
+
+    paths.forEach((path, index) => {
+      const snapshot = snapshots[index];
+      snapshot.forEach(child => {
+        const row = child.val();
+        if (!row || typeof row !== 'object') return false;
+        if (path === 'employees' && String(row.id || '') === id) {
+          collectPhotos(row);
+          updates[`employees/${child.key}`] = null;
+          removedByPath.employees = (removedByPath.employees || 0) + 1;
+        } else if (path === 'jobPlan' && String(row.empId || '') === id) {
+          updates[`jobPlan/${child.key}/empId`] = '';
+          updates[`jobPlan/${child.key}/empName`] = '';
+          updates[`jobPlan/${child.key}/plate`] = '';
+          updates[`jobPlan/${child.key}/phone`] = '';
+          updates[`jobPlan/${child.key}/dispatched`] = false;
+          updates[`jobPlan/${child.key}/dispatchedAt`] = null;
+          removedByPath.jobPlan = (removedByPath.jobPlan || 0) + 1;
+        } else if (path !== 'employees' && String(row.empId || '') === id) {
+          collectPhotos(row);
+          updates[`${path}/${child.key}`] = null;
+          removedByPath[path] = (removedByPath[path] || 0) + 1;
+        }
+        return false;
+      });
+    });
+    photoIds.forEach(photoId => { updates[`photos/${photoId}`] = null; });
+
+    await _withTimeout(update(ref(db), updates), 30000, 'timeout:employee-delete-write');
+    const [employeesAfter, tombstoneAfter] = await _withTimeout(
+      Promise.all([
+        get(ref(db, 'employees')),
+        get(ref(db, `deletedEmployees/${revocationKey}`))
+      ]),
+      20000,
+      'timeout:employee-delete-verify'
+    );
+    const remaining = normalizeList(employeesAfter.val()) || [];
+    if (remaining.some(emp => emp && String(emp.id || '') === id)) {
+      throw new Error('employee delete verification failed');
+    }
+    if (!tombstoneAfter.exists() || String(tombstoneAfter.val()?.id || '') !== id) {
+      throw new Error('employee revocation verification failed');
+    }
+
+    _deletedEmployeeIds.add(id);
+    _saveDeletedEmployeeCache();
+    _scrubEmployeeFromOutbox(id);
+    if (typeof window.skePurgeDeletedEmployeeLocalData === 'function') {
+      window.skePurgeDeletedEmployeeLocalData(id);
+    }
+    _notifyDeletedEmployee(id, 'บัญชีนี้ถูกลบโดยผู้ดูแล');
+    return {
+      employeeId:id,
+      removedRecords:Object.values(removedByPath).reduce((sum, count) => sum + count, 0),
+      removedPhotos:photoIds.size
+    };
   };
 
   // บันทึกรายการรถทั้งหมดขึ้น Firebase (ทะเบียนรถเป็น "เอนทิตี้แยก" ไม่ผูกกับพนักงานอีกต่อไป)
@@ -833,8 +971,9 @@
 
   // บันทึกรายการแจ้งซ่อมขึ้น Firebase
   window.fbSaveRepairs = function(list) {
-    _obMark('repairs', list);
-    return _withTimeout(set(ref(db, 'repairs'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs')
+    const clean = (Array.isArray(list) ? list : []).filter(row => row && !_isEmployeeDeleted(row.empId));
+    _obMark('repairs', clean);
+    return _withTimeout(set(ref(db, 'repairs'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs')
       .then(() => { _obClear('repairs'); })
       .catch(e => { console.error('fbSaveRepairs error', e); throw e; });
   };
@@ -855,8 +994,9 @@
 
   // บันทึกรายการเปลี่ยนถ่ายของเหลวขึ้น Firebase
   window.fbSaveFluidLogs = function(list) {
-    _obMark('fluidLogs', list);
-    return _withTimeout(set(ref(db, 'fluidLogs'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs')
+    const clean = (Array.isArray(list) ? list : []).filter(row => row && !_isEmployeeDeleted(row.empId));
+    _obMark('fluidLogs', clean);
+    return _withTimeout(set(ref(db, 'fluidLogs'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs')
       .then(() => { _obClear('fluidLogs'); })
       .catch(e => { console.error('fbSaveFluidLogs error', e); throw e; });
   };
@@ -875,33 +1015,40 @@
 
   // บันทึกรายการเบิกเงินพนักงานขึ้น Firebase
   window.fbSaveCashRequests = function(list) {
-    _obMark('cashRequests', list);
-    return _withTimeout(set(ref(db, 'cashRequests'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:cashRequests')
+    const clean = (Array.isArray(list) ? list : []).filter(row => row && !_isEmployeeDeleted(row.empId));
+    _obMark('cashRequests', clean);
+    return _withTimeout(set(ref(db, 'cashRequests'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:cashRequests')
       .then(() => { _obClear('cashRequests'); })
       .catch(e => console.error('fbSaveCashRequests error', e));
   };
 
   // บันทึกประวัติการลาขึ้น Firebase
   window.fbSaveLeaveLogs = function(list) {
-    _obMark('leaveLogs', list);
-    return _withTimeout(set(ref(db, 'leaveLogs'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:leaveLogs')
+    const clean = (Array.isArray(list) ? list : []).filter(row => row && !_isEmployeeDeleted(row.empId));
+    _obMark('leaveLogs', clean);
+    return _withTimeout(set(ref(db, 'leaveLogs'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:leaveLogs')
       .then(() => { _obClear('leaveLogs'); })
       .catch(e => console.error('fbSaveLeaveLogs error', e));
   };
 
   // บันทึกประวัติเที่ยววิ่งงาน (บันทึกถาวร ไม่ขึ้นกับสถานะปัจจุบันของพนักงาน) ขึ้น Firebase
   window.fbSaveRunLogs = function(list) {
-    set(ref(db, 'runLogs'), list).catch(e => console.error('fbSaveRunLogs error', e));
+    const clean = (Array.isArray(list) ? list : []).filter(row => row && !_isEmployeeDeleted(row.empId));
+    set(ref(db, 'runLogs'), clean).catch(e => console.error('fbSaveRunLogs error', e));
   };
 
   // ดึงข้อมูลล่าสุดจาก Firebase ทันที (สำหรับปุ่มรีเฟรชของผู้ดูแล)
   window.fbForceRefresh = function(cb) {
     get(ref(db, 'employees')).then(snapshot => {
-      const data = normalizeEmployees(snapshot.val());
+      const data = _activeEmployeeList(normalizeEmployees(snapshot.val()) || []);
       if (data && data.length > 0) {
         employees = data;
         _skeCacheSet('ske_emp', employees);
+      } else {
+        employees = [];
+        _skeCacheSet('ske_emp', employees);
       }
+      if (currentUser && !employees.some(e => e && e.id === currentUser.id)) _notifyDeletedEmployee(currentUser.id);
       return get(ref(db, 'vehicles'));
     }).then(snapshot => {
       const vdata = normalizeList(snapshot.val());
@@ -916,15 +1063,54 @@
     });
   };
 
+  // ฟังรายชื่อบัญชีที่ถูกลบก่อน เพื่อให้ทุกเครื่องเพิกถอน session เดิมได้ทันทีที่ออนไลน์
+  onValue(ref(db, 'deletedEmployees'), (snapshot) => {
+    _deletedEmployeeIds.clear();
+    const raw = snapshot.val();
+    if (raw && typeof raw === 'object') {
+      Object.values(raw).forEach(item => {
+        const id = item && typeof item === 'object' ? item.id : item;
+        if (id !== undefined && id !== null && String(id)) _deletedEmployeeIds.add(String(id));
+      });
+    }
+    _saveDeletedEmployeeCache();
+    window._deletedEmployeesReady = true;
+
+    const removedIds = [..._deletedEmployeeIds];
+    employees = _activeEmployeeList(employees);
+    _skeCacheSet('ske_emp', employees);
+    removedIds.forEach(id => {
+      _scrubEmployeeFromOutbox(id);
+      if (typeof window.skePurgeDeletedEmployeeLocalData === 'function') {
+        window.skePurgeDeletedEmployeeLocalData(id);
+      }
+    });
+    if (currentUser && _isEmployeeDeleted(currentUser.id)) {
+      _notifyDeletedEmployee(currentUser.id, 'บัญชีนี้ถูกลบโดยผู้ดูแล');
+    }
+  });
+
   // ฟัง realtime — เมื่อข้อมูลเปลี่ยนจากเครื่องอื่นจะอัพเดทอัตโนมัติ
   // หมายเหตุ: การ sync ครั้งแรกหลังเปิดแอพ (เทียบกับ cache เก่าใน localStorage ที่อาจค้างมาเป็นชม./วัน)
   // ไม่นับเป็น "การเปลี่ยนสถานะสด" — กันไม่ให้เด้งแจ้งเตือน+เสียงรัวๆ ย้อนหลังทุกครั้งที่เปิดแอพใหม่
   let _empSynced = false;
   onValue(ref(db, 'employees'), (snapshot) => {
-    const data = normalizeEmployees(snapshot.val());
+    const rawData = normalizeEmployees(snapshot.val()) || [];
+    const data = _activeEmployeeList(rawData);
+
+    // ถ้า client รุ่นเก่าเขียน ID ที่ถูกลบกลับมา ให้ลบแถวที่ฟื้นกลับนั้นออกจาก Firebase อัตโนมัติ
+    const revokedUpdates = {};
+    snapshot.forEach(child => {
+      const row = child.val();
+      if (row && _isEmployeeDeleted(row.id)) revokedUpdates[`employees/${child.key}`] = null;
+      return false;
+    });
+    if (Object.keys(revokedUpdates).length) update(ref(db), revokedUpdates).catch(() => {});
+
     if (_obHasFresh('employees')) {
       // ยังมีงานค้างส่งของเครื่องนี้อยู่ — ข้อมูลเซิร์ฟเวอร์ตอนนี้เก่ากว่าของเครื่อง อย่าเพิ่งเอามาทับ
       // (setInterval ใน _obFlushAll จะพยายามส่งซ้ำเองจนสำเร็จ แล้วค่อยปล่อยให้ onValue รอบถัดไปทำงานตามปกติ)
+      if (currentUser && _isEmployeeDeleted(currentUser.id)) _notifyDeletedEmployee(currentUser.id);
       _firstSync.employees = true; _empSynced = true; window._fbReady = true; return;
     }
     if (data && data.length > 0) {
@@ -937,17 +1123,25 @@
       if (currentUser) {
         const fresh = employees.find(e => e.id === currentUser.id);
         if (fresh) { currentUser = {...currentUser, ...fresh}; saveU(); }
+        else _notifyDeletedEmployee(currentUser.id, 'ไม่พบบัญชีพนักงานนี้ในระบบแล้ว');
       }
       const dash = document.getElementById('dashboard');
       const admin = document.getElementById('admin');
       if (dash && !dash.classList.contains('hidden')) renderDashboard();
       if (admin && !admin.classList.contains('hidden')) renderAdmin();
-    } else if (!_firstSync.employees && employees.length > 0) {
-      // Firebase ว่างจริงๆ (ครั้งแรกที่ใช้งาน) → อัพโหลดข้อมูลเครื่องขึ้นไปครั้งเดียว
-      set(ref(db, 'employees'), employees);
+    } else {
+      // Firebase ว่าง = ไม่มีพนักงานจริง ห้ามเอา cache เก่าในเครื่องเขียนฟื้นกลับขึ้นไป
+      employees = [];
+      _skeCacheSet('ske_emp', employees);
+      if (currentUser) _notifyDeletedEmployee(currentUser.id, 'ไม่พบบัญชีพนักงานนี้ในระบบแล้ว');
+      const dash = document.getElementById('dashboard');
+      const admin = document.getElementById('admin');
+      if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
+      if (admin && !admin.classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
     }
     _firstSync.employees = true;
     _empSynced = true;
+    window._employeeListSynced = true;
     window._fbReady = true;
   });
 
@@ -1105,15 +1299,23 @@
       _obFlushAll();
       // เพิ่งกลับมาเชื่อมต่อได้ → sync ข้อมูลทุกชุดทันที (onValue จะ replay ให้เองอยู่แล้ว แต่ get ย้ำให้ชัวร์+เร็ว)
       get(ref(db, 'employees')).then(s => {
-        const d = normalizeList(s.val());
+        const d = _activeEmployeeList(normalizeList(s.val()) || []);
         if (d && d.length > 0) {
           employees = d;
           _skeCacheSet('ske_emp', employees);
-          if (currentUser) { const f = employees.find(e => e.id === currentUser.id); if (f) { currentUser = {...currentUser, ...f}; saveU(); } }
+          if (currentUser) {
+            const f = employees.find(e => e.id === currentUser.id);
+            if (f) { currentUser = {...currentUser, ...f}; saveU(); }
+            else _notifyDeletedEmployee(currentUser.id, 'ไม่พบบัญชีพนักงานนี้ในระบบแล้ว');
+          }
           const dash = document.getElementById('dashboard');
           const admin = document.getElementById('admin');
           if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
           if (admin && !admin.classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
+        } else {
+          employees = [];
+          _skeCacheSet('ske_emp', employees);
+          if (currentUser) _notifyDeletedEmployee(currentUser.id, 'ไม่พบบัญชีพนักงานนี้ในระบบแล้ว');
         }
       }).catch(() => {});
     }
@@ -1122,16 +1324,21 @@
   });
 
   get(ref(db, 'employees')).then(snapshot => {
-    const data = normalizeList(snapshot.val());
+    const data = _activeEmployeeList(normalizeList(snapshot.val()) || []);
     if (data && data.length > 0) {
       // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ
       employees = data;
       _skeCacheSet('ske_emp', employees);
-    } else if (!_firstSync.employees) {
-      // Firebase ว่างจริงๆ → อัพโหลดข้อมูลที่มีอยู่ในเครื่อง (default หรือ localStorage)
-      window.fbSaveEmployees(employees);
+    } else {
+      // ห้าม seed รายชื่อจาก cache เมื่อ Firebase ว่าง เพราะอาจเป็นบัญชีที่ผู้ดูแลลบไปแล้ว
+      employees = [];
+      _skeCacheSet('ske_emp', employees);
     }
     _firstSync.employees = true;
+    window._employeeListSynced = true;
+    if (currentUser && !employees.some(e => e && e.id === currentUser.id)) {
+      _notifyDeletedEmployee(currentUser.id, 'ไม่พบบัญชีพนักงานนี้ในระบบแล้ว');
+    }
     window._fbReady = true;
   }).catch(e => { window._fbReady = true; console.error('fbGet error', e); });
 
@@ -1199,7 +1406,7 @@
   // ══ Monthly document submissions — realtime Firebase sync ══
   // คืนค่า Promise เสมอ เพื่อให้ฝั่งอัปโหลดรอจน Firebase บันทึกสำเร็จจริงก่อนแจ้งผล
   window.fbSaveMonthlyDocs = function(list) {
-    const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object') : [];
+    const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object' && !_isEmployeeDeleted(x.empId)) : [];
     _obMark('monthlyDocs', clean);
     return _withTimeout(set(ref(db, 'monthlyDocs'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:monthlyDocs')
       .then(() => { _obClear('monthlyDocs'); })
@@ -1213,6 +1420,7 @@
   // แล้วเขียนขึ้น Firebase "เฉพาะรายการของตัวเอง" เท่านั้น ไม่แตะรูปของคนอื่น — เร็วขึ้นมากบนสัญญาณอ่อน
   window.fbUpsertMonthlyDoc = async function(rec) {
     if (!rec || !rec.id) throw new Error('invalid monthly doc record');
+    if (_isEmployeeDeleted(rec.empId)) throw new Error('employee account was deleted');
     if (window._fbConnected === false) throw new Error('การเชื่อมต่ออินเทอร์เน็ตหลุดอยู่ กรุณาเช็คสัญญาณแล้วลองใหม่');
     // หา "คีย์จริง" ของรายการนี้บนเซิร์ฟเวอร์ก่อนเสมอ (ยืนยันด้วย id กันเขียนทับรายการของคนอื่น)
     let key = await _findServerKey('monthlyDocs', rec.id, monthlyDocs);
@@ -1289,7 +1497,11 @@
 
   // ══ แผนงาน (จ่ายงาน) — jobPlan ══
   window.fbSaveJobPlan = function(list) {
-    const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object') : [];
+    const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object').map(row =>
+      _isEmployeeDeleted(row.empId)
+        ? { ...row, empId:'', empName:'', plate:'', phone:'', dispatched:false, dispatchedAt:null }
+        : row
+    ) : [];
     _obMark('jobPlan', clean);
     return _withTimeout(set(ref(db, 'jobPlan'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:jobPlan')
       .then(() => { _obClear('jobPlan'); })
@@ -1371,7 +1583,7 @@
 
   // ══ ความคิดเห็น/ข้อเสนอแนะพนักงาน (feedbacks) ══
   window.fbSaveFeedbacks = function(list) {
-    const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object') : [];
+    const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object' && !_isEmployeeDeleted(x.empId)) : [];
     _obMark('feedbacks', clean);
     return _withTimeout(set(ref(db, 'feedbacks'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:feedbacks')
       .then(() => { _obClear('feedbacks'); })
@@ -2092,7 +2304,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.26-dev-v3.2.2-transport-fix</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.1-employee-delete-fix</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2100,7 +2312,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.26-dev-v3.2.2-transport-fix</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.27-dev-v3.2.2.1-employee-delete-fix</div>
       </div>
     </div>
 
@@ -2120,7 +2332,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div id="loginMsg" class="msg-ok hidden"></div>
       <div id="empList"></div>
       <div class="row-btns" style="margin-top:14px;">
-        <button class="btn btn-orange" style="flex:1;" onclick="showMode('register')">+ ลงทะเบียน</button>
+        <div style="flex:1;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:9px 11px;color:#9A3412;font-size:11.5px;font-weight:700;line-height:1.45;">เพิ่มพนักงานใหม่ได้จากเมนูผู้ดูแลเท่านั้น</div>
         <button class="btn btn-purple" style="flex:1;" onclick="showMode('adminPw')">🔐 ผู้ดูแล</button>
       </div>
     </div>
@@ -2218,7 +2430,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.26-dev-v3.2.2-transport-fix</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.1-employee-delete-fix</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -2474,7 +2686,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.26-dev-v3.2.2-transport-fix</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.27-dev-v3.2.2.1-employee-delete-fix</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3102,7 +3314,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.26-dev-v3.2.2-transport-fix';
+const SKE_APP_VERSION='v2026.07.27-dev-v3.2.2.1-employee-delete-fix';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -3199,6 +3411,9 @@ function _cacheSet(key,value){
 //    เพราะกว่าจะถึงตอน fallback ตัวแปร employees อาจถูก realtime ทับด้วยข้อมูลเก่า (ที่ยังไม่มีสถานะใหม่) ไปแล้ว
 //    ถ้าส่งทั้งก้อนโดยไม่ใส่ patch กลับ = สถานะที่พนักงานเพิ่งกดยืนยันจะหายถาวร (บั๊ก "สถานะเด้งกลับ")
 function fbPatchEmployee(empId,patch){
+  if(window.skeIsEmployeeDeleted&&window.skeIsEmployeeDeleted(empId)){
+    return Promise.reject(new Error('employee account was deleted'));
+  }
   const reapply=()=>{employees=(employees||[]).map(e=>e&&e.id===empId?{...e,...patch}:e);_cacheSet('ske_emp',employees);};
   if(window.fbUpdateEmployeeFields){
     return window.fbUpdateEmployeeFields(empId,patch).catch(()=>{reapply();if(window.fbSaveEmployees)return window.fbSaveEmployees(employees);});
@@ -3326,10 +3541,95 @@ let _repNewPhotos=[]; // รูปที่พนักงานเลือก�
 let _fluNewPhotos=[]; // รูปที่พนักงานเลือกไว้ก่อนบันทึกการเปลี่ยนถ่ายของเหลว (ย่อแล้ว)
 
 function saveE(){
+  employees=(employees||[]).filter(e=>e&&!(window.skeIsEmployeeDeleted&&window.skeIsEmployeeDeleted(e.id)));
   _cacheSet('ske_emp', employees);
   if(window.fbSaveEmployees) window.fbSaveEmployees(employees);
 }
 function saveU(){localStorage.setItem('ske_user',JSON.stringify(currentUser));}
+
+// ล้างข้อมูลของพนักงานที่ถูกลบออกจาก state/cache ในเครื่อง โดยไม่เขียนข้อมูลเก่ากลับขึ้น Firebase
+function purgeDeletedEmployeeLocalData(empId){
+  const id=String(empId||'');
+  if(!id)return;
+  const photoIds=new Set();
+  const addPhoto=v=>{if(v&&!String(v).startsWith('data:'))photoIds.add(String(v));};
+  const collectPhotos=row=>{
+    if(!row)return;
+    addPhoto(row.photo);
+    (Array.isArray(row.photos)?row.photos:[]).forEach(addPhoto);
+    (Array.isArray(row.empPhotos)?row.empPhotos:[]).forEach(addPhoto);
+  };
+  (employees||[]).filter(e=>e&&String(e.id||'')===id).forEach(collectPhotos);
+  (repairs||[]).filter(r=>r&&String(r.empId||'')===id).forEach(collectPhotos);
+  (fluidLogs||[]).filter(r=>r&&String(r.empId||'')===id).forEach(collectPhotos);
+  (cashRequests||[]).filter(r=>r&&String(r.empId||'')===id).forEach(collectPhotos);
+  (monthlyDocs||[]).filter(r=>r&&String(r.empId||'')===id).forEach(collectPhotos);
+
+  employees=(employees||[]).filter(e=>e&&String(e.id||'')!==id);
+  repairs=(repairs||[]).filter(r=>r&&String(r.empId||'')!==id);
+  fluidLogs=(fluidLogs||[]).filter(r=>r&&String(r.empId||'')!==id);
+  cashRequests=(cashRequests||[]).filter(r=>r&&String(r.empId||'')!==id);
+  leaveLogs=(leaveLogs||[]).filter(r=>r&&String(r.empId||'')!==id);
+  runLogs=(runLogs||[]).filter(r=>r&&String(r.empId||'')!==id);
+  monthlyDocs=(monthlyDocs||[]).filter(r=>r&&String(r.empId||'')!==id);
+  companyFeedbacks=(companyFeedbacks||[]).filter(r=>r&&String(r.empId||'')!==id);
+  jobPlanRows=(jobPlanRows||[]).map(row=>row&&String(row.empId||'')===id
+    ? {...row,empId:'',empName:'',plate:'',phone:'',dispatched:false,dispatchedAt:null}
+    : row);
+
+  _cacheSet('ske_emp',employees);
+  _cacheSet('ske_repairs',repairs);
+  _cacheSet('ske_fluid',fluidLogs);
+  localStorage.setItem('ske_cash',JSON.stringify(cashRequests));
+  localStorage.setItem('ske_leaveLogs',JSON.stringify(leaveLogs));
+  localStorage.setItem('ske_runlogs',JSON.stringify(runLogs));
+  _cacheSet('ske_monthly_docs',monthlyDocs);
+  _cacheSet('ske_feedbacks',companyFeedbacks);
+  _cacheSet('ske_jobplan',jobPlanRows);
+  photoIds.forEach(photoId=>{
+    try{localStorage.removeItem('ske_ph_'+photoId);}catch(e){}
+    if(typeof _photoMem!=='undefined')_photoMem.delete(photoId);
+  });
+}
+window.skePurgeDeletedEmployeeLocalData=purgeDeletedEmployeeLocalData;
+
+function showEmployeeRemovedLoginMessage(reason){
+  const msg=document.getElementById('loginMsg');
+  if(!msg)return;
+  msg.textContent='⛔ '+(reason||'บัญชีพนักงานนี้ถูกลบโดยผู้ดูแล กรุณาติดต่อผู้ดูแลหากมีข้อสงสัย');
+  msg.className='msg-err';
+  msg.classList.remove('hidden');
+}
+window.skeHandleDeletedEmployee=function(empId,reason){
+  const id=String(empId||'');
+  const wasCurrent=!!(currentUser&&String(currentUser.id||'')===id);
+  purgeDeletedEmployeeLocalData(id);
+  if(!wasCurrent)return;
+  currentUser=null;
+  saveU();
+  _pinTargetId=null;
+  editOpen=false;
+  if(typeof stopAlertTimer==='function')stopAlertTimer();
+  document.getElementById('statusEditModal')?.remove();
+  if(adminMode){
+    if(typeof renderAdmin==='function')renderAdmin();
+    return;
+  }
+  show('login');
+  renderEmpList();
+  showMode('select');
+  showEmployeeRemovedLoginMessage(reason);
+};
+function requireActiveEmployee(showNotice=true){
+  if(!currentUser)return false;
+  const deleted=!!(window.skeIsEmployeeDeleted&&window.skeIsEmployeeDeleted(currentUser.id));
+  const missing=!!window._employeeListSynced&&!employees.some(e=>e&&e.id===currentUser.id);
+  if(deleted||missing){
+    window.skeHandleDeletedEmployee(currentUser.id,showNotice?'บัญชีพนักงานนี้ถูกลบหรือปิดใช้งานแล้ว':'');
+    return false;
+  }
+  return true;
+}
 // ตั้งรหัสผ่าน/PIN ใหม่ — รับค่าที่พิมพ์เข้ามาแบบข้อความปกติ แล้วเข้ารหัสก่อนเก็บ/ส่งขึ้น Firebase เสมอ (ไม่มีการเก็บ/ส่ง plain text อีกต่อไป)
 async function setAdminPw(plainPw){
   adminPwHash=await sha256Hex(plainPw);
@@ -3595,7 +3895,10 @@ function skeInitApp(){
         if(window.fbRegisterPushToken)window.fbRegisterPushToken(adminRole==='viewer'?'viewer':'super');
         startAdminAlertTimer();
       }
-      else if(currentUser){show('dashboard');renderDashboard();startAlertTimer();}
+      else if(currentUser){
+        if(requireActiveEmployee(false)){show('dashboard');renderDashboard();startAlertTimer();}
+        else{show('login');renderEmpList();showMode('select');showEmployeeRemovedLoginMessage();}
+      }
       else{show('login');renderEmpList();}
     } else {
       setTimeout(tryStart,50);
@@ -3683,7 +3986,7 @@ function compressAvatar(file){
 function renderEmpList(){
   const el=document.getElementById('empList');
   if(!employees.length){
-    el.innerHTML='<div class="card" style="text-align:center;color:#9CA3AF;padding:32px;border-radius:20px;"><div style="font-size:44px;margin-bottom:10px;">👷</div><b style="color:#374151;">ยังไม่มีพนักงาน</b><br>กรุณาลงทะเบียนก่อน</div>';
+    el.innerHTML='<div class="card" style="text-align:center;color:#9CA3AF;padding:32px;border-radius:20px;"><div style="font-size:44px;margin-bottom:10px;">👷</div><b style="color:#374151;">ยังไม่มีพนักงาน</b><br>กรุณาติดต่อผู้ดูแลเพื่อเพิ่มพนักงาน</div>';
     return;
   }
   el.innerHTML=employees.map(e=>{
@@ -3731,7 +4034,13 @@ function doConfirmPin(){
   doLogin(emp.id);
 }
 function doLogin(id){
-  currentUser=employees.find(e=>e.id===id)||null;
+  const emp=employees.find(e=>e.id===id)||null;
+  if(!emp||(window.skeIsEmployeeDeleted&&window.skeIsEmployeeDeleted(id))){
+    currentUser=null;saveU();showMode('select');renderEmpList();
+    showEmployeeRemovedLoginMessage('บัญชีนี้ถูกลบหรือปิดใช้งานแล้ว');
+    return;
+  }
+  currentUser=emp;
   saveU();adminMode=false;
   _unlockAudio(); // unlock AudioContext ทันทีที่ login (user gesture)
   show('dashboard');renderDashboard();
@@ -3746,6 +4055,11 @@ function doRegister(){
   const pin=document.getElementById('regPin').value.trim();
   const pin2=document.getElementById('regPin2').value.trim();
   const m=document.getElementById('regMsg');
+  if(!adminMode){
+    m.textContent='⛔ การเพิ่มพนักงานใหม่ทำได้จากเมนูผู้ดูแลเท่านั้น';
+    m.classList.remove('hidden');
+    return;
+  }
   if(!name||!plate){m.textContent='กรุณากรอกชื่อและทะเบียนรถ';m.classList.remove('hidden');return;}
   if(!pin||pin.length!==4||!/^\d{4}$/.test(pin)){m.textContent='PIN ต้องเป็นตัวเลข 4 หลัก';m.classList.remove('hidden');return;}
   if(pin!==pin2){m.textContent='PIN ทั้งสองช่องไม่ตรงกัน';m.classList.remove('hidden');return;}
@@ -6129,13 +6443,17 @@ function saveEditRunLogEntry(id){
 }
 
 function renderDashboard(){
+  if(!requireActiveEmployee())return;
   // sync currentUser จาก employees (กันกรณี localStorage เก่า)
   if(currentUser){
     const fresh=employees.find(e=>e.id===currentUser.id);
     if(fresh)currentUser={...currentUser,...fresh};
   }
-  const me=employees.find(e=>e.id===currentUser?.id)||currentUser;
-  if(!me){show('login');renderEmpList();return;}
+  const me=employees.find(e=>e.id===currentUser?.id);
+  if(!me){
+    window.skeHandleDeletedEmployee(currentUser?.id,'ไม่พบบัญชีพนักงานนี้ในระบบแล้ว');
+    return;
+  }
   const s=getS(me.status);const lbl=getFullLabel(me);
   if(!editOpen&&!document.getElementById('statusEditModal')){
     // ซิงค์ค่าที่กำลังเลือกจากข้อมูลล่าสุดเฉพาะตอนยังไม่ได้เปิดแผงแก้ไขอยู่จริงๆ (เช็ค 2 ชั้น: ทั้ง flag และ DOM จริง)
@@ -8602,12 +8920,35 @@ function doSaveAEdit(id){
   if(currentUser?.id===id){currentUser={...currentUser,name,position,plate,phone,lineId,note,status,province:prov};saveU();}
   saveE();renderAdminEmpList();
 }
-function doDelEmp(id){
-  if(!confirm('ลบพนักงานคนนี้?'))return;
-  employees=employees.filter(e=>e.id!==id);
-  if(currentUser?.id===id){currentUser=null;saveU();}
-  saveE();renderAdminEmpList();
-  renderSysInfo();
+async function doDelEmp(id){
+  if(adminRole==='viewer'){alert('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้นที่ลบพนักงานได้');return;}
+  const emp=employees.find(e=>e.id===id);
+  if(!emp){alert('ไม่พบข้อมูลพนักงานนี้ในระบบ');return;}
+  const warning='ลบพนักงานคนนี้ออกจากระบบถาวร?\n\n'
+    +(emp.name||'-')+' · '+(emp.plate||'-')
+    +'\n\nระบบจะลบข้อมูลที่ผูกกับพนักงานคนนี้ เช่น แจ้งซ่อม การลา เที่ยววิ่ง เอกสาร เบิกเงิน และรูปภาพ'
+    +'\nพร้อมบังคับออกจากระบบทุกเครื่อง การดำเนินการนี้ย้อนกลับไม่ได้';
+  if(!confirm(warning))return;
+  if(!window.fbDeleteEmployeePermanently){
+    alert('ระบบลบพนักงานแบบถาวรยังไม่พร้อม กรุณารีเฟรชหน้าแล้วลองใหม่');
+    return;
+  }
+  showDocUploadPopup('กำลังลบพนักงานออกจากระบบ','กำลังลบบัญชี ข้อมูลที่เกี่ยวข้อง และเพิกถอนการเข้าใช้งานทุกเครื่อง');
+  try{
+    const result=await window.fbDeleteEmployeePermanently(id);
+    purgeDeletedEmployeeLocalData(id);
+    hideDocUploadPopup();
+    renderAdminEmpList();
+    renderSysInfo();
+    if(typeof renderAdmin==='function')renderAdmin();
+    alert('✅ ลบพนักงานออกจากระบบถาวรแล้ว\n\nลบข้อมูลที่เกี่ยวข้อง '
+      +(result?.removedRecords||0)+' รายการ และรูปภาพ '+(result?.removedPhotos||0)+' รูป\n'
+      +'เครื่องที่เคยล็อกอินบัญชีนี้จะถูกบังคับออกเมื่อเชื่อมต่ออินเทอร์เน็ต');
+  }catch(e){
+    hideDocUploadPopup();
+    console.error('delete employee permanently failed',e);
+    alert('❌ ลบพนักงานไม่สำเร็จ ข้อมูลเดิมยังไม่ถูกนำออกจากหน้าจอ\n\nกรุณาตรวจสัญญาณอินเทอร์เน็ตแล้วลองใหม่');
+  }
 }
 async function doChangePw(){
   const v=document.getElementById('newPwInput').value;
