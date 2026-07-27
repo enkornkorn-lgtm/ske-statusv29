@@ -691,7 +691,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.27-dev-v3.2.2.2-record-transaction-fix');
+  console.log('[SKE TRUCK] app version: v2026.07.27-dev-v3.2.2.3-old-job-status-guard');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2591,7 +2591,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.2-record-transaction-fix</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.3-old-job-status-guard</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2599,7 +2599,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.27-dev-v3.2.2.2-record-transaction-fix</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.27-dev-v3.2.2.3-old-job-status-guard</div>
       </div>
     </div>
 
@@ -2717,7 +2717,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.2-record-transaction-fix</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.3-old-job-status-guard</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -2973,7 +2973,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.27-dev-v3.2.2.2-record-transaction-fix</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.27-dev-v3.2.2.3-old-job-status-guard</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3601,7 +3601,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.27-dev-v3.2.2.2-record-transaction-fix';
+const SKE_APP_VERSION='v2026.07.27-dev-v3.2.2.3-old-job-status-guard';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -7390,6 +7390,16 @@ function selStat(id){
   }
 }
 
+function clearJobLinkWhenLeavingGotJob(status){
+  return status==='got_job'?{}:{
+    jobWorkDate:null,
+    previousStatus:null,
+    previousProvince:null,
+    previousNote:null,
+    previousStandbyAt:null
+  };
+}
+
 async function doSave(){
   // อ่านสถานะที่กำลังเลือกอยู่จริงจากปุ่มที่ถูกไฮไลต์บนจอเป็นหลัก ไม่พึ่งตัวแปร _selStatus เพียงอย่างเดียว
   // (กันกรณีข้อมูลพื้นหลังอัพเดทมาทับตัวแปรระหว่างที่ฟอร์มเปิดค้างอยู่ ทำให้บันทึกสถานะ/จังหวัดผิดไปจากที่เห็นบนจอจริง)
@@ -7419,7 +7429,14 @@ async function doSave(){
   // บันทึก standbyAt เมื่อเปลี่ยนมาเป็น standby ครั้งแรก
   const prev=employees.find(e=>e.id===currentUser.id);
   const standbyAt=(_selStatus==='standby'&&prev?.status!=='standby')?now:(prev?.standbyAt||null);
-  const patch={status:_selStatus,province:prov,note,updatedAt:now,standbyAt:_selStatus==='standby'?standbyAt:null};
+  const patch={
+    status:_selStatus,
+    province:prov,
+    note,
+    updatedAt:now,
+    standbyAt:_selStatus==='standby'?standbyAt:null,
+    ...clearJobLinkWhenLeavingGotJob(_selStatus)
+  };
   recordRunLogIfNeeded(prev,_selStatus,note,currentUser.id,prev?.plate||currentUser.plate,prev?.name||currentUser.name);
   employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
   currentUser={...currentUser,...patch};
@@ -8240,6 +8257,9 @@ function isPastWorkDate(workDate){
   if(!workDate)return false;
   return workDate<todayStrJP();
 }
+function isCancelledJobPlanRow(row){
+  return !!(row&&String(row.remark||'').trim().includes('ยกเลิก'));
+}
 
 const THAI_DOW_JP=['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
 function fmtJobDateFull(dateStr){
@@ -8556,11 +8576,32 @@ function updateJobPlanField(id,field,value){
 
 async function syncJobNoteToEmployee(row){
   if(!row||!row.empId)return;
+  // งานย้อนหลัง/งานยกเลิกเป็นข้อมูลประวัติเท่านั้น ห้ามนำกลับมาเปลี่ยนสถานะปัจจุบัน
+  if(!row.workDate||isPastWorkDate(row.workDate)||isCancelledJobPlanRow(row)){
+    console.warn('[SKE job plan] ข้ามการเปลี่ยนสถานะจากงานย้อนหลัง/งานยกเลิก',row.id||'');
+    return;
+  }
   const emp=employees.find(e=>e.id===row.empId);
+  if(!emp)return;
   // จำสถานะ "ก่อนได้งาน" ไว้ ก่อนทับเป็น got_job — เผื่อไว้คืนกลับตอนงานถูกดึงออก (เช่น สแตนบายว่างงาน ก็ต้องกลับไปสแตนบายว่างงาน ไม่ใช่เหมารวมเป็นสแตนบายรอขึ้นงานเสมอ)
   // ถ้าตอนนี้เป็น got_job อยู่แล้ว (เช่น sync ซ้ำ/แก้ไขข้อมูลงานเดิม) ไม่ทับ previousStatus เดิมที่เคยจำไว้
-  const prevStatus=(emp&&emp.status!=='got_job')?emp.status:(emp?.previousStatus||'standby');
-  const patch={status:'got_job',note:buildJobNoteText(row),province:'',jobWorkDate:row.workDate||'',previousStatus:prevStatus,updatedAt:new Date().toISOString()};
+  const alreadyGotJob=emp.status==='got_job';
+  const prevStatus=alreadyGotJob?(emp.previousStatus||'standby'):emp.status;
+  const prevProvince=alreadyGotJob?(emp.previousProvince||''):(emp.province||'');
+  const prevNote=alreadyGotJob?(emp.previousNote||''):(emp.note||'');
+  const prevStandbyAt=alreadyGotJob?(emp.previousStandbyAt||null):(emp.standbyAt||null);
+  const patch={
+    status:'got_job',
+    note:buildJobNoteText(row),
+    province:'',
+    standbyAt:null,
+    jobWorkDate:row.workDate||'',
+    previousStatus:prevStatus,
+    previousProvince:prevProvince,
+    previousNote:prevNote,
+    previousStandbyAt:prevStandbyAt,
+    updatedAt:new Date().toISOString()
+  };
   employees=employees.map(e=>e.id===row.empId?{...e,...patch}:e);
   _cacheSet('ske_emp',employees);
   try{ await fbPatchEmployee(row.empId,patch); }catch(e){console.warn('sync job note error',e);}
@@ -8572,14 +8613,30 @@ async function syncJobNoteToEmployee(row){
 // คืนกลับไปที่ "สถานะก่อนได้งาน" เป๊ะๆ (ไม่ใช่เหมารวมเป็นสแตนบายรอขึ้นงานเสมอ) และไม่ใส่ข้อความ "งานถูกยกเลิก" อัตโนมัติอีกต่อไป
 // (ถ้าแอดมินอยากแจ้งพนักงานว่างานถูกยกเลิกจริงๆ ให้ไปพิมพ์ในช่องหมายเหตุตอนแก้ไขสถานะเองแทน)
 async function revertJobAssignment(empId,excludeRowId){
-  const otherRow=jobPlanRows.find(r=>r.id!==excludeRowId&&r.empId===empId&&r.dispatched);
+  const emp=employees.find(e=>e.id===empId);
+  // ถ้าพนักงานเปลี่ยนเป็นสถานะอื่นไปแล้ว แปลว่าสถานะปัจจุบันใหม่กว่างานที่กำลังถอด
+  // ห้ามงานในแผน (โดยเฉพาะแถวย้อนหลัง) ดึงกลับไปเป็น got_job หรือ previousStatus อีก
+  if(!emp||emp.status!=='got_job')return;
+  const otherRow=jobPlanRows
+    .filter(r=>r.id!==excludeRowId&&r.empId===empId&&r.dispatched&&r.workDate&&!isPastWorkDate(r.workDate)&&!isCancelledJobPlanRow(r))
+    .sort((a,b)=>(a.workDate||'').localeCompare(b.workDate||'')||(a.standbyTime||'').localeCompare(b.standbyTime||''))[0];
   if(otherRow){
     await syncJobNoteToEmployee(otherRow);
     return;
   }
-  const emp=employees.find(e=>e.id===empId);
   const restoreStatus=emp?.previousStatus||'standby';
-  const patch={status:restoreStatus,note:'',updatedAt:new Date().toISOString()};
+  const patch={
+    status:restoreStatus,
+    note:emp?.previousNote||'',
+    province:emp?.previousProvince||'',
+    standbyAt:restoreStatus==='standby'?(emp?.previousStandbyAt||new Date().toISOString()):null,
+    jobWorkDate:null,
+    previousStatus:null,
+    previousProvince:null,
+    previousNote:null,
+    previousStandbyAt:null,
+    updatedAt:new Date().toISOString()
+  };
   employees=employees.map(e=>e.id===empId?{...e,...patch}:e);
   _cacheSet('ske_emp',employees);
   try{ await fbPatchEmployee(empId,patch); }catch(e){console.warn('revert job error',e);}
@@ -9015,7 +9072,7 @@ function sdConfirmSwitch(){
   // ประวัติเก่าทั้งหมด (ลา/ซ่อม/เที่ยววิ่ง/เอกสาร) ยังผูกกับ empId เดิมอยู่ครบ ไม่ถูกลบหรือแก้ไข
   const swappedOutIds=employees.filter(e=>e.plate===plate&&e.id!==finalId).map(e=>e.id);
   if(swappedOutIds.length){
-    const outPatch={status:'inactive',plate:'',province:'',standbyAt:null,updatedAt:now};
+    const outPatch={status:'inactive',plate:'',province:'',standbyAt:null,updatedAt:now,...clearJobLinkWhenLeavingGotJob('inactive')};
     employees=employees.map(e=>swappedOutIds.includes(e.id)?{...e,...outPatch}:e);
     saveE();
     swappedOutIds.forEach(id=>{
@@ -9238,7 +9295,10 @@ function doSaveAEdit(id){
     if(e.id!==id)return e;
     const prev=e;
     const standbyAt=(status==='standby'&&prev.status!=='standby')?now:(status==='standby'?prev.standbyAt||now:null);
-    const updated={...e,name,position,plate,phone,lineId,note,status,province:prov,updatedAt:now,standbyAt};
+    const updated={
+      ...e,name,position,plate,phone,lineId,note,status,province:prov,updatedAt:now,standbyAt,
+      ...clearJobLinkWhenLeavingGotJob(status)
+    };
     updated.onLeave=onLeave;
     if(onLeave){
       updated.leaveFrom=leaveFromVal||prev.leaveFrom||null;
@@ -9250,7 +9310,11 @@ function doSaveAEdit(id){
     recordRunLogIfNeeded(prev,status,note,id,plate,name);
     return updated;
   });
-  if(currentUser?.id===id){currentUser={...currentUser,name,position,plate,phone,lineId,note,status,province:prov};saveU();}
+  if(currentUser?.id===id){
+    const fresh=employees.find(e=>e.id===id);
+    if(fresh)currentUser={...currentUser,...fresh};
+    saveU();
+  }
   saveE();renderAdminEmpList();
 }
 let _pendingDeleteEmployeeId=null;
