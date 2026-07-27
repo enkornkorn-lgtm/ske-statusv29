@@ -43,7 +43,7 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-  import { getDatabase, ref, set, onValue, get, update, remove, goOffline, goOnline } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+  import { getDatabase, ref, set, onValue, get, update, remove, runTransaction, goOffline, goOnline } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
   import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging.js";
 
   const firebaseConfig = {
@@ -601,21 +601,62 @@
     const id = String(empId);
     const ob = _obLoad();
     let changed = false;
-    const removeFromList = key => {
+    const removeEmployeeOps = key => {
       const entry = ob[key];
-      if (!entry || !Array.isArray(entry.payload)) return;
-      const clean = entry.payload.filter(row => !row || String(row.empId || row.id || '') !== id);
-      if (clean.length !== entry.payload.length) { entry.payload = clean; entry.ts = Date.now(); changed = true; }
+      if (!entry) return;
+      if (Array.isArray(entry.payload)) {
+        const clean = entry.payload.filter(row => !row || String(row.empId || row.id || '') !== id);
+        if (clean.length !== entry.payload.length) { entry.payload = clean; entry.ts = Date.now(); changed = true; }
+        return;
+      }
+      const payload = entry.payload;
+      if (!payload || payload.__skeRecordOps !== 1 || !Array.isArray(payload.ops)) return;
+      const shadow = typeof _recordShadows !== 'undefined' ? _recordShadows[key] : null;
+      const cleanOps = payload.ops.filter(op => {
+        if (!op) return false;
+        if (key === 'employees') return String(op.id || '') !== id;
+        const oldRow = shadow?.get(String(op.id || ''));
+        const linkedId = op.patch?.empId ?? oldRow?.empId;
+        return String(linkedId || '') !== id;
+      });
+      if (cleanOps.length !== payload.ops.length) {
+        if (cleanOps.length) entry.payload = { __skeRecordOps:1, ops:cleanOps };
+        else delete ob[key];
+        if (ob[key]) ob[key].ts = Date.now();
+        changed = true;
+      }
     };
-    ['employees','repairs','fluidLogs','cashRequests','leaveLogs','runLogs','monthlyDocs','feedbacks'].forEach(removeFromList);
+    ['employees','repairs','fluidLogs','cashRequests','leaveLogs','runLogs','monthlyDocs','feedbacks'].forEach(removeEmployeeOps);
     const jp = ob.jobPlan;
-    if (jp && Array.isArray(jp.payload)) {
-      const clean = jp.payload.map(row => row && String(row.empId || '') === id
-        ? { ...row, empId:'', empName:'', plate:'', phone:'', dispatched:false, dispatchedAt:null }
-        : row);
-      if (JSON.stringify(clean) !== JSON.stringify(jp.payload)) { jp.payload = clean; jp.ts = Date.now(); changed = true; }
+    if (jp) {
+      if (Array.isArray(jp.payload)) {
+        const clean = jp.payload.map(row => row && String(row.empId || '') === id
+          ? { ...row, empId:'', empName:'', plate:'', phone:'', dispatched:false, dispatchedAt:null }
+          : row);
+        if (JSON.stringify(clean) !== JSON.stringify(jp.payload)) { jp.payload = clean; jp.ts = Date.now(); changed = true; }
+      } else if (jp.payload?.__skeRecordOps === 1 && Array.isArray(jp.payload.ops)) {
+        const shadow = typeof _recordShadows !== 'undefined' ? _recordShadows.jobPlan : null;
+        const cleanOps = jp.payload.ops.map(op => {
+          if (!op || op.delete) return op;
+          const oldRow = shadow?.get(String(op.id || ''));
+          const linkedId = op.patch?.empId ?? oldRow?.empId;
+          if (String(linkedId || '') !== id) return op;
+          return {
+            ...op,
+            patch:{
+              ...(op.patch || {}),
+              empId:'', empName:'', plate:'', phone:'', dispatched:false, dispatchedAt:null
+            }
+          };
+        });
+        if (JSON.stringify(cleanOps) !== JSON.stringify(jp.payload.ops)) {
+          jp.payload = { __skeRecordOps:1, ops:cleanOps };
+          jp.ts = Date.now();
+          changed = true;
+        }
+      }
     }
-    if (changed) _obSaveAll(ob);
+    if (changed) { _obSaveAll(ob); _obUpdateIndicator(); }
   }
   window.skeIsEmployeeDeleted = _isEmployeeDeleted;
 
@@ -650,16 +691,20 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.27-dev-v3.2.2.1-employee-delete-fix');
-  const SKE_OUTBOX_KEY = 'ske_outbox_v1';
-  // งานค้างมีอายุจำกัด — เกินนี้ให้ "ทิ้ง" แทนที่จะส่งซ้ำ เพราะ payload เป็นข้อมูลทั้งชุด ณ เวลานั้น
-  // ถ้าปล่อยให้คิวเก่าหลายนาที/ชั่วโมงส่งสำเร็จทีหลัง มันจะเอาข้อมูล "ทั้งก้อนเวอร์ชันเก่า" ทับขึ้นเซิร์ฟเวอร์
-  // ลบสถานะ/จังหวัดที่เครื่องอื่นๆ เพิ่งอัพเดทไประหว่างนั้นทิ้งทั้งหมด (อันตรายกว่าเสียงานค้าง 1 รายการมาก)
-  // และตราบใดที่คิวค้างอยู่ onValue จะไม่รับข้อมูลใหม่จากเซิร์ฟเวอร์เลย = เครื่องนั้นค้างของเก่าถาวร
+  console.log('[SKE TRUCK] app version: v2026.07.27-dev-v3.2.2.2-record-transaction-fix');
+  // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
+  const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
+  try {
+    if (localStorage.getItem('ske_outbox_v1')) {
+      console.warn('[SKE outbox] ยกเลิกคิว V1 แบบทั้งก้อนหลังอัปเกรดเป็น transaction รายรายการ');
+      localStorage.removeItem('ske_outbox_v1');
+    }
+  } catch (e) {}
+  // งานค้างมีอายุจำกัด แม้ V2 จะเก็บเฉพาะ patch รายรายการแล้วก็ตาม:
+  // กันคำสั่งเดิมที่ล้มเหลวถาวรค้างปิดกั้น onValue ของชุดข้อมูลนั้น และกัน patch เก่ามากไปทับฟิลด์เดียวกันที่เพิ่งแก้จากเครื่องอื่น
   const SKE_OUTBOX_MAX_AGE_MS = 10 * 60 * 1000;
   function _obLoad() { try { return JSON.parse(localStorage.getItem(SKE_OUTBOX_KEY) || '{}'); } catch (e) { return {}; } }
   function _obSaveAll(ob) { try { localStorage.setItem(SKE_OUTBOX_KEY, JSON.stringify(ob)); } catch (e) {} }
-  function _obMark(key, payload) { const ob = _obLoad(); ob[key] = { payload, ts: Date.now() }; _obSaveAll(ob); _obUpdateIndicator(); }
   function _obClear(key) { const ob = _obLoad(); if (ob[key]) { delete ob[key]; _obSaveAll(ob); _obUpdateIndicator(); } }
   function _obHas(key) { return !!_obLoad()[key]; }
   // เช็คว่ามีงานค้างที่ "ยังไม่หมดอายุ" ไหม — ถ้าหมดอายุแล้วให้ล้างทิ้งทันทีและถือว่าไม่มี
@@ -686,6 +731,232 @@
     ]);
   }
   const SKE_WRITE_TIMEOUT_MS = 25000;
+
+  // ══ เขียน Firebase แบบรายรายการ + transaction ════════════════════════════
+  // ทุกชุดข้อมูลหลักเก็บ shadow ของค่าล่าสุดที่เครื่องเคยเห็น แล้วหาเฉพาะฟิลด์ที่ผู้ใช้แก้จริง
+  // จึงไม่ส่งรายชื่อ/ประวัติทั้งก้อนกลับขึ้น Firebase และไม่ทับรายการอื่นที่อีกเครื่องเพิ่งแก้
+  const _recordShadows = Object.create(null);
+  const _recordWriteChains = Object.create(null);
+  const _recordWriteBusy = Object.create(null);
+  const _recordCacheKeys = {
+    employees:'ske_emp', vehicles:'ske_vehicles', repairs:'ske_repairs', fluidLogs:'ske_fluid',
+    cashRequests:'ske_cash', leaveLogs:'ske_leaveLogs', runLogs:'ske_runlogs',
+    monthlyDocs:'ske_monthly_docs', jobPlan:'ske_jobplan',
+    jobRouteTemplates:'ske_jobtemplates', feedbacks:'ske_feedbacks'
+  };
+  function _cloneRecord(value) {
+    if (value === undefined) return undefined;
+    try { return JSON.parse(JSON.stringify(value)); } catch (e) { return value; }
+  }
+  function _sameRecordValue(a, b) {
+    if (a === b) return true;
+    try { return JSON.stringify(a) === JSON.stringify(b); } catch (e) { return false; }
+  }
+  function _setRecordShadow(path, list) {
+    const map = new Map();
+    (Array.isArray(list) ? list : []).forEach(row => {
+      if (row && row.id !== undefined && row.id !== null && String(row.id)) {
+        map.set(String(row.id), _cloneRecord(row));
+      }
+    });
+    _recordShadows[path] = map;
+  }
+  function _primeRecordShadowsFromCache() {
+    Object.entries(_recordCacheKeys).forEach(([path, cacheKey]) => {
+      try {
+        const list = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+        _setRecordShadow(path, Array.isArray(list) ? list : []);
+      } catch (e) { _setRecordShadow(path, []); }
+    });
+  }
+  _primeRecordShadowsFromCache();
+
+  function _safeRecordKey(itemId) {
+    return 'id_' + String(itemId).replace(/[%\.#$\[\]\/]/g, ch =>
+      '%' + ch.charCodeAt(0).toString(16).padStart(2, '0')
+    );
+  }
+  function _cleanPatch(patch) {
+    const clean = {};
+    Object.keys(patch || {}).forEach(key => {
+      if (patch[key] !== undefined) clean[key] = _cloneRecord(patch[key]);
+    });
+    return clean;
+  }
+  function _coalesceRecordOps(ops) {
+    const byId = new Map();
+    (Array.isArray(ops) ? ops : []).forEach(raw => {
+      if (!raw || raw.id === undefined || raw.id === null || !String(raw.id)) return;
+      const id = String(raw.id);
+      if (raw.delete) {
+        byId.set(id, { id, delete:true });
+        return;
+      }
+      const incoming = { id, create:!!raw.create, patch:_cleanPatch(raw.patch || {}) };
+      const prev = byId.get(id);
+      if (!prev || prev.delete) byId.set(id, incoming);
+      else byId.set(id, {
+        id,
+        create:prev.create || incoming.create,
+        patch:{ ...prev.patch, ...incoming.patch }
+      });
+    });
+    return [...byId.values()].filter(op => op.delete || Object.keys(op.patch || {}).length);
+  }
+  function _buildRecordOps(path, list, includeDeletes = true) {
+    const shadow = _recordShadows[path] || new Map();
+    const clean = Array.isArray(list) ? list.filter(row => row && typeof row === 'object' && row.id !== undefined && row.id !== null && String(row.id)) : [];
+    const localIds = new Set();
+    const ops = [];
+    clean.forEach(row => {
+      const id = String(row.id);
+      localIds.add(id);
+      const base = shadow.get(id);
+      if (!base) {
+        ops.push({ id, create:true, patch:_cleanPatch(row) });
+        return;
+      }
+      const patch = {};
+      const keys = new Set([...Object.keys(base), ...Object.keys(row)]);
+      keys.delete('id');
+      keys.forEach(key => {
+        const next = Object.prototype.hasOwnProperty.call(row, key) ? row[key] : null;
+        if (!_sameRecordValue(base[key], next)) patch[key] = next;
+      });
+      if (Object.keys(patch).length) ops.push({ id, create:false, patch:_cleanPatch(patch) });
+    });
+    // รายการที่เคยอยู่ใน shadow แต่หายจาก list คือการลบที่ผู้ใช้/ระบบตั้งใจทำ
+    // ลบเฉพาะ ID เหล่านี้ ไม่แตะรายการใหม่จากเครื่องอื่นที่ไม่เคยอยู่ใน shadow ของเครื่องนี้
+    if (includeDeletes) {
+      shadow.forEach((row, id) => {
+        if (!localIds.has(id)) ops.push({ id, delete:true });
+      });
+    }
+    return _coalesceRecordOps(ops);
+  }
+  function _obMarkRecordOps(key, ops) {
+    const incoming = _coalesceRecordOps(ops);
+    if (!incoming.length) return;
+    const ob = _obLoad();
+    const oldPayload = ob[key]?.payload;
+    const oldOps = oldPayload && oldPayload.__skeRecordOps === 1 ? oldPayload.ops : [];
+    ob[key] = {
+      payload:{ __skeRecordOps:1, ops:_coalesceRecordOps([...(oldOps || []), ...incoming]) },
+      ts:Date.now()
+    };
+    _obSaveAll(ob);
+    _obUpdateIndicator();
+  }
+  function _obAckRecordOps(key, appliedOps) {
+    const ob = _obLoad();
+    const payload = ob[key]?.payload;
+    if (!payload || payload.__skeRecordOps !== 1) { _obClear(key); return; }
+    const current = _coalesceRecordOps(payload.ops);
+    const applied = new Map(_coalesceRecordOps(appliedOps).map(op => [op.id, op]));
+    const remaining = [];
+    current.forEach(cur => {
+      const done = applied.get(cur.id);
+      if (!done) { remaining.push(cur); return; }
+      if (cur.delete) {
+        if (!done.delete) remaining.push(cur);
+        return;
+      }
+      if (done.delete) { remaining.push(cur); return; }
+      const patch = { ...cur.patch };
+      Object.keys(done.patch || {}).forEach(field => {
+        if (_sameRecordValue(patch[field], done.patch[field])) delete patch[field];
+      });
+      if (Object.keys(patch).length) remaining.push({ ...cur, patch });
+    });
+    if (remaining.length) {
+      ob[key] = { payload:{ __skeRecordOps:1, ops:remaining }, ts:Date.now() };
+      _obSaveAll(ob);
+      _obUpdateIndicator();
+    } else {
+      _obClear(key);
+    }
+  }
+  async function _executeRecordOps(path, ops) {
+    const cleanOps = _coalesceRecordOps(ops);
+    if (!cleanOps.length) return [];
+    // อ่านครั้งเดียวเพื่อจับคู่ id -> Firebase key ที่แท้จริง รองรับข้อมูลเก่าที่เป็น array
+    // และข้อมูลใหม่ที่ใช้ deterministic key โดยไม่ต้องอ่านซ้ำทีละรายการ
+    const snap = await _withTimeout(get(ref(db, path)), SKE_WRITE_TIMEOUT_MS, 'timeout:' + path + '-keys');
+    const keysById = new Map();
+    snap.forEach(child => {
+      const row = child.val();
+      if (row && row.id !== undefined && row.id !== null && String(row.id)) {
+        keysById.set(String(row.id), child.key);
+      }
+      return false;
+    });
+    const results = await Promise.all(cleanOps.map(async op => {
+      let key = keysById.get(op.id);
+      if (op.delete && key == null) return { op, value:null };
+      if (key == null) {
+        if (!op.create) throw new Error(path + '/' + op.id + ' was deleted or not found');
+        key = _safeRecordKey(op.id);
+      }
+      const itemRef = ref(db, path + '/' + key);
+      const tx = await _withTimeout(runTransaction(itemRef, current => {
+        if (op.delete) {
+          if (current == null) return null;
+          if (String(current.id || '') !== op.id) return;
+          return null;
+        }
+        if (current == null && !op.create) return;
+        if (current != null && String(current.id || '') !== op.id) return;
+        return { ...(current && typeof current === 'object' ? current : {}), ...op.patch, id:op.id };
+      }, { applyLocally:false }), SKE_WRITE_TIMEOUT_MS, 'timeout:' + path + '-transaction');
+      if (!tx.committed && !(op.delete && !tx.snapshot.exists())) {
+        throw new Error(path + '/' + op.id + ' transaction aborted');
+      }
+      return { op, value:tx.snapshot.val() };
+    }));
+    const shadow = _recordShadows[path] || new Map();
+    results.forEach(({ op, value }) => {
+      if (op.delete || !value) shadow.delete(op.id);
+      else shadow.set(op.id, _cloneRecord(value));
+    });
+    _recordShadows[path] = shadow;
+    return results;
+  }
+  function _queueRecordOps(path, outboxKey, ops) {
+    const cleanOps = _coalesceRecordOps(ops);
+    if (!cleanOps.length) { _obClear(outboxKey); return Promise.resolve(); }
+    _obMarkRecordOps(outboxKey, cleanOps);
+    const previous = _recordWriteChains[path] || Promise.resolve();
+    const task = previous.catch(() => {}).then(async () => {
+      _recordWriteBusy[path] = true;
+      try {
+        await _executeRecordOps(path, cleanOps);
+        _obAckRecordOps(outboxKey, cleanOps);
+      } finally {
+        _recordWriteBusy[path] = false;
+      }
+    });
+    _recordWriteChains[path] = task;
+    return task;
+  }
+  function _saveRecordList(path, outboxKey, payload, filterFn) {
+    let ops;
+    if (payload && payload.__skeRecordOps === 1) {
+      ops = _coalesceRecordOps(payload.ops).filter(op =>
+        op.delete || !filterFn || filterFn({ id:op.id, ...(op.patch || {}) })
+      );
+    } else {
+      const list = (Array.isArray(payload) ? payload : []).filter(row => !filterFn || filterFn(row));
+      ops = _buildRecordOps(path, list);
+    }
+    return _queueRecordOps(path, outboxKey, ops);
+  }
+  function _patchRecord(path, outboxKey, itemId, patch) {
+    return _queueRecordOps(path, outboxKey, [{ id:String(itemId), create:false, patch }]);
+  }
+  function _deleteRecord(path, outboxKey, itemId) {
+    return _queueRecordOps(path, outboxKey, [{ id:String(itemId), delete:true }]);
+  }
+
   // ส่งข้อมูลค้าง (ถ้ามี) ของทุกชุดซ้ำอีกครั้ง — เรียกตอนเน็ตกลับมา หรือทุก 8 วิ
   function _obFlushAll() {
     const ob = _obLoad();
@@ -698,16 +969,20 @@
         _obClear(key);
         return;
       }
-      if (key === 'employees' && window.fbSaveEmployees) window.fbSaveEmployees(entry.payload);
-      else if (key === 'vehicles' && window.fbSaveVehicles) window.fbSaveVehicles(entry.payload);
-      else if (key === 'repairs' && window.fbSaveRepairs) window.fbSaveRepairs(entry.payload);
-      else if (key === 'fluidLogs' && window.fbSaveFluidLogs) window.fbSaveFluidLogs(entry.payload);
-      else if (key === 'cashRequests' && window.fbSaveCashRequests) window.fbSaveCashRequests(entry.payload);
-      else if (key === 'leaveLogs' && window.fbSaveLeaveLogs) window.fbSaveLeaveLogs(entry.payload);
-      else if (key === 'monthlyDocs' && window.fbSaveMonthlyDocs) window.fbSaveMonthlyDocs(entry.payload);
-      else if (key === 'jobPlan' && window.fbSaveJobPlan) window.fbSaveJobPlan(entry.payload);
-      else if (key === 'jobRouteTemplates' && window.fbSaveJobRouteTemplates) window.fbSaveJobRouteTemplates(entry.payload);
-      else if (key === 'feedbacks' && window.fbSaveFeedbacks) window.fbSaveFeedbacks(entry.payload);
+      if (_recordWriteBusy[key]) return;
+      let p = null;
+      if (key === 'employees' && window.fbSaveEmployees) p = window.fbSaveEmployees(entry.payload);
+      else if (key === 'vehicles' && window.fbSaveVehicles) p = window.fbSaveVehicles(entry.payload);
+      else if (key === 'repairs' && window.fbSaveRepairs) p = window.fbSaveRepairs(entry.payload);
+      else if (key === 'fluidLogs' && window.fbSaveFluidLogs) p = window.fbSaveFluidLogs(entry.payload);
+      else if (key === 'cashRequests' && window.fbSaveCashRequests) p = window.fbSaveCashRequests(entry.payload);
+      else if (key === 'leaveLogs' && window.fbSaveLeaveLogs) p = window.fbSaveLeaveLogs(entry.payload);
+      else if (key === 'runLogs' && window.fbSaveRunLogs) p = window.fbSaveRunLogs(entry.payload);
+      else if (key === 'monthlyDocs' && window.fbSaveMonthlyDocs) p = window.fbSaveMonthlyDocs(entry.payload);
+      else if (key === 'jobPlan' && window.fbSaveJobPlan) p = window.fbSaveJobPlan(entry.payload);
+      else if (key === 'jobRouteTemplates' && window.fbSaveJobRouteTemplates) p = window.fbSaveJobRouteTemplates(entry.payload);
+      else if (key === 'feedbacks' && window.fbSaveFeedbacks) p = window.fbSaveFeedbacks(entry.payload);
+      if (p && typeof p.catch === 'function') p.catch(() => {});
     });
   }
   setInterval(() => { if (Object.keys(_obLoad()).length > 0) _obFlushAll(); }, 8000);
@@ -818,12 +1093,9 @@
   })();
 
 
-  // บันทึกข้อมูลพนักงานทั้งหมดขึ้น Firebase
+  // บันทึกเฉพาะพนักงานที่เพิ่ม/แก้/ลบ โดยเทียบกับ shadow ล่าสุดของเครื่อง
   window.fbSaveEmployees = function(emps) {
-    const clean = _activeEmployeeList(emps);
-    _obMark('employees', clean);
-    return _withTimeout(set(ref(db, 'employees'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:employees')
-      .then(() => { _obClear('employees'); })
+    return _saveRecordList('employees', 'employees', emps, emp => emp && !_isEmployeeDeleted(emp.id))
       .catch(e => console.error('fbSave error', e));
   };
 
@@ -832,14 +1104,9 @@
   // ครอบด้วย timeout กันเคสเน็ตช้า/หลุดกลางทางแล้วค้างรอไม่มีกำหนด (จุดที่ .catch fallback ของทุกจุดเรียกจะยังทำงานได้)
   window.fbUpdateEmployeeFields = async function(empId, patch) {
     if (_isEmployeeDeleted(empId)) throw new Error('employee account was deleted');
-    const key = await _findServerKey('employees', empId, employees);
-    if (key == null) throw new Error('employee not found');
-    const updates = {};
-    Object.keys(patch).forEach(k => { updates[`employees/${key}/${k}`] = patch[k]; });
-    await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:employees-update');
+    await _patchRecord('employees', 'employees', empId, patch);
     employees = (employees || []).map(e => e && e.id === empId ? { ...e, ...patch } : e);
     _skeCacheSet('ske_emp', employees);
-    _obClear('employees');
   };
 
   // ลบพนักงานและข้อมูลที่ผูกกับพนักงานคนนั้นจาก Firebase ใน update เดียว
@@ -850,6 +1117,12 @@
     const deletedAt = new Date().toISOString();
     const revocationKey = _employeeRevocationKey(id);
     const paths = ['employees','repairs','fluidLogs','cashRequests','leaveLogs','runLogs','monthlyDocs','feedbacks','jobPlan'];
+    // ให้ transaction ที่เริ่มจากเครื่องนี้จบก่อน แล้วค่อยทำ cascade delete เป็นคำสั่งสุดท้าย
+    // กันงานค้างในแท็บเดียวกันวิ่งแซงกลับไปสร้างข้อมูลของบัญชีที่เพิ่งลบ
+    const activeWrites = paths.map(path => _recordWriteChains[path]).filter(Boolean);
+    if (activeWrites.length) {
+      await _withTimeout(Promise.allSettled(activeWrites), 30000, 'timeout:employee-delete-wait-writes');
+    }
     const snapshots = await _withTimeout(
       Promise.all(paths.map(path => get(ref(db, path)))),
       30000,
@@ -929,25 +1202,19 @@
     };
   };
 
-  // บันทึกรายการรถทั้งหมดขึ้น Firebase (ทะเบียนรถเป็น "เอนทิตี้แยก" ไม่ผูกกับพนักงานอีกต่อไป)
+  // บันทึกเฉพาะรถที่เพิ่ม/แก้/ลบ (ทะเบียนรถเป็นเอนทิตี้แยก)
   window.fbSaveVehicles = function(list) {
-    _obMark('vehicles', list);
-    return _withTimeout(set(ref(db, 'vehicles'), list), SKE_WRITE_TIMEOUT_MS, 'timeout:vehicles')
-      .then(() => { _obClear('vehicles'); })
+    return _saveRecordList('vehicles', 'vehicles', list)
       .catch(e => console.error('fbSaveVehicles error', e));
   };
 
   // อัพเดทเฉพาะ "รถคันเดียว" (ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์มาก่อนแล้วแก้เฉพาะฟิลด์ที่เปลี่ยน)
   window.fbUpdateVehicleFields = async function(vehId, patch) {
-    const key = await _findServerKey('vehicles', vehId, vehicles);
-    if (key == null) throw new Error('vehicle not found');
-    const updates = {};
-    Object.keys(patch).forEach(k => { updates[`vehicles/${key}/${k}`] = patch[k]; });
-    await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:vehicles-update');
+    await _patchRecord('vehicles', 'vehicles', vehId, patch);
     vehicles = (vehicles || []).map(v => v && v.id === vehId ? { ...v, ...patch } : v);
     localStorage.setItem('ske_vehicles', JSON.stringify(vehicles));
-    _obClear('vehicles');
   };
+  window.fbDeleteVehicle = vehId => _deleteRecord('vehicles', 'vehicles', vehId);
 
   // บันทึก admin password (รหัสผู้ดูแล — สิทธิ์เต็ม) — เก็บเป็น SHA-256 hash เท่านั้น ไม่ส่ง/เก็บ plain text ขึ้น Firebase อีกต่อไป
   window.fbSaveAdminPwHash = function(hash) {
@@ -969,12 +1236,9 @@
     set(ref(db, 'emergencyCodeHash'), hash).catch(e => console.error('fbSaveEmerg error', e));
   };
 
-  // บันทึกรายการแจ้งซ่อมขึ้น Firebase
+  // บันทึกเฉพาะรายการแจ้งซ่อมที่เปลี่ยน
   window.fbSaveRepairs = function(list) {
-    const clean = (Array.isArray(list) ? list : []).filter(row => row && !_isEmployeeDeleted(row.empId));
-    _obMark('repairs', clean);
-    return _withTimeout(set(ref(db, 'repairs'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs')
-      .then(() => { _obClear('repairs'); })
+    return _saveRecordList('repairs', 'repairs', list, row => row && !_isEmployeeDeleted(row.empId))
       .catch(e => { console.error('fbSaveRepairs error', e); throw e; });
   };
 
@@ -982,60 +1246,46 @@
   // แก้ปัญหาเดิม: repairs เก็บรูปแนบสะสมไว้ 12 เดือน พอมีคนเดียวเปลี่ยน 1 รายการ (เช่นแนบรูปเพิ่ม)
   // ระบบเดิมจะอัพโหลด "ประวัติทั้งหมดของทุกคน" ซ้ำทุกครั้ง ทำให้ช้ามากบนเน็ตมือถือ และเสี่ยง timeout จนบันทึกไม่สำเร็จแบบเงียบๆ
   window.fbUpdateRepairFields = async function(repairId, patch) {
-    const key = await _findServerKey('repairs', repairId, repairs);
-    if (key == null) throw new Error('repair not found');
-    const updates = {};
-    Object.keys(patch).forEach(k => { updates[`repairs/${key}/${k}`] = patch[k]; });
-    await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:repairs-update');
+    await _patchRecord('repairs', 'repairs', repairId, patch);
     repairs = (repairs || []).map(r => r && r.id === repairId ? { ...r, ...patch } : r);
     _skeCacheSet('ske_repairs', repairs);
-    _obClear('repairs');
   };
+  window.fbDeleteRepair = repairId => _deleteRecord('repairs', 'repairs', repairId);
 
-  // บันทึกรายการเปลี่ยนถ่ายของเหลวขึ้น Firebase
+  // บันทึกเฉพาะรายการเปลี่ยนถ่ายของเหลวที่เปลี่ยน
   window.fbSaveFluidLogs = function(list) {
-    const clean = (Array.isArray(list) ? list : []).filter(row => row && !_isEmployeeDeleted(row.empId));
-    _obMark('fluidLogs', clean);
-    return _withTimeout(set(ref(db, 'fluidLogs'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs')
-      .then(() => { _obClear('fluidLogs'); })
+    return _saveRecordList('fluidLogs', 'fluidLogs', list, row => row && !_isEmployeeDeleted(row.empId))
       .catch(e => { console.error('fbSaveFluidLogs error', e); throw e; });
   };
 
   // อัพเดทเฉพาะ "รายการเปลี่ยนถ่ายของเหลวรายการเดียว" — เหตุผลเดียวกับ fbUpdateRepairFields ด้านบน
   window.fbUpdateFluidFields = async function(fluidId, patch) {
-    const key = await _findServerKey('fluidLogs', fluidId, fluidLogs);
-    if (key == null) throw new Error('fluid log not found');
-    const updates = {};
-    Object.keys(patch).forEach(k => { updates[`fluidLogs/${key}/${k}`] = patch[k]; });
-    await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:fluidLogs-update');
+    await _patchRecord('fluidLogs', 'fluidLogs', fluidId, patch);
     fluidLogs = (fluidLogs || []).map(f => f && f.id === fluidId ? { ...f, ...patch } : f);
     _skeCacheSet('ske_fluid', fluidLogs);
-    _obClear('fluidLogs');
   };
+  window.fbDeleteFluidLog = fluidId => _deleteRecord('fluidLogs', 'fluidLogs', fluidId);
 
-  // บันทึกรายการเบิกเงินพนักงานขึ้น Firebase
+  // บันทึกเฉพาะรายการเบิกเงินที่เปลี่ยน
   window.fbSaveCashRequests = function(list) {
-    const clean = (Array.isArray(list) ? list : []).filter(row => row && !_isEmployeeDeleted(row.empId));
-    _obMark('cashRequests', clean);
-    return _withTimeout(set(ref(db, 'cashRequests'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:cashRequests')
-      .then(() => { _obClear('cashRequests'); })
+    return _saveRecordList('cashRequests', 'cashRequests', list, row => row && !_isEmployeeDeleted(row.empId))
       .catch(e => console.error('fbSaveCashRequests error', e));
   };
+  window.fbDeleteCashRequest = requestId => _deleteRecord('cashRequests', 'cashRequests', requestId);
 
-  // บันทึกประวัติการลาขึ้น Firebase
+  // บันทึกเฉพาะประวัติการลาที่เปลี่ยน
   window.fbSaveLeaveLogs = function(list) {
-    const clean = (Array.isArray(list) ? list : []).filter(row => row && !_isEmployeeDeleted(row.empId));
-    _obMark('leaveLogs', clean);
-    return _withTimeout(set(ref(db, 'leaveLogs'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:leaveLogs')
-      .then(() => { _obClear('leaveLogs'); })
+    return _saveRecordList('leaveLogs', 'leaveLogs', list, row => row && !_isEmployeeDeleted(row.empId))
       .catch(e => console.error('fbSaveLeaveLogs error', e));
   };
+  window.fbDeleteLeaveLog = leaveId => _deleteRecord('leaveLogs', 'leaveLogs', leaveId);
 
-  // บันทึกประวัติเที่ยววิ่งงาน (บันทึกถาวร ไม่ขึ้นกับสถานะปัจจุบันของพนักงาน) ขึ้น Firebase
+  // บันทึกเฉพาะเที่ยววิ่งที่เพิ่ม/แก้/ลบ
   window.fbSaveRunLogs = function(list) {
-    const clean = (Array.isArray(list) ? list : []).filter(row => row && !_isEmployeeDeleted(row.empId));
-    set(ref(db, 'runLogs'), clean).catch(e => console.error('fbSaveRunLogs error', e));
+    return _saveRecordList('runLogs', 'runLogs', list, row => row && !_isEmployeeDeleted(row.empId))
+      .catch(e => console.error('fbSaveRunLogs error', e));
   };
+  window.fbDeleteRunLog = runId => _deleteRecord('runLogs', 'runLogs', runId);
 
   // ดึงข้อมูลล่าสุดจาก Firebase ทันที (สำหรับปุ่มรีเฟรชของผู้ดูแล)
   window.fbForceRefresh = function(cb) {
@@ -1113,6 +1363,7 @@
       if (currentUser && _isEmployeeDeleted(currentUser.id)) _notifyDeletedEmployee(currentUser.id);
       _firstSync.employees = true; _empSynced = true; window._fbReady = true; return;
     }
+    _setRecordShadow('employees', data);
     if (data && data.length > 0) {
       // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ (ไม่เขียนทับด้วยข้อมูลเครื่อง)
       const oldEmployees = employees;
@@ -1150,6 +1401,7 @@
   onValue(ref(db, 'vehicles'), (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('vehicles')) { _firstSync.vehicles = true; _vehSynced = true; return; }
+    _setRecordShadow('vehicles', data || []);
     if (data) {
       vehicles = data;
       localStorage.setItem('ske_vehicles', JSON.stringify(vehicles));
@@ -1161,7 +1413,7 @@
       if (vp && !vp.classList.contains('hidden') && typeof renderAdminVehicleList === 'function') renderAdminVehicleList();
     } else if (!_firstSync.vehicles && vehicles.length > 0) {
       // Firebase ว่างจริงๆ (ครั้งแรกที่ใช้งาน) → อัพโหลดข้อมูลเครื่องขึ้นไปครั้งเดียว
-      set(ref(db, 'vehicles'), vehicles);
+      window.fbSaveVehicles(vehicles);
     }
     _firstSync.vehicles = true;
     _vehSynced = true;
@@ -1191,6 +1443,7 @@
   onValue(ref(db, 'repairs'), (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('repairs')) { _firstSync.repairs = true; return; }
+    _setRecordShadow('repairs', data || []);
     if (data) {
       repairs = data;
       _skeCacheSet('ske_repairs', repairs);
@@ -1201,7 +1454,7 @@
       if (am && !am.classList.contains('hidden') && typeof renderAdminMaint === 'function') renderAdminMaint();
       if (typeof updateAdminMaintBadge === 'function') updateAdminMaintBadge();
     } else if (!_firstSync.repairs && repairs.length > 0) {
-      set(ref(db, 'repairs'), repairs);
+      window.fbSaveRepairs(repairs).catch(() => {});
     }
     if (!_firstSync.repairs) {
       // sync ครั้งแรก → ลบรูปเก่าเกิน 12 เดือนออกจาก repairs แล้วอัพเดท Firebase
@@ -1214,6 +1467,7 @@
   onValue(ref(db, 'fluidLogs'), (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('fluidLogs')) { _firstSync.fluidLogs = true; return; }
+    _setRecordShadow('fluidLogs', data || []);
     if (data) {
       fluidLogs = data;
       _skeCacheSet('ske_fluid', fluidLogs);
@@ -1221,7 +1475,7 @@
       const m = document.getElementById('fluidModal');
       if (m && !m.classList.contains('hidden') && typeof renderFluidList === 'function') renderFluidList();
     } else if (!_firstSync.fluidLogs && fluidLogs.length > 0) {
-      set(ref(db, 'fluidLogs'), fluidLogs);
+      window.fbSaveFluidLogs(fluidLogs).catch(() => {});
     }
     _firstSync.fluidLogs = true;
   });
@@ -1230,6 +1484,7 @@
   onValue(ref(db, 'cashRequests'), (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('cashRequests')) { _firstSync.cashRequests = true; return; }
+    _setRecordShadow('cashRequests', data || []);
     if (data) {
       cashRequests = data;
       localStorage.setItem('ske_cash', JSON.stringify(cashRequests));
@@ -1240,7 +1495,7 @@
       const ap = document.getElementById('adminCashPanel');
       if (ap && !ap.classList.contains('hidden') && typeof renderAdminCashList === 'function') renderAdminCashList();
     } else if (!_firstSync.cashRequests && cashRequests.length > 0) {
-      set(ref(db, 'cashRequests'), cashRequests);
+      window.fbSaveCashRequests(cashRequests);
     }
     _firstSync.cashRequests = true;
   });
@@ -1249,13 +1504,14 @@
   onValue(ref(db, 'leaveLogs'), (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('leaveLogs')) { _firstSync.leaveLogs = true; return; }
+    _setRecordShadow('leaveLogs', data || []);
     if (data) {
       leaveLogs = data;
       localStorage.setItem('ske_leaveLogs', JSON.stringify(leaveLogs));
       const lp = document.getElementById('adminLeaveHistoryPanel');
       if (lp && !lp.classList.contains('hidden') && typeof renderLeaveHistory === 'function') renderLeaveHistory();
     } else if (!_firstSync.leaveLogs && leaveLogs.length > 0) {
-      set(ref(db, 'leaveLogs'), leaveLogs);
+      window.fbSaveLeaveLogs(leaveLogs);
     }
     _firstSync.leaveLogs = true;
   });
@@ -1263,6 +1519,8 @@
   // ฟัง realtime — ประวัติเที่ยววิ่งงาน (บันทึกถาวร)
   onValue(ref(db, 'runLogs'), (snapshot) => {
     const data = normalizeList(snapshot.val());
+    if (_obHasFresh('runLogs')) { _firstSync.runLogs = true; return; }
+    _setRecordShadow('runLogs', data || []);
     if (data) {
       runLogs = data;
       localStorage.setItem('ske_runlogs', JSON.stringify(runLogs));
@@ -1271,7 +1529,7 @@
       const dash = document.getElementById('dashboard');
       if (dash && !dash.classList.contains('hidden') && currentUser && typeof renderDashboard === 'function') renderDashboard();
     } else if (!_firstSync.runLogs && runLogs.length > 0) {
-      set(ref(db, 'runLogs'), runLogs);
+      window.fbSaveRunLogs(runLogs);
     }
     if (!_firstSync.runLogs) {
       // sync ครั้งแรก → กู้เที่ยวที่ตกหล่นก่อนอัพเดทระบบนี้ (รอให้ employees โหลดเสร็จก่อน)
@@ -1299,7 +1557,9 @@
       _obFlushAll();
       // เพิ่งกลับมาเชื่อมต่อได้ → sync ข้อมูลทุกชุดทันที (onValue จะ replay ให้เองอยู่แล้ว แต่ get ย้ำให้ชัวร์+เร็ว)
       get(ref(db, 'employees')).then(s => {
+        if (_obHasFresh('employees')) return;
         const d = _activeEmployeeList(normalizeList(s.val()) || []);
+        _setRecordShadow('employees', d);
         if (d && d.length > 0) {
           employees = d;
           _skeCacheSet('ske_emp', employees);
@@ -1324,7 +1584,9 @@
   });
 
   get(ref(db, 'employees')).then(snapshot => {
+    if (_obHasFresh('employees')) { window._fbReady = true; return; }
     const data = _activeEmployeeList(normalizeList(snapshot.val()) || []);
+    _setRecordShadow('employees', data);
     if (data && data.length > 0) {
       // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ
       employees = data;
@@ -1367,7 +1629,9 @@
   });
 
   get(ref(db, 'repairs')).then(snapshot => {
+    if (_obHasFresh('repairs')) return;
     const data = normalizeList(snapshot.val());
+    _setRecordShadow('repairs', data || []);
     if (data) {
       repairs = data;
       _skeCacheSet('ske_repairs', repairs);
@@ -1379,7 +1643,9 @@
   }).catch(e => console.error('fbGet repairs error', e));
 
   get(ref(db, 'fluidLogs')).then(snapshot => {
+    if (_obHasFresh('fluidLogs')) return;
     const data = normalizeList(snapshot.val());
+    _setRecordShadow('fluidLogs', data || []);
     if (data) {
       fluidLogs = data;
       _skeCacheSet('ske_fluid', fluidLogs);
@@ -1391,7 +1657,9 @@
   }).catch(e => console.error('fbGet fluidLogs error', e));
 
   get(ref(db, 'cashRequests')).then(snapshot => {
+    if (_obHasFresh('cashRequests')) return;
     const data = normalizeList(snapshot.val());
+    _setRecordShadow('cashRequests', data || []);
     if (data) {
       cashRequests = data;
       localStorage.setItem('ske_cash', JSON.stringify(cashRequests));
@@ -1406,10 +1674,9 @@
   // ══ Monthly document submissions — realtime Firebase sync ══
   // คืนค่า Promise เสมอ เพื่อให้ฝั่งอัปโหลดรอจน Firebase บันทึกสำเร็จจริงก่อนแจ้งผล
   window.fbSaveMonthlyDocs = function(list) {
-    const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object' && !_isEmployeeDeleted(x.empId)) : [];
-    _obMark('monthlyDocs', clean);
-    return _withTimeout(set(ref(db, 'monthlyDocs'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:monthlyDocs')
-      .then(() => { _obClear('monthlyDocs'); })
+    return _saveRecordList('monthlyDocs', 'monthlyDocs', list, row =>
+      row && typeof row === 'object' && !_isEmployeeDeleted(row.empId)
+    )
       .catch(e => { console.error('fbSaveMonthlyDocs error', e); throw e; });
   };
 
@@ -1422,20 +1689,10 @@
     if (!rec || !rec.id) throw new Error('invalid monthly doc record');
     if (_isEmployeeDeleted(rec.empId)) throw new Error('employee account was deleted');
     if (window._fbConnected === false) throw new Error('การเชื่อมต่ออินเทอร์เน็ตหลุดอยู่ กรุณาเช็คสัญญาณแล้วลองใหม่');
-    // หา "คีย์จริง" ของรายการนี้บนเซิร์ฟเวอร์ก่อนเสมอ (ยืนยันด้วย id กันเขียนทับรายการของคนอื่น)
-    let key = await _findServerKey('monthlyDocs', rec.id, monthlyDocs);
-    if (key == null) {
-      // ยังไม่เคยส่งเดือนนี้ — ต้องหา slot ว่างต่อท้ายจากข้อมูลดิบบนเซิร์ฟเวอร์ (ไม่ผ่าน normalize กัน index เพี้ยน)
-      const snap = await _withTimeout(get(ref(db, 'monthlyDocs')), 25000, 'เชื่อมต่อ Firebase ช้าเกินไป (ดึงข้อมูลไม่สำเร็จ) กรุณาลองใหม่เมื่อสัญญาณเน็ตดีขึ้น');
-      const raw = snap.val();
-      if (!raw) key = '0';
-      else if (Array.isArray(raw)) key = String(raw.length);
-      else {
-        const nums = Object.keys(raw).map(k => parseInt(k, 10)).filter(n => !isNaN(n));
-        key = String(nums.length ? Math.max(...nums) + 1 : 0);
-      }
-    }
-    await _withTimeout(update(ref(db), { [`monthlyDocs/${key}`]: rec }), 30000, 'บันทึกไม่สำเร็จเพราะเน็ตช้า/หลุดระหว่างส่ง กรุณาลองส่งใหม่อีกครั้ง (รูปยังไม่ถูกบันทึก)');
+    // upsert ด้วย deterministic key + transaction: ส่งเฉพาะเอกสารของคนนี้ ไม่แตะเอกสารคนอื่น
+    await _queueRecordOps('monthlyDocs', 'monthlyDocs', [{
+      id:String(rec.id), create:true, patch:_cleanPatch(rec)
+    }]);
     const exists = (monthlyDocs || []).some(x => x && x.id === rec.id);
     monthlyDocs = exists ? monthlyDocs.map(x => x && x.id === rec.id ? rec : x) : (monthlyDocs || []).concat([rec]);
     _skeCacheSet('ske_monthly_docs', monthlyDocs);
@@ -1445,14 +1702,11 @@
 
   // อัพเดทเฉพาะฟิลด์ของเอกสารรายการเดียว (เช่น อนุมัติ/ไม่อนุมัติ) — ยืนยันคีย์จริงบนเซิร์ฟเวอร์ก่อนเขียนเสมอ กันแพตช์ลงผิดรายการ
   window.fbUpdateMonthlyDocFields = async function(docId, patch) {
-    const key = await _findServerKey('monthlyDocs', docId, monthlyDocs);
-    if (key == null) throw new Error('monthly doc not found');
-    const updates = {};
-    Object.keys(patch).forEach(k => { updates[`monthlyDocs/${key}/${k}`] = patch[k]; });
-    await _withTimeout(update(ref(db), updates), SKE_WRITE_TIMEOUT_MS, 'timeout:monthlyDocs-update');
+    await _patchRecord('monthlyDocs', 'monthlyDocs', docId, patch);
     monthlyDocs = (monthlyDocs || []).map(d => d && d.id === docId ? { ...d, ...patch } : d);
     _skeCacheSet('ske_monthly_docs', monthlyDocs);
   };
+  window.fbDeleteMonthlyDoc = docId => _deleteRecord('monthlyDocs', 'monthlyDocs', docId);
 
   window.fbGetMonthlyDocs = async function() {
     const snap = await get(ref(db, 'monthlyDocs'));
@@ -1461,6 +1715,8 @@
 
   onValue(ref(db, 'monthlyDocs'), (snapshot) => {
     const data = normalizeList(snapshot.val());
+    if (_obHasFresh('monthlyDocs')) { _firstSync.monthlyDocs = true; return; }
+    _setRecordShadow('monthlyDocs', data || []);
     if (data) {
       monthlyDocs = data;
       _skeCacheSet('ske_monthly_docs', data);
@@ -1471,7 +1727,7 @@
     } else if (!_firstSync.monthlyDocs) {
       // อัปโหลด cache เครื่องขึ้น Firebase เฉพาะครั้งแรกเท่านั้น เพื่อไม่ให้ข้อมูลเก่าในเครื่องฟื้นกลับมาทับข้อมูลที่ลบ/อัปเดตแล้ว
       const cache = (()=>{try{return JSON.parse(localStorage.getItem('ske_monthly_docs')||'[]');}catch(e){return [];}})();
-      if (Array.isArray(cache) && cache.length) set(ref(db, 'monthlyDocs'), cache).catch(e=>console.error('fb seed monthlyDocs error', e));
+      if (Array.isArray(cache) && cache.length) window.fbSaveMonthlyDocs(cache).catch(e=>console.error('fb seed monthlyDocs error', e));
       else {
         monthlyDocs = [];
         localStorage.setItem('ske_monthly_docs', '[]');
@@ -1487,7 +1743,9 @@
     _firstSync.monthlyDocs = true;
   });
   get(ref(db, 'monthlyDocs')).then(snapshot => {
+    if (_obHasFresh('monthlyDocs')) return;
     const data = normalizeList(snapshot.val());
+    _setRecordShadow('monthlyDocs', data || []);
     if (data) {
       monthlyDocs = data;
       _skeCacheSet('ske_monthly_docs', data);
@@ -1497,22 +1755,38 @@
 
   // ══ แผนงาน (จ่ายงาน) — jobPlan ══
   window.fbSaveJobPlan = function(list) {
+    if (list && list.__skeRecordOps === 1) {
+      const safePayload = {
+        __skeRecordOps:1,
+        ops:(list.ops || []).map(op => !op?.delete && _isEmployeeDeleted(op.patch?.empId)
+          ? { ...op, patch:{ ...(op.patch || {}), empId:'', empName:'', plate:'', phone:'', dispatched:false, dispatchedAt:null } }
+          : op
+        )
+      };
+      return _saveRecordList('jobPlan', 'jobPlan', safePayload)
+        .catch(e => { console.error('fbSaveJobPlan error', e); throw e; });
+    }
     const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object').map(row =>
       _isEmployeeDeleted(row.empId)
         ? { ...row, empId:'', empName:'', plate:'', phone:'', dispatched:false, dispatchedAt:null }
         : row
     ) : [];
-    _obMark('jobPlan', clean);
-    return _withTimeout(set(ref(db, 'jobPlan'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:jobPlan')
-      .then(() => { _obClear('jobPlan'); })
+    return _saveRecordList('jobPlan', 'jobPlan', clean)
       .catch(e => { console.error('fbSaveJobPlan error', e); throw e; });
   };
-  // ดึงข้อมูลแผนงานสดจากเซิร์ฟเวอร์ตรงๆ (ไม่ใช้ cache) — ใช้ก่อนบันทึกทุกครั้ง กันแอดมินหลายคนแก้พร้อมกันแล้วเขียนทับกัน
-  window.fbGetJobPlanFresh = function() {
-    return get(ref(db, 'jobPlan')).then(s => normalizeList(s.val()) || []).catch(() => null);
+  window.fbSaveJobPlanRows = function(rows) {
+    const clean = (Array.isArray(rows) ? rows : []).map(row => _isEmployeeDeleted(row?.empId)
+      ? { ...row, empId:'', empName:'', plate:'', phone:'', dispatched:false, dispatchedAt:null }
+      : row
+    );
+    return _queueRecordOps('jobPlan', 'jobPlan', _buildRecordOps('jobPlan', clean, false))
+      .catch(e => { console.error('fbSaveJobPlanRows error', e); throw e; });
   };
+  window.fbDeleteJobPlanRow = rowId => _deleteRecord('jobPlan', 'jobPlan', rowId);
   onValue(ref(db, 'jobPlan'), (snapshot) => {
     const data = normalizeList(snapshot.val());
+    if (_obHasFresh('jobPlan')) { _firstSync.jobPlan = true; return; }
+    _setRecordShadow('jobPlan', data || []);
     if (data) {
       jobPlanRows = data;
       _skeCacheSet('ske_jobplan', data);
@@ -1520,7 +1794,7 @@
       if (admin && !admin.classList.contains('hidden') && typeof renderJobPlan === 'function') renderJobPlan();
     } else if (!_firstSync.jobPlan) {
       const cache = (()=>{try{return JSON.parse(localStorage.getItem('ske_jobplan')||'[]');}catch(e){return [];}})();
-      if (Array.isArray(cache) && cache.length) set(ref(db, 'jobPlan'), cache).catch(e=>console.error('fb seed jobPlan error', e));
+      if (Array.isArray(cache) && cache.length) window.fbSaveJobPlan(cache).catch(e=>console.error('fb seed jobPlan error', e));
       else {
         jobPlanRows = [];
         localStorage.setItem('ske_jobplan', '[]');
@@ -1534,7 +1808,9 @@
     _firstSync.jobPlan = true;
   });
   get(ref(db, 'jobPlan')).then(snapshot => {
+    if (_obHasFresh('jobPlan')) return;
     const data = normalizeList(snapshot.val());
+    _setRecordShadow('jobPlan', data || []);
     if (data) {
       jobPlanRows = data;
       _skeCacheSet('ske_jobplan', data);
@@ -1544,14 +1820,19 @@
 
   // ══ เส้นทางหลักประจำสัปดาห์ (route templates) ══
   window.fbSaveJobRouteTemplates = function(list) {
+    if (list && list.__skeRecordOps === 1) {
+      return _saveRecordList('jobRouteTemplates', 'jobRouteTemplates', list)
+        .catch(e => { console.error('fbSaveJobRouteTemplates error', e); throw e; });
+    }
     const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object') : [];
-    _obMark('jobRouteTemplates', clean);
-    return _withTimeout(set(ref(db, 'jobRouteTemplates'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:jobRouteTemplates')
-      .then(() => { _obClear('jobRouteTemplates'); })
+    return _saveRecordList('jobRouteTemplates', 'jobRouteTemplates', clean)
       .catch(e => { console.error('fbSaveJobRouteTemplates error', e); throw e; });
   };
+  window.fbDeleteJobRouteTemplate = templateId => _deleteRecord('jobRouteTemplates', 'jobRouteTemplates', templateId);
   onValue(ref(db, 'jobRouteTemplates'), (snapshot) => {
     const data = normalizeList(snapshot.val());
+    if (_obHasFresh('jobRouteTemplates')) { _firstSync.jobRouteTemplates = true; return; }
+    _setRecordShadow('jobRouteTemplates', data || []);
     if (data) {
       jobRouteTemplates = data;
       _skeCacheSet('ske_jobtemplates', data);
@@ -1559,7 +1840,7 @@
       if (admin && !admin.classList.contains('hidden') && typeof renderJobRouteTemplates === 'function') renderJobRouteTemplates();
     } else if (!_firstSync.jobRouteTemplates) {
       const cache = (()=>{try{return JSON.parse(localStorage.getItem('ske_jobtemplates')||'[]');}catch(e){return [];}})();
-      if (Array.isArray(cache) && cache.length) set(ref(db, 'jobRouteTemplates'), cache).catch(e=>console.error('fb seed jobRouteTemplates error', e));
+      if (Array.isArray(cache) && cache.length) window.fbSaveJobRouteTemplates(cache).catch(e=>console.error('fb seed jobRouteTemplates error', e));
       else {
         jobRouteTemplates = [];
         localStorage.setItem('ske_jobtemplates', '[]');
@@ -1573,7 +1854,9 @@
     _firstSync.jobRouteTemplates = true;
   });
   get(ref(db, 'jobRouteTemplates')).then(snapshot => {
+    if (_obHasFresh('jobRouteTemplates')) return;
     const data = normalizeList(snapshot.val());
+    _setRecordShadow('jobRouteTemplates', data || []);
     if (data) {
       jobRouteTemplates = data;
       _skeCacheSet('ske_jobtemplates', data);
@@ -1583,14 +1866,16 @@
 
   // ══ ความคิดเห็น/ข้อเสนอแนะพนักงาน (feedbacks) ══
   window.fbSaveFeedbacks = function(list) {
-    const clean = Array.isArray(list) ? list.filter(x => x && typeof x === 'object' && !_isEmployeeDeleted(x.empId)) : [];
-    _obMark('feedbacks', clean);
-    return _withTimeout(set(ref(db, 'feedbacks'), clean), SKE_WRITE_TIMEOUT_MS, 'timeout:feedbacks')
-      .then(() => { _obClear('feedbacks'); })
+    return _saveRecordList('feedbacks', 'feedbacks', list, row =>
+      row && typeof row === 'object' && !_isEmployeeDeleted(row.empId)
+    )
       .catch(e => { console.error('fbSaveFeedbacks error', e); throw e; });
   };
+  window.fbDeleteFeedback = feedbackId => _deleteRecord('feedbacks', 'feedbacks', feedbackId);
   onValue(ref(db, 'feedbacks'), (snapshot) => {
     const data = normalizeList(snapshot.val());
+    if (_obHasFresh('feedbacks')) { _firstSync.feedbacks = true; return; }
+    _setRecordShadow('feedbacks', data || []);
     if (data) {
       companyFeedbacks = data;
       _skeCacheSet('ske_feedbacks', data);
@@ -1598,7 +1883,7 @@
       if (admin && !admin.classList.contains('hidden') && typeof renderFeedbackList === 'function') renderFeedbackList();
     } else if (!_firstSync.feedbacks) {
       const cache = (()=>{try{return JSON.parse(localStorage.getItem('ske_feedbacks')||'[]');}catch(e){return [];}})();
-      if (Array.isArray(cache) && cache.length) set(ref(db, 'feedbacks'), cache).catch(e=>console.error('fb seed feedbacks error', e));
+      if (Array.isArray(cache) && cache.length) window.fbSaveFeedbacks(cache).catch(e=>console.error('fb seed feedbacks error', e));
       else {
         companyFeedbacks = [];
         localStorage.setItem('ske_feedbacks', '[]');
@@ -1612,7 +1897,9 @@
     _firstSync.feedbacks = true;
   });
   get(ref(db, 'feedbacks')).then(snapshot => {
+    if (_obHasFresh('feedbacks')) return;
     const data = normalizeList(snapshot.val());
+    _setRecordShadow('feedbacks', data || []);
     if (data) {
       companyFeedbacks = data;
       _skeCacheSet('ske_feedbacks', data);
@@ -2304,7 +2591,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.1-employee-delete-fix</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.2-record-transaction-fix</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2312,7 +2599,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.27-dev-v3.2.2.1-employee-delete-fix</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.27-dev-v3.2.2.2-record-transaction-fix</div>
       </div>
     </div>
 
@@ -2430,7 +2717,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.1-employee-delete-fix</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.2-record-transaction-fix</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -2686,7 +2973,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.27-dev-v3.2.2.1-employee-delete-fix</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.27-dev-v3.2.2.2-record-transaction-fix</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3314,7 +3601,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.27-dev-v3.2.2.1-employee-delete-fix';
+const SKE_APP_VERSION='v2026.07.27-dev-v3.2.2.2-record-transaction-fix';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -3407,9 +3694,9 @@ function _cacheSet(key,value){
 
 // อัพเดทข้อมูลพนักงานรายคนขึ้น Firebase แบบกันพลาด:
 // 1) พยายามแพตช์เฉพาะฟิลด์ก่อน (เบา เร็ว ไม่แตะข้อมูลคนอื่น)
-// 2) ถ้าล้มเหลวค่อย fallback ส่งทั้งก้อน — แต่ต้อง "ใส่ patch กลับเข้าไปใหม่ก่อนส่งเสมอ"
+// 2) ถ้าล้มเหลวค่อย fallback ผ่านตัวเทียบ shadow ซึ่งยังส่งเฉพาะรายการ/ฟิลด์ที่เปลี่ยน
 //    เพราะกว่าจะถึงตอน fallback ตัวแปร employees อาจถูก realtime ทับด้วยข้อมูลเก่า (ที่ยังไม่มีสถานะใหม่) ไปแล้ว
-//    ถ้าส่งทั้งก้อนโดยไม่ใส่ patch กลับ = สถานะที่พนักงานเพิ่งกดยืนยันจะหายถาวร (บั๊ก "สถานะเด้งกลับ")
+//    การ reapply ก่อน fallback กันสถานะที่พนักงานเพิ่งกดยืนยันหายจากตัวแปรในเครื่อง (บั๊ก "สถานะเด้งกลับ")
 function fbPatchEmployee(empId,patch){
   if(window.skeIsEmployeeDeleted&&window.skeIsEmployeeDeleted(empId)){
     return Promise.reject(new Error('employee account was deleted'));
@@ -3663,7 +3950,7 @@ function saveFluid(){
   if(window.fbSaveFluidLogs) return window.fbSaveFluidLogs(fluidLogs);
   return Promise.resolve();
 }
-// แพตช์เฉพาะรายการแจ้งซ่อม/ของเหลว 1 รายการ (ไม่อัพโหลดประวัติทั้งหมดซ้ำ) — ถ้าแพตช์ล้มเหลวค่อย fallback เป็นอัพโหลดทั้งก้อน (มี outbox กันข้อมูลหายอยู่แล้ว)
+// แพตช์เฉพาะรายการแจ้งซ่อม/ของเหลว 1 รายการ — ถ้าแพตช์ล้มเหลว fallback จะเทียบ shadow และส่งเฉพาะส่วนต่าง
 // หมายเหตุ: ต้องอัพเดทตัวแปร repairs/fluidLogs ในเครื่องให้เสร็จก่อนเรียกฟังก์ชันนี้ เผื่อต้อง fallback
 function _patchRepair(id,patch){
   if(window.fbUpdateRepairFields){
@@ -4652,11 +4939,18 @@ function renderFeedbackList(){
     <div style="font-size:10.5px;color:#aaa;margin-top:6px;">${fmt(f.createdAt)}</div>
   </div>`).join('');
 }
-function delFeedback(id){
+async function delFeedback(id){
   if(!confirm('ลบความคิดเห็นนี้?'))return;
-  companyFeedbacks=companyFeedbacks.filter(f=>f.id!==id);
-  saveFeedbacks();
-  renderFeedbackList();
+  try{
+    if(window.fbDeleteFeedback)await window.fbDeleteFeedback(id);
+    else throw new Error('delete API unavailable');
+    companyFeedbacks=companyFeedbacks.filter(f=>f.id!==id);
+    _cacheSet('ske_feedbacks',companyFeedbacks);
+    renderFeedbackList();
+  }catch(e){
+    console.error('delete feedback failed',e);
+    alert('❌ ลบความคิดเห็นไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -5123,10 +5417,21 @@ function toggleRepairStatus(id){
   _cacheSet('ske_repairs', repairs);
   _patchRepair(id,patch);refreshRepairViews();
 }
-function doDelRepair(id){
+async function doDelRepair(id){
   if(!confirm('ลบรายการแจ้งซ่อมนี้?'))return;
-  repairs=repairs.filter(r=>r.id!==id);
-  saveRepairs().catch(()=>{});refreshRepairViews();
+  const row=repairs.find(r=>r.id===id);
+  try{
+    if(window.fbDeleteRepair)await window.fbDeleteRepair(id);
+    else throw new Error('delete API unavailable');
+    repairs=repairs.filter(r=>r.id!==id);
+    _cacheSet('ske_repairs',repairs);
+    const photoIds=[...(row?.photos||[]),...(row?.empPhotos||[])].filter(Boolean);
+    if(photoIds.length&&window.fbDeletePhotos)window.fbDeletePhotos(photoIds);
+    refreshRepairViews();
+  }catch(e){
+    console.error('delete repair failed',e);
+    alert('❌ ลบรายการแจ้งซ่อมไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+  }
 }
 // รีเฟรชทุกหน้าที่อาจกำลังแสดงรายการแจ้งซ่อมอยู่ (หน้าพนักงาน + แผงผู้ดูแล)
 function refreshRepairViews(){
@@ -5447,10 +5752,18 @@ function renderCashList(){
   }).join('');
   updateMaintBadges();
 }
-function doDelCash(id){
+async function doDelCash(id){
   if(!confirm('ลบรายการเบิกเงินนี้?'))return;
-  cashRequests=cashRequests.filter(s=>s.id!==id);
-  saveCash();refreshCashViews();
+  try{
+    if(window.fbDeleteCashRequest)await window.fbDeleteCashRequest(id);
+    else throw new Error('delete API unavailable');
+    cashRequests=cashRequests.filter(s=>s.id!==id);
+    _cacheSet('ske_cash',cashRequests);
+    refreshCashViews();
+  }catch(e){
+    console.error('delete cash request failed',e);
+    alert('❌ ลบรายการเบิกเงินไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+  }
 }
 function toggleCashStatus(id){
   cashRequests=cashRequests.map(s=>s.id===id?{...s,status:s.status==='done'?'pending':'done'}:s);
@@ -6402,14 +6715,21 @@ function openEmployeeRunLogModal(){
 }
 function closeEmployeeRunLogModal(){document.getElementById('employeeRunLogModal')?.remove();}
 // ── ลบเที่ยววิ่งที่บันทึกไว้ 1 รายการ (พนักงานลบของตัวเองได้) ──
-function doDeleteRunLogEntry(id){
+async function doDeleteRunLogEntry(id){
   const log=(runLogs||[]).find(r=>r.id===id);
   if(!log)return;
   if(!confirm('ลบเที่ยววิ่งนี้?\n\n'+(log.detail||'')))return;
-  runLogs=runLogs.filter(r=>r.id!==id);
-  saveRunLogs();
-  renderDashboard();
-  if(document.getElementById('employeeRunLogModal'))openEmployeeRunLogModal();
+  try{
+    if(window.fbDeleteRunLog)await window.fbDeleteRunLog(id);
+    else throw new Error('delete API unavailable');
+    runLogs=runLogs.filter(r=>r.id!==id);
+    _cacheSet('ske_runlogs',runLogs);
+    renderDashboard();
+    if(document.getElementById('employeeRunLogModal'))openEmployeeRunLogModal();
+  }catch(e){
+    console.error('delete run log failed',e);
+    alert('❌ ลบเที่ยววิ่งไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+  }
 }
 // ── แก้ไขรายละเอียดเที่ยววิ่งที่บันทึกไว้ 1 รายการ (พนักงานแก้ของตัวเองได้) ──
 function openEditRunLogEntry(id){
@@ -7707,16 +8027,23 @@ function renderLeaveHistory(){
 }
 
 // ── ลบประวัติการลา 1 รายการ (เฉพาะผู้ดูแล/super เท่านั้น) ──────────────────────
-function deleteLeaveLog(id){
+async function deleteLeaveLog(id){
   // กันสิทธิ์: แอดมิน (viewer) ห้ามลบ
   if(adminRole==='viewer'){alert('เฉพาะผู้ดูแลเท่านั้นที่ลบประวัติการลาได้');return;}
   const log=(leaveLogs||[]).find(l=>l.id===id);
   if(!log)return;
   const range=log.leaveFrom+(log.leaveTo&&log.leaveTo!==log.leaveFrom?' → '+log.leaveTo:'');
   if(!confirm('ลบประวัติการลานี้?\n\n'+(log.empName||'')+'\n📅 '+range))return;
-  leaveLogs=leaveLogs.filter(l=>l.id!==id);
-  saveLeaveLogs();
-  renderLeaveHistory();
+  try{
+    if(window.fbDeleteLeaveLog)await window.fbDeleteLeaveLog(id);
+    else throw new Error('delete API unavailable');
+    leaveLogs=leaveLogs.filter(l=>l.id!==id);
+    _cacheSet('ske_leaveLogs',leaveLogs);
+    renderLeaveHistory();
+  }catch(e){
+    console.error('delete leave log failed',e);
+    alert('❌ ลบประวัติการลาไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7815,14 +8142,21 @@ function toggleVehicleActive(id){
   saveV();
   renderAdminVehicleList();
 }
-function doDelVehicle(id){
+async function doDelVehicle(id){
   const v=vehicles.find(x=>x.id===id);if(!v)return;
   const drivers=employees.filter(e=>(e.plate||'').trim()===(v.plate||'').trim()&&e.status!=='inactive');
   const warnMsg=drivers.length?`\n\n⚠️ ตอนนี้มีคนขับผูกกับทะเบียนนี้อยู่ ${drivers.length} คน (${drivers.map(d=>d.name).join(', ')}) — ลบแล้วพวกเขาจะไม่ถูกลบ แต่ทะเบียนจะไม่อยู่ในระบบรถอีกต่อไป`:'';
   if(!confirm(`ลบรถทะเบียน "${v.plate}" ออกจากระบบ?${warnMsg}`))return;
-  vehicles=vehicles.filter(x=>x.id!==id);
-  saveV();
-  renderAdminVehicleList();
+  try{
+    if(window.fbDeleteVehicle)await window.fbDeleteVehicle(id);
+    else throw new Error('delete API unavailable');
+    vehicles=vehicles.filter(x=>x.id!==id);
+    _cacheSet('ske_vehicles',vehicles);
+    renderAdminVehicleList();
+  }catch(e){
+    console.error('delete vehicle failed',e);
+    alert('❌ ลบรถไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+  }
 }
 function renderAdminVehicleList(){
   const el=document.getElementById('adminVehicleList');
@@ -7959,34 +8293,15 @@ function buildJobNoteText(row){
   return parts.join(' · ')||'ได้รับมอบหมายงาน';
 }
 
-// บันทึกแผนงาน — ถ้าระบุ changedRowIds (string เดี่ยวหรือ array หลายแถว) จะดึงข้อมูลสดจากเซิร์ฟเวอร์มาก่อน แล้วอัปเดตเฉพาะแถวที่ระบุลงไป
-// (กันปัญหาแอดมินหลายคนแก้แผนงานพร้อมกันคนละเครื่อง แล้วเขียนทับข้อมูลกันเอง ทำให้ชื่อที่เพิ่งเลือกไว้หายไป)
-// ถ้าไม่ระบุเลย จะบันทึกทับทั้งชุดแบบเดิม (ใช้กับกรณีสร้างข้อมูลชุดใหญ่ตอนตั้งค่าเริ่มต้น ซึ่งเสี่ยงชนกันน้อยกว่า)
+// บันทึกแผนงาน — ถ้าระบุ changedRowIds จะ transaction เฉพาะแถวเหล่านั้น
+// ถ้าไม่ระบุ ระบบจะเทียบ shadow แล้วส่งเฉพาะแถว/ฟิลด์ที่เปลี่ยน ไม่เขียนแผนงานทั้งก้อน
 async function saveJobPlan(changedRowIds){
   _cacheSet('ske_jobplan',jobPlanRows);
   if(!window.fbSaveJobPlan)return;
   const ids=changedRowIds?(Array.isArray(changedRowIds)?changedRowIds:[changedRowIds]):null;
-  if(ids&&ids.length&&window.fbGetJobPlanFresh){
-    try{
-      const fresh=await window.fbGetJobPlanFresh();
-      if(fresh){
-        let merged=fresh.slice();
-        ids.forEach(rid=>{
-          const changedRow=jobPlanRows.find(r=>r.id===rid);
-          if(!changedRow){
-            merged=merged.filter(r=>r.id!==rid);
-          }else{
-            const exists=merged.some(r=>r.id===rid);
-            merged=exists?merged.map(r=>r.id===rid?changedRow:r):merged.concat([changedRow]);
-          }
-        });
-        jobPlanRows=merged;
-        _cacheSet('ske_jobplan',jobPlanRows);
-        await window.fbSaveJobPlan(merged).catch(()=>{});
-        renderJobPlan();
-        return;
-      }
-    }catch(e){/* ดึงข้อมูลสดไม่สำเร็จ (เช่นเน็ตหลุด) — บันทึกด้วยข้อมูลเครื่องตัวเองไปก่อน ดีกว่าไม่บันทึกอะไรเลย */}
+  if(ids&&ids.length&&window.fbSaveJobPlanRows){
+    const changedRows=ids.map(rid=>jobPlanRows.find(r=>r.id===rid)).filter(Boolean);
+    if(changedRows.length)return window.fbSaveJobPlanRows(changedRows).catch(()=>{});
   }
   return window.fbSaveJobPlan(jobPlanRows).catch(()=>{});
 }
@@ -8219,7 +8534,17 @@ async function delJobPlanRow(id){
     }
   }
   jobPlanRows=jobPlanRows.filter(r=>r.id!==id);
-  saveJobPlan(id);renderJobPlan();
+  try{
+    if(window.fbDeleteJobPlanRow)await window.fbDeleteJobPlanRow(id);
+    else throw new Error('delete API unavailable');
+    _cacheSet('ske_jobplan',jobPlanRows);
+    renderJobPlan();
+  }catch(e){
+    jobPlanRows=jobPlanRows.concat([row]);
+    console.error('delete job plan row failed',e);
+    alert('❌ ลบเส้นทางไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+    renderJobPlan();
+  }
 }
 
 function updateJobPlanField(id,field,value){
@@ -8413,10 +8738,18 @@ function addJobRouteTemplate(){
   jobRouteTemplates=jobRouteTemplates.concat([{id:'jt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),route:'',standbyTime:'',weekDays:[1,2,3,4,5,6,7]}]);
   saveJobRouteTemplates();renderJobRouteTemplates();
 }
-function delJobRouteTemplate(id){
+async function delJobRouteTemplate(id){
   if(!confirm('ลบเส้นทางหลักนี้? (ไม่กระทบแผนงานที่สร้างไปแล้ว)'))return;
-  jobRouteTemplates=jobRouteTemplates.filter(t=>t.id!==id);
-  saveJobRouteTemplates();renderJobRouteTemplates();
+  try{
+    if(window.fbDeleteJobRouteTemplate)await window.fbDeleteJobRouteTemplate(id);
+    else throw new Error('delete API unavailable');
+    jobRouteTemplates=jobRouteTemplates.filter(t=>t.id!==id);
+    _cacheSet('ske_jobtemplates',jobRouteTemplates);
+    renderJobRouteTemplates();
+  }catch(e){
+    console.error('delete job route template failed',e);
+    alert('❌ ลบเส้นทางหลักไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+  }
 }
 function updateJobRouteTemplate(id,field,value){
   jobRouteTemplates=jobRouteTemplates.map(t=>t.id===id?{...t,[field]:value}:t);
@@ -8920,19 +9253,67 @@ function doSaveAEdit(id){
   if(currentUser?.id===id){currentUser={...currentUser,name,position,plate,phone,lineId,note,status,province:prov};saveU();}
   saveE();renderAdminEmpList();
 }
-async function doDelEmp(id){
+let _pendingDeleteEmployeeId=null;
+function closeDeleteEmployeePopup(){
+  const popup=document.getElementById('deleteEmployeeConfirmPopup');
+  if(popup?.dataset.busy==='1')return;
+  popup?.remove();
+  _pendingDeleteEmployeeId=null;
+}
+function doDelEmp(id){
   if(adminRole==='viewer'){alert('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้นที่ลบพนักงานได้');return;}
   const emp=employees.find(e=>e.id===id);
   if(!emp){alert('ไม่พบข้อมูลพนักงานนี้ในระบบ');return;}
-  const warning='ลบพนักงานคนนี้ออกจากระบบถาวร?\n\n'
-    +(emp.name||'-')+' · '+(emp.plate||'-')
-    +'\n\nระบบจะลบข้อมูลที่ผูกกับพนักงานคนนี้ เช่น แจ้งซ่อม การลา เที่ยววิ่ง เอกสาร เบิกเงิน และรูปภาพ'
-    +'\nพร้อมบังคับออกจากระบบทุกเครื่อง การดำเนินการนี้ย้อนกลับไม่ได้';
-  if(!confirm(warning))return;
+  document.getElementById('deleteEmployeeConfirmPopup')?.remove();
+  _pendingDeleteEmployeeId=id;
+  const popup=document.createElement('div');
+  popup.id='deleteEmployeeConfirmPopup';
+  popup.style.cssText='position:fixed;inset:0;z-index:120000;background:rgba(15,23,42,.68);display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(3px);';
+  popup.innerHTML=`
+    <div role="dialog" aria-modal="true" aria-labelledby="deleteEmpPopupTitle" style="width:100%;max-width:440px;background:#fff;border-radius:22px;box-shadow:0 24px 70px rgba(0,0,0,.35);overflow:hidden;">
+      <div style="padding:22px 22px 14px;text-align:center;">
+        <div style="width:64px;height:64px;margin:0 auto 12px;border-radius:50%;background:#FEE2E2;color:#DC2626;display:flex;align-items:center;justify-content:center;font-size:31px;">🗑️</div>
+        <div id="deleteEmpPopupTitle" style="font-size:20px;font-weight:900;color:#991B1B;">ยืนยันลบพนักงานถาวร</div>
+        <div style="font-size:13px;color:#64748B;margin-top:5px;">ตรวจสอบชื่อให้ถูกต้องก่อนกดยืนยัน</div>
+      </div>
+      <div style="padding:0 22px 20px;">
+        <div style="background:#FFF7F7;border:1.5px solid #FECACA;border-radius:14px;padding:13px 15px;margin-bottom:13px;">
+          <div style="font-size:16px;font-weight:900;color:#7F1D1D;">${esc(emp.name||'-')}</div>
+          <div style="font-size:13px;color:#991B1B;margin-top:4px;">🚛 ${esc(emp.plate||'ยังไม่ผูกทะเบียน')} · ☎ ${esc(emp.phone||'-')}</div>
+        </div>
+        <div style="font-size:13px;font-weight:800;color:#334155;margin-bottom:7px;">ระบบจะดำเนินการดังนี้</div>
+        <div style="font-size:12.5px;line-height:1.75;color:#475569;background:#F8FAFC;border-radius:12px;padding:10px 13px;">
+          • ลบบัญชีและข้อมูลพนักงานออกจาก Firebase<br>
+          • ลบแจ้งซ่อม การลา เที่ยววิ่ง เอกสาร เบิกเงิน ความคิดเห็น และรูปภาพที่ผูกกับบัญชีนี้<br>
+          • ถอนชื่อออกจากแผนงาน และบังคับออกจากระบบทุกเครื่อง
+        </div>
+        <div style="margin-top:12px;padding:9px 12px;border-radius:10px;background:#FEF2F2;color:#B91C1C;font-size:12px;font-weight:800;text-align:center;">⚠️ การลบนี้ย้อนกลับไม่ได้</div>
+        <div style="display:flex;gap:10px;margin-top:17px;">
+          <button id="cancelDeleteEmpBtn" type="button" onclick="closeDeleteEmployeePopup()" style="flex:1;min-height:48px;border-radius:12px;background:#E2E8F0;color:#334155;font-size:14px;font-weight:900;">ยกเลิก</button>
+          <button id="confirmDeleteEmpBtn" type="button" onclick="confirmDeleteEmployeePopup()" style="flex:1.35;min-height:48px;border-radius:12px;background:#DC2626;color:#fff;font-size:14px;font-weight:900;box-shadow:0 7px 18px rgba(220,38,38,.28);">ลบพนักงานถาวร</button>
+        </div>
+      </div>
+    </div>`;
+  popup.addEventListener('click',ev=>{if(ev.target===popup)closeDeleteEmployeePopup();});
+  document.body.appendChild(popup);
+}
+async function confirmDeleteEmployeePopup(){
+  const id=_pendingDeleteEmployeeId;
+  const popup=document.getElementById('deleteEmployeeConfirmPopup');
+  const emp=employees.find(e=>e.id===id);
+  if(!id||!emp){closeDeleteEmployeePopup();alert('ไม่พบข้อมูลพนักงานนี้ในระบบ');return;}
   if(!window.fbDeleteEmployeePermanently){
+    closeDeleteEmployeePopup();
     alert('ระบบลบพนักงานแบบถาวรยังไม่พร้อม กรุณารีเฟรชหน้าแล้วลองใหม่');
     return;
   }
+  if(popup)popup.dataset.busy='1';
+  const confirmBtn=document.getElementById('confirmDeleteEmpBtn');
+  const cancelBtn=document.getElementById('cancelDeleteEmpBtn');
+  if(confirmBtn){confirmBtn.disabled=true;confirmBtn.textContent='กำลังลบ...';confirmBtn.style.opacity='.7';}
+  if(cancelBtn){cancelBtn.disabled=true;cancelBtn.style.opacity='.55';}
+  popup?.remove();
+  _pendingDeleteEmployeeId=null;
   showDocUploadPopup('กำลังลบพนักงานออกจากระบบ','กำลังลบบัญชี ข้อมูลที่เกี่ยวข้อง และเพิกถอนการเข้าใช้งานทุกเครื่อง');
   try{
     const result=await window.fbDeleteEmployeePermanently(id);
