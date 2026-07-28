@@ -42,7 +42,7 @@
 <meta name="apple-mobile-web-app-title" content="SKE TRUCK">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#FFFFFF">
-<link rel="manifest" href="manifest.json?v=dev-v322-transport-fix">
+<link rel="manifest" href="manifest.json?v=dev-v3228-white-splash">
 <title>SKE TRUCK</title>
 <!-- Firebase SDK -->
 <script type="module">
@@ -721,7 +721,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.27-dev-v3.2.2.6-province-fix-app-check-v3');
+  console.log('[SKE TRUCK] app version: v2026.07.28-dev-v3.2.2.8-premium-loader-app-check-v3');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1952,40 +1952,136 @@ textarea{resize:none;}
 .screen{height:100%;height:-webkit-fill-available;display:flex;flex-direction:column;overflow:hidden;}
 .hidden{display:none!important;}
 
-/* ── Splash ── */
-#splash{background:#fff;align-items:center;justify-content:center;gap:20px;}
-.splash-logo{width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,#F47920,#1E90D6,#7B2FBE);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 32px rgba(244,121,32,.35),0 4px 16px rgba(30,144,214,.2);}
-.splash-logo span{color:#fff;font-weight:900;font-size:34px;letter-spacing:-1px;}
-.splash-title{font-size:26px;font-weight:800;color:#1a1a2e;letter-spacing:1px;}
-.splash-sub{font-size:13px;color:#666;margin-top:4px;text-align:center;}
-.dots{display:flex;gap:6px;margin-top:12px;}
-.dot{width:8px;height:8px;border-radius:50%;animation:pulse 1.2s ease-in-out infinite;}
-.dot:nth-child(1){background:#F47920;}
-.dot:nth-child(2){background:#1E90D6;animation-delay:.2s;}
-.dot:nth-child(3){background:#7B2FBE;animation-delay:.4s;}
-@keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
-
-/* ══ Premium video intro splash by ChatGPT ═════════════════════════════ */
-#splash.ske-intro-screen{
-  position:fixed;inset:0;z-index:99999;background:#fff;overflow:hidden;
-  display:flex!important;align-items:center;justify-content:center;color:#fff;
+/* ── SKE Premium Splash ─────────────────────────────────────────────────── */
+#splash{
+  position:fixed;inset:0;z-index:99999;
+  display:flex;align-items:center;justify-content:center;
+  background:
+    radial-gradient(circle at 18% 18%,rgba(255,111,0,.15),transparent 30%),
+    radial-gradient(circle at 82% 22%,rgba(0,174,255,.16),transparent 32%),
+    radial-gradient(circle at 50% 88%,rgba(132,39,255,.13),transparent 36%),
+    linear-gradient(145deg,#FFFFFF 0%,#F8FBFF 50%,#FFF9F4 100%);
+  overflow:hidden;
 }
-.ske-intro-video{position:absolute;inset:0;width:100vw;height:100vh;object-fit:cover;background:#000;filter:saturate(1.08) contrast(1.04);} 
-.ske-intro-vignette{position:absolute;inset:0;background:radial-gradient(circle at 50% 45%,rgba(255,255,255,.05),rgba(0,0,0,.12) 32%,rgba(0,0,0,.68) 100%);pointer-events:none;}
-.ske-intro-brand{position:absolute;left:50%;bottom:max(72px,calc(46px + env(safe-area-inset-bottom,0px)));transform:translateX(-50%) translateY(12px);width:min(78vw,360px);text-align:center;opacity:0;animation:skeBrandIn 1.05s ease-out 4.75s forwards;}
-.ske-intro-brand img{width:min(58vw,240px);height:auto;object-fit:contain;display:block;margin:0 auto 12px;filter:drop-shadow(0 0 18px rgba(30,144,214,.32)) drop-shadow(0 0 26px rgba(123,47,190,.24));}
-.ske-intro-title{font-size:clamp(22px,7vw,34px);font-weight:900;letter-spacing:-.4px;text-shadow:0 6px 28px rgba(0,0,0,.55);}
-.ske-intro-sub{margin-top:4px;font-size:clamp(11px,3.2vw,15px);font-weight:800;letter-spacing:2.4px;color:rgba(255,255,255,.82);}
-
-.ske-intro-sound{position:absolute;left:50%;bottom:max(18px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:2;display:none;background:rgba(255,255,255,.92);color:#111827;border-radius:999px;padding:10px 16px;font-size:13px;font-weight:900;box-shadow:0 12px 28px rgba(0,0,0,.28);}
-#splash.ske-intro-fadeout{animation:skeIntroOut .55s ease-in forwards;}
-@keyframes skeBrandIn{to{opacity:1;transform:translateX(-50%) translateY(0)}}
-@keyframes skeIntroOut{to{opacity:0;visibility:hidden}}
-/* Final intro cleanup: video only, no logo/text/buttons */
-.ske-intro-brand,.ske-intro-sound,#skeIntroSkip,#splashInstallBtn{display:none!important;}
-#splash.ske-intro-screen{background:#fff!important;}
-
-@media (orientation:landscape){.ske-intro-brand{bottom:28px;width:min(48vw,320px)}.ske-intro-brand img{width:min(34vw,190px)}}
+#splash::before,#splash::after{
+  content:"";position:absolute;border-radius:50%;pointer-events:none;
+  filter:blur(3px);opacity:.72;
+}
+#splash::before{
+  width:min(82vw,520px);height:min(82vw,520px);left:-30%;top:-21%;
+  border:1px solid rgba(0,174,255,.20);
+  box-shadow:0 0 80px rgba(0,174,255,.10),inset 0 0 70px rgba(255,111,0,.06);
+  animation:skeSplashOrbit 8s linear infinite;
+}
+#splash::after{
+  width:min(72vw,460px);height:min(72vw,460px);right:-27%;bottom:-22%;
+  border:1px solid rgba(132,39,255,.18);
+  box-shadow:0 0 85px rgba(132,39,255,.10),inset 0 0 65px rgba(0,174,255,.06);
+  animation:skeSplashOrbit 10s linear infinite reverse;
+}
+.ske-splash-stage{
+  position:relative;z-index:2;width:min(86vw,390px);
+  display:flex;flex-direction:column;align-items:center;
+  animation:skeSplashStageIn .62s cubic-bezier(.2,.8,.2,1) both;
+}
+.ske-splash-logo-wrap{
+  position:relative;width:min(61vw,260px);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:8px;
+}
+.ske-splash-logo-wrap::before{
+  content:"";position:absolute;inset:4% -7%;border-radius:50%;
+  background:conic-gradient(from 90deg,rgba(255,111,0,.25),rgba(0,174,255,.25),rgba(132,39,255,.22),rgba(255,111,0,.25));
+  filter:blur(28px);opacity:.50;
+  animation:skeSplashAura 2.4s ease-in-out infinite;
+}
+.ske-splash-logo{
+  position:relative;width:100%;height:auto;display:block;
+  filter:drop-shadow(0 14px 24px rgba(18,56,120,.16));
+  animation:skeSplashLogoFloat 2.5s ease-in-out infinite;
+}
+.ske-splash-brand{
+  margin-top:2px;color:#17223B;font-size:clamp(13px,3.8vw,17px);
+  font-weight:950;letter-spacing:.22em;text-align:center;
+  text-shadow:0 2px 14px rgba(30,144,214,.12);
+}
+.ske-splash-caption{
+  margin-top:5px;color:#8992A6;font-size:10px;font-weight:800;
+  letter-spacing:.18em;text-transform:uppercase;
+}
+.ske-splash-loader{
+  width:min(76vw,318px);margin-top:30px;
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+}
+.ske-splash-track{
+  position:relative;width:100%;height:14px;padding:3px;border-radius:999px;
+  background:rgba(255,255,255,.78);
+  border:1px solid rgba(83,102,153,.14);
+  box-shadow:0 10px 30px rgba(46,67,125,.12),inset 0 1px 2px rgba(255,255,255,.95);
+  overflow:visible;backdrop-filter:blur(9px);
+}
+.ske-splash-track-inner{
+  position:relative;width:100%;height:100%;border-radius:999px;
+  background:#E9EDF5;overflow:hidden;
+}
+.ske-splash-progress{
+  position:absolute;inset:0 auto 0 0;width:66%;border-radius:inherit;
+  background:linear-gradient(90deg,#FF7A18 0%,#FF3D7F 24%,#8647FF 47%,#168BFF 72%,#00D4FF 100%);
+  background-size:200% 100%;
+  box-shadow:0 0 16px rgba(75,94,255,.55);
+  animation:skeSplashFill 1.5s cubic-bezier(.45,0,.2,1) infinite alternate,
+            skeSplashGradient 2.1s linear infinite;
+}
+.ske-splash-progress::after{
+  content:"";position:absolute;inset:0;width:44%;left:-48%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.95),transparent);
+  transform:skewX(-24deg);
+  animation:skeSplashShine 1.15s ease-in-out infinite;
+}
+.ske-splash-truck{
+  position:absolute;z-index:3;left:0;top:50%;transform:translate(-24%,-52%);
+  width:31px;height:31px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.96);font-size:17px;
+  box-shadow:0 7px 20px rgba(30,55,112,.22),0 0 0 1px rgba(80,104,164,.10);
+  animation:skeSplashTruckRun 1.5s cubic-bezier(.45,0,.2,1) infinite alternate;
+}
+.ske-splash-status{
+  min-height:22px;display:flex;align-items:center;justify-content:center;
+  color:#56627A;font-size:12.5px;font-weight:850;letter-spacing:.03em;
+}
+.ske-splash-dots::after{
+  content:"";display:inline-block;width:18px;text-align:left;
+  animation:skeSplashDots 1.2s steps(4,end) infinite;
+}
+.ske-splash-pulses{display:flex;align-items:center;gap:5px;height:9px;}
+.ske-splash-pulses i{
+  display:block;width:5px;height:5px;border-radius:50%;
+  background:#268DFF;box-shadow:0 0 8px rgba(38,141,255,.55);
+  animation:skeSplashPulse 1.05s ease-in-out infinite;
+}
+.ske-splash-pulses i:nth-child(2){background:#8647FF;animation-delay:.16s;}
+.ske-splash-pulses i:nth-child(3){background:#FF6A28;animation-delay:.32s;}
+#splashInstallBtn{display:none!important;}
+@keyframes skeSplashStageIn{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes skeSplashLogoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes skeSplashAura{0%,100%{transform:scale(.94) rotate(0);opacity:.38}50%{transform:scale(1.06) rotate(10deg);opacity:.62}}
+@keyframes skeSplashFill{0%{width:22%}100%{width:91%}}
+@keyframes skeSplashGradient{to{background-position:200% 0}}
+@keyframes skeSplashShine{0%{left:-48%}72%,100%{left:118%}}
+@keyframes skeSplashTruckRun{0%{left:20%}100%{left:89%}}
+@keyframes skeSplashDots{0%{content:""}25%{content:"."}50%{content:".."}75%,100%{content:"..."}}
+@keyframes skeSplashPulse{0%,100%{opacity:.28;transform:scale(.72)}50%{opacity:1;transform:scale(1.35)}}
+@keyframes skeSplashOrbit{to{transform:rotate(360deg)}}
+@media(max-width:420px){
+  .ske-splash-logo-wrap{width:min(66vw,250px)}
+  .ske-splash-loader{margin-top:25px}
+}
+@media(prefers-reduced-motion:reduce){
+  #splash::before,#splash::after,.ske-splash-logo,.ske-splash-logo-wrap::before,
+  .ske-splash-progress,.ske-splash-progress::after,.ske-splash-truck,.ske-splash-pulses i{animation:none}
+  .ske-splash-progress{width:78%}.ske-splash-truck{left:76%}
+}
 
 
 /* ── Topbar ── */
@@ -2587,45 +2683,36 @@ select.inp option{background:#fff;color:#1a1a2e;}
 
 <body>
 
-<!-- ══ SPLASH ══ -->
-<div id="splash" class="screen" style="display:flex;background:#fff;align-items:center;justify-content:center;flex-direction:column;gap:14px;">
-  <img src="ske-logo.png" alt="SKE LOGISTICS" style="width:60vw;max-width:280px;min-width:200px;height:auto;">
-  <div style="color:#1a1a2e;font-size:16px;font-weight:700;letter-spacing:1.5px;margin-top:4px;">SK EVO LOGISTICS</div>
-  <div class="ske-splash-loader" aria-label="กำลังเชื่อมต่อระบบ">
-    <div class="ske-splash-track">
-      <div class="ske-splash-progress"></div>
-      <div class="ske-splash-shine"></div>
+<!-- ══ SKE PREMIUM SPLASH ══ -->
+<div id="splash" class="screen">
+  <div class="ske-splash-stage">
+    <div class="ske-splash-logo-wrap">
+      <img class="ske-splash-logo" src="ske-logo.png" alt="SKE LOGISTICS">
     </div>
-    <div class="ske-splash-status">
-      <span class="ske-splash-truck" aria-hidden="true">🚚</span>
-      <span>กำลังเชื่อมต่อระบบ</span><span class="ske-splash-ellipsis" aria-hidden="true"></span>
+    <div class="ske-splash-brand">SK EVO LOGISTICS</div>
+    <div class="ske-splash-caption">Smart Transport System</div>
+    <div class="ske-splash-loader" aria-label="กำลังเชื่อมต่อระบบ">
+      <div class="ske-splash-track">
+        <div class="ske-splash-track-inner">
+          <div class="ske-splash-progress"></div>
+        </div>
+        <span class="ske-splash-truck" aria-hidden="true">🚚</span>
+      </div>
+      <div class="ske-splash-status">
+        <span>กำลังเชื่อมต่อระบบ SKE</span><span class="ske-splash-dots" aria-hidden="true"></span>
+      </div>
+      <div class="ske-splash-pulses" aria-hidden="true"><i></i><i></i><i></i></div>
     </div>
   </div>
-  <div id="splashInstallBtn" style="display:none;margin-top:24px;"></div>
+  <div id="splashInstallBtn"></div>
 </div>
-<style>
-/* Splash loader — bright multicolor while preserving the existing logo position */
-.ske-splash-loader{width:min(72vw,300px);margin-top:6px;display:flex;flex-direction:column;align-items:center;gap:11px;}
-.ske-splash-track{position:relative;width:100%;height:10px;border-radius:999px;overflow:hidden;background:#EEF1F6;box-shadow:inset 0 1px 3px rgba(31,41,55,.10),0 6px 18px rgba(82,91,255,.10);}
-.ske-splash-progress{position:absolute;inset:0 auto 0 0;width:58%;border-radius:inherit;background:linear-gradient(90deg,#35C6FF 0%,#675CFF 22%,#B84DFF 42%,#FF4D9D 61%,#FF8A2A 79%,#FFD93D 91%,#52D273 100%);background-size:180% 100%;animation:skeSplashFill 1.55s cubic-bezier(.4,0,.2,1) infinite alternate,skeSplashGradient 2.4s linear infinite;box-shadow:0 0 12px rgba(103,92,255,.30);}
-.ske-splash-shine{position:absolute;top:0;bottom:0;width:34%;left:-38%;transform:skewX(-20deg);background:linear-gradient(90deg,transparent,rgba(255,255,255,.82),transparent);animation:skeSplashShine 1.35s ease-in-out infinite;}
-.ske-splash-status{display:flex;align-items:center;justify-content:center;color:#667085;font-size:12.5px;font-weight:700;letter-spacing:.15px;min-height:20px;}
-.ske-splash-truck{display:inline-block;margin-right:7px;font-size:15px;animation:skeSplashTruck 1.2s ease-in-out infinite;}
-.ske-splash-ellipsis::after{content:'';display:inline-block;width:14px;text-align:left;animation:skeSplashDots 1.2s steps(4,end) infinite;}
-@keyframes skeSplashFill{0%{width:22%}100%{width:88%}}
-@keyframes skeSplashGradient{to{background-position:180% 0}}
-@keyframes skeSplashShine{0%{left:-38%}70%,100%{left:112%}}
-@keyframes skeSplashTruck{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
-@keyframes skeSplashDots{0%{content:''}25%{content:'.'}50%{content:'..'}75%,100%{content:'...'}}
-@media (prefers-reduced-motion:reduce){.ske-splash-progress,.ske-splash-shine,.ske-splash-truck,.ske-splash-ellipsis::after{animation:none}.ske-splash-progress{width:72%}.ske-splash-ellipsis::after{content:'...'}}
-</style>
 
 <!-- ══ LOGIN ══ -->
 <div id="login" class="screen hidden">
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.6-province-fix-app-check-v3</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.28-dev-v3.2.2.8-premium-loader-app-check-v3</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2633,7 +2720,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.27-dev-v3.2.2.6-province-fix-app-check-v3</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.28-dev-v3.2.2.8-premium-loader-app-check-v3</div>
       </div>
     </div>
 
@@ -2751,7 +2838,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.27-dev-v3.2.2.6-province-fix-app-check-v3</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.28-dev-v3.2.2.8-premium-loader-app-check-v3</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3007,7 +3094,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.27-dev-v3.2.2.6-province-fix-app-check-v3</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.28-dev-v3.2.2.8-premium-loader-app-check-v3</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3635,7 +3722,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.27-dev-v3.2.2.6-province-fix-app-check-v3';
+const SKE_APP_VERSION='v2026.07.28-dev-v3.2.2.8-premium-loader-app-check-v3';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -4177,17 +4264,13 @@ function showSystemNotification(title, options){
 window.addEventListener('beforeunload',e=>{e.preventDefault();e.returnValue='';});
 
 
-// ── Premium video intro controller ───────────────────────────────────────────
-// เอาวิดีโอ splash ออกแล้ว (17/07/2569) — ใช้โลโก้ธรรมดาแทน โชว์สั้นๆ แล้วเข้าแอปเลย ไม่ต้องโหลด/แคชไฟล์วิดีโออีกต่อไป
+// ── Splash controller ────────────────────────────────────────────────────────
+// แสดงอย่างน้อยช่วงสั้น ๆ แล้วคงหน้าโหลดไว้จน Firebase พร้อมและ show() เปิดหน้าระบบ
 window.SKEIntro={
   play:function(done){
     const splash=document.getElementById('splash');
-    if(!splash){ if(typeof done==='function')done(); return; }
-    splash.classList.remove('hidden');
-    setTimeout(()=>{
-      splash.classList.add('ske-intro-fadeout');
-      setTimeout(()=>{ splash.classList.add('hidden'); splash.classList.remove('ske-intro-fadeout'); if(typeof done==='function')done(); },520);
-    },800);
+    if(splash)splash.classList.remove('hidden');
+    setTimeout(()=>{ if(typeof done==='function')done(); },800);
   }
 };
 
