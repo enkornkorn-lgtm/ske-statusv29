@@ -721,7 +721,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.14D');
+  console.log('[SKE TRUCK] app version: v3.2.15G');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2726,6 +2726,10 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-status-person-name{font-size:12px;font-weight:900;line-height:1.25;color:#253245;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .ske-status-person-meta,.ske-status-person-note{font-size:10px;line-height:1.4;color:#7B8797;margin-top:2px;white-space:normal;word-break:break-word;}
 .ske-status-person-note{color:#59677A;}
+.ske-status-person-location{display:flex;align-items:center;flex-wrap:wrap;gap:3px 6px;margin-top:4px;padding:4px 6px;border-radius:7px;background:#ECFDF5;border:1px solid #A7F3D0;color:#047857;font-size:9.5px;font-weight:750;line-height:1.35;}
+.ske-status-person-location.stale{background:#FFFBEB;border-color:#FDE68A;color:#92400E;}
+.ske-status-person-location.old{background:#F8FAFC;border-color:#E2E8F0;color:#64748B;}
+.ske-status-person-location a{color:inherit;font-weight:900;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;}
 .ske-status-person-time{display:flex;align-items:center;gap:3px;color:#9AA4B2;font-size:9.5px;line-height:1.2;font-weight:700;white-space:nowrap;padding-top:1px;}
 .ske-status-person-time svg{font-size:11px;}
 @keyframes skeStatusJumpFlash{
@@ -2745,6 +2749,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   .ske-status-avatar,.ske-status-avatar img{width:31px!important;height:31px!important;min-width:31px!important;}
   .ske-status-person-name{font-size:11.5px;}
   .ske-status-person-meta,.ske-status-person-note{font-size:9.5px;}
+  .ske-status-person-location{font-size:9px;padding:4px 5px;}
   .ske-status-person-time{font-size:9px;}
 }
 
@@ -2782,7 +2787,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.14D</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.15G</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2790,7 +2795,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.14D</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.15G</div>
       </div>
     </div>
 
@@ -2908,7 +2913,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.14D</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.15G</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3164,7 +3169,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.14D</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.15G</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3796,7 +3801,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.14D';
+const SKE_APP_VERSION='v3.2.15G';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -4028,6 +4033,149 @@ function saveE(){
   if(window.fbSaveEmployees) window.fbSaveEmployees(employees);
 }
 function saveU(){localStorage.setItem('ske_user',JSON.stringify(currentUser));}
+
+// ── ตำแหน่งล่าสุดจากโทรศัพท์พนักงาน ─────────────────────────────────────────
+// เว็บติดตามได้เมื่อพนักงานอนุญาตตำแหน่งและหน้าแอปยังเปิดอยู่เท่านั้น
+// แยก phoneLocation ออกจาก updatedAt เพื่อไม่ให้การขยับ GPS เปลี่ยนเวลา/ลำดับสถานะรถ
+const SKE_PHONE_GPS_MIN_WRITE_MS=60*1000;
+const SKE_PHONE_GPS_FORCE_WRITE_MS=5*60*1000;
+const SKE_PHONE_GPS_MIN_MOVE_M=50;
+let _skePhoneGpsWatchId=null;
+let _skePhoneGpsLastPosition=null;
+let _skePhoneGpsLastSentAt=0;
+let _skePhoneGpsLastSentCoords=null;
+let _skePhoneGpsLastError=null;
+
+function _skePhoneLocationFromPosition(position){
+  const coords=position&&position.coords;
+  const lat=Number(coords&&coords.latitude);
+  const lng=Number(coords&&coords.longitude);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat<-90||lat>90||lng<-180||lng>180)return null;
+  const accuracy=Number(coords.accuracy);
+  const speed=Number(coords.speed);
+  const heading=Number(coords.heading);
+  const capturedMs=Number(position.timestamp)||Date.now();
+  return {
+    lat:Number(lat.toFixed(6)),
+    lng:Number(lng.toFixed(6)),
+    accuracy:Number.isFinite(accuracy)?Math.max(0,Math.round(accuracy)):null,
+    speed:Number.isFinite(speed)&&speed>=0?Number(speed.toFixed(1)):null,
+    heading:Number.isFinite(heading)&&heading>=0?Math.round(heading):null,
+    capturedAt:new Date(capturedMs).toISOString(),
+    source:'employee-phone'
+  };
+}
+
+function _skeGpsDistanceMeters(a,b){
+  if(!a||!b)return Infinity;
+  const toRad=n=>n*Math.PI/180;
+  const lat1=toRad(Number(a.lat)),lat2=toRad(Number(b.lat));
+  const dLat=lat2-lat1,dLng=toRad(Number(b.lng)-Number(a.lng));
+  const h=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+  return 6371000*2*Math.atan2(Math.sqrt(h),Math.sqrt(Math.max(0,1-h)));
+}
+
+function _skeApplyPhoneLocationLocal(empId,phoneLocation){
+  employees=(employees||[]).map(e=>e&&e.id===empId?{...e,phoneLocation}:e);
+  if(currentUser&&currentUser.id===empId){
+    currentUser={...currentUser,phoneLocation};
+    saveU();
+  }
+  _cacheSet('ske_emp',employees);
+}
+
+async function _skeSendPhoneLocation(position,force=false){
+  if(!currentUser||adminMode||document.visibilityState==='hidden')return false;
+  if(window.skeIsEmployeeDeleted&&window.skeIsEmployeeDeleted(currentUser.id))return false;
+  const phoneLocation=_skePhoneLocationFromPosition(position);
+  if(!phoneLocation)return false;
+  const now=Date.now();
+  const elapsed=now-_skePhoneGpsLastSentAt;
+  const moved=_skeGpsDistanceMeters(_skePhoneGpsLastSentCoords,phoneLocation);
+  if(!force&&_skePhoneGpsLastSentAt&&elapsed<SKE_PHONE_GPS_FORCE_WRITE_MS&&(elapsed<SKE_PHONE_GPS_MIN_WRITE_MS||moved<SKE_PHONE_GPS_MIN_MOVE_M)){
+    return false;
+  }
+  const empId=currentUser.id;
+  _skePhoneGpsLastSentAt=now;
+  _skePhoneGpsLastSentCoords={lat:phoneLocation.lat,lng:phoneLocation.lng};
+  _skeApplyPhoneLocationLocal(empId,phoneLocation);
+  try{
+    await fbPatchEmployee(empId,{phoneLocation});
+    return true;
+  }catch(error){
+    console.warn('[SKE GPS] รอส่งตำแหน่งเมื่อกลับมาออนไลน์',error);
+    return false;
+  }
+}
+
+function stopEmployeePhoneGps(){
+  if(_skePhoneGpsWatchId!==null&&navigator.geolocation){
+    try{navigator.geolocation.clearWatch(_skePhoneGpsWatchId);}catch(_){}
+  }
+  _skePhoneGpsWatchId=null;
+}
+
+function startEmployeePhoneGps(){
+  if(!currentUser||adminMode||document.visibilityState==='hidden'||!navigator.geolocation)return false;
+  if(_skePhoneGpsWatchId!==null)return true;
+  try{
+    _skePhoneGpsWatchId=navigator.geolocation.watchPosition(position=>{
+      _skePhoneGpsLastError=null;
+      _skePhoneGpsLastPosition=position;
+      void _skeSendPhoneLocation(position,false);
+    },error=>{
+      _skePhoneGpsLastError=error||null;
+      if(error&&error.code===1)stopEmployeePhoneGps();
+    },{
+      enableHighAccuracy:true,
+      maximumAge:30000,
+      timeout:20000
+    });
+    return true;
+  }catch(error){
+    _skePhoneGpsLastError=error;
+    _skePhoneGpsWatchId=null;
+    return false;
+  }
+}
+
+function getEmployeePhoneLocationForSave(){
+  if(!navigator.geolocation||!currentUser)return Promise.resolve(null);
+  if(_skePhoneGpsLastPosition&&Date.now()-(Number(_skePhoneGpsLastPosition.timestamp)||0)<=2*60*1000){
+    return Promise.resolve(_skePhoneLocationFromPosition(_skePhoneGpsLastPosition));
+  }
+  return new Promise(resolve=>{
+    let settled=false;
+    const finish=value=>{if(settled)return;settled=true;resolve(value);};
+    const guard=setTimeout(()=>finish(null),10000);
+    try{
+      navigator.geolocation.getCurrentPosition(position=>{
+        clearTimeout(guard);
+        _skePhoneGpsLastError=null;
+        _skePhoneGpsLastPosition=position;
+        finish(_skePhoneLocationFromPosition(position));
+        startEmployeePhoneGps();
+      },error=>{
+        clearTimeout(guard);
+        _skePhoneGpsLastError=error||null;
+        finish(null);
+      },{
+        enableHighAccuracy:true,
+        maximumAge:30000,
+        timeout:9000
+      });
+    }catch(error){
+      clearTimeout(guard);
+      _skePhoneGpsLastError=error;
+      finish(null);
+    }
+  });
+}
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden')stopEmployeePhoneGps();
+  else if(currentUser&&!adminMode)startEmployeePhoneGps();
+});
 
 // ล้างข้อมูลของพนักงานที่ถูกลบออกจาก state/cache ในเครื่อง โดยไม่เขียนข้อมูลเก่ากลับขึ้น Firebase
 function purgeDeletedEmployeeLocalData(empId){
@@ -4374,7 +4522,7 @@ function skeInitApp(){
         startAdminAlertTimer();
       }
       else if(currentUser){
-        if(requireActiveEmployee(false)){show('dashboard');renderDashboard();startAlertTimer();}
+        if(requireActiveEmployee(false)){show('dashboard');renderDashboard();startAlertTimer();startEmployeePhoneGps();}
         else{show('login');renderEmpList();showMode('select');showEmployeeRemovedLoginMessage();}
       }
       else{show('login');renderEmpList();}
@@ -4523,6 +4671,7 @@ function doLogin(id){
   _unlockAudio(); // unlock AudioContext ทันทีที่ login (user gesture)
   show('dashboard');renderDashboard();
   requestNotifPermission();
+  startEmployeePhoneGps();
   startAlertTimer();
 }
 
@@ -4942,7 +5091,7 @@ function requestNotifPermission(){
   }
 }
 
-function doLogout(){if(window.fbUnregisterPushToken)window.fbUnregisterPushToken();closeEmpSettings();closeRepairModal();closeFluidModal();stopAlertTimer();stopAdminAlertTimer();currentUser=null;adminMode=false;adminRole=null;saveU();saveA();saveAR();document.getElementById('admin')?.classList.remove('role-viewer');show('login');renderEmpList();showMode('select');}
+function doLogout(){if(window.fbUnregisterPushToken)window.fbUnregisterPushToken();stopEmployeePhoneGps();closeEmpSettings();closeRepairModal();closeFluidModal();stopAlertTimer();stopAdminAlertTimer();currentUser=null;adminMode=false;adminRole=null;saveU();saveA();saveAR();document.getElementById('admin')?.classList.remove('role-viewer');show('login');renderEmpList();showMode('select');}
 
 // ── Employee settings sheet (โปรไฟล์ + ออกจากระบบ) ───────────────────────────
 function openEmpSettings(){
@@ -7541,6 +7690,32 @@ function statusTimeShort(value){
   return date.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
 }
 
+function getEmployeePhoneLocation(e){
+  const loc=e&&e.phoneLocation;
+  if(!loc||typeof loc!=='object')return null;
+  const lat=Number(loc.lat),lng=Number(loc.lng);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat<-90||lat>90||lng<-180||lng>180)return null;
+  return {...loc,lat,lng};
+}
+
+function renderEmployeePhoneLocation(e){
+  const loc=getEmployeePhoneLocation(e);
+  if(!loc)return'';
+  const captured=new Date(loc.capturedAt||0);
+  const capturedMs=captured.getTime();
+  const ageMs=Number.isFinite(capturedMs)?Math.max(0,Date.now()-capturedMs):Infinity;
+  const freshness=ageMs>2*60*60*1000?'old':(ageMs>15*60*1000?'stale':'');
+  const accuracy=Number(loc.accuracy);
+  const accuracyText=Number.isFinite(accuracy)?` · ±${Math.round(accuracy)} ม.`:'';
+  const timeText=Number.isFinite(capturedMs)?fmt(loc.capturedAt):'ไม่ระบุเวลา';
+  const latText=loc.lat.toFixed(5),lngText=loc.lng.toFixed(5);
+  const mapUrl=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(latText+','+lngText)}`;
+  return `<div class="ske-status-person-location ${freshness}">
+    <span>${skeIcon('pin')} GPS โทรศัพท์: ${latText}, ${lngText}${accuracyText} · ${esc(timeText)}</span>
+    <a href="${mapUrl}" target="_blank" rel="noopener noreferrer" aria-label="เปิดตำแหน่งของ ${esc(e.name||'พนักงาน')} ใน Google Maps">เปิดแผนที่</a>
+  </div>`;
+}
+
 function renderStatusPersonRow(e,st,options={}){
   const queue=Number(options.queue||0);
   const timeValue=options.timeValue||e.updatedAt;
@@ -7551,6 +7726,7 @@ function renderStatusPersonRow(e,st,options={}){
       <div class="ske-status-person-meta">${skeIcon('truck')} ${esc(e.plate||'-')}${phoneLink(e.phone)}${lineLink(e.lineId)}</div>
       ${leaveTodayBadge(e)}
       ${e.note?`<div class="ske-status-person-note">${skeIcon('note')} ${esc(e.note)}</div>`:''}
+      ${renderEmployeePhoneLocation(e)}
     </div>
     <div class="ske-status-person-time">${skeIcon('history')} ${statusTimeShort(timeValue)}</div>
   </div>`;
@@ -7649,6 +7825,7 @@ function openStatusModal(){
       <div id="provWrap">${(!canSelfUpdateVehicleStatus(me.position)||!me.plate)?'<div style="font-size:11.5px;color:#94A3B8;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:8px 10px;">📍 ไม่ต้องระบุจังหวัดสแตนบาย (ไม่มีสิทธิ์ติดตามรถหรือยังไม่มีทะเบียน)</div>':provHTML(_selStatus,_selProv)}</div>
       <div class="inp-label" style="margin-top:10px;">หมายเหตุ</div>
       <textarea id="noteInp" rows="2" class="inp" style="width:100%;" placeholder="หมายเหตุ (ไม่บังคับ)">${esc(me.note||'')}</textarea>
+      <div style="font-size:10.5px;color:#64748B;line-height:1.45;margin-top:7px;">📍 เมื่อกดบันทึก ระบบจะขอตำแหน่งจากโทรศัพท์ และติดตามเป็นระยะขณะที่เปิดแอป (หากอนุญาตแล้ว)</div>
       <button class="btn btn-blue btn-full" style="margin-top:12px;" onclick="doSave()">✓ บันทึกสถานะ</button>
     </div>`;
   modal.addEventListener('click',()=>closeStatusModal());
@@ -7751,6 +7928,15 @@ async function doSave(){
     if(provSel){provSel.focus();provSel.style.borderColor='#DC2626';provSel.style.boxShadow='0 0 0 2px #FCA5A5';}
     return;
   }
+  const saveBtn=document.querySelector('#statusEditModal .btn-blue');
+  if(saveBtn){
+    if(saveBtn.disabled)return;
+    saveBtn.disabled=true;
+    saveBtn.textContent='📍 กำลังตรวจตำแหน่งและบันทึก...';
+  }
+  // พยายามอ่าน GPS ทุกครั้งที่บันทึกสถานะ แต่หากผู้ใช้ไม่อนุญาต/หา GPS ไม่ทัน
+  // ยังบันทึกสถานะเดิมได้ตามปกติ ไม่บังคับให้พนักงานติดค้างอยู่ในฟอร์ม
+  const phoneLocation=await getEmployeePhoneLocationForSave();
   const now=new Date().toISOString();
   // บันทึก standbyAt เมื่อเปลี่ยนมาเป็น standby ครั้งแรก
   const standbyAt=(_selStatus==='standby'&&prev?.status!=='standby')?now:(prev?.standbyAt||null);
@@ -7770,15 +7956,21 @@ async function doSave(){
     previousStatus:'done',
     previousProvince:prov,
     previousNote:note,
-    previousStandbyAt:null
+    previousStandbyAt:null,
+    ...(phoneLocation?{phoneLocation}:{})
   }:{
     status:finalStatus,
     province:prov,
     note,
     updatedAt:now,
     standbyAt:finalStatus==='standby'?standbyAt:null,
+    ...(phoneLocation?{phoneLocation}:{}),
     ...clearJobLinkWhenLeavingGotJob(finalStatus)
   };
+  if(phoneLocation){
+    _skePhoneGpsLastSentAt=Date.now();
+    _skePhoneGpsLastSentCoords={lat:phoneLocation.lat,lng:phoneLocation.lng};
+  }
   recordRunLogIfNeeded(prev,finalStatus,note,empId,prev?.plate||currentUser.plate,prev?.name||currentUser.name);
   const reapplySavedPatch=()=>{
     employees=(employees||[]).map(e=>e&&e.id===empId?{...e,...patch}:e);
