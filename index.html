@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.16P');
+  console.log('[SKE TRUCK] app version: v3.2.17G');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2788,7 +2788,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.16P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.17G</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2796,7 +2796,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.16P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.17G</div>
       </div>
     </div>
 
@@ -2914,7 +2914,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.16P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.17G</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3170,7 +3170,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.16P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.17G</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3802,7 +3802,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.16P';
+const SKE_APP_VERSION='v3.2.17G';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -7720,10 +7720,16 @@ function statusTimeShort(value){
 // แปลงพิกัดเป็นชื่ออำเภอ/จังหวัดจากฝั่งเบราว์เซอร์ แล้วเก็บผลกลับไว้กับพนักงาน
 // เพื่อให้เครื่องอื่นเห็นชื่อพื้นที่ได้ทันทีและไม่ต้องเรียกบริการแปลงพิกัดซ้ำทุกครั้ง
 const SKE_REVERSE_GEOCODE_URL='https://api.bigdatacloud.net/data/reverse-geocode-client';
+const SKE_PHONE_PLACE_TIMEOUT_MS=5000;
+const SKE_PHONE_PLACE_RETRY_MS=20000;
+const SKE_PHONE_PLACE_MAX_CONCURRENCY=4;
 const _skePhonePlacePending=new Set();
 const _skePhonePlaceQueue=[];
 const _skePhonePlaceRetryAfter=new Map();
-let _skePhonePlaceWorkerRunning=false;
+const _skePhonePlaceRetryTimers=new Map();
+const _skePhonePlaceUiState=new Map();
+let _skePhonePlaceActiveWorkers=0;
+let _skePhonePlaceRenderTimer=null;
 let _skePhonePlaceCache=(()=>{
   try{
     const value=JSON.parse(localStorage.getItem('ske_phone_place_cache')||'{}');
@@ -7765,7 +7771,7 @@ async function _skeFetchPhonePlace(loc){
     return {locality:cached.locality||'',province:cached.province||'',countryName:cached.countryName||''};
   }
   const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),7000);
+  const timeout=setTimeout(()=>controller.abort(),SKE_PHONE_PLACE_TIMEOUT_MS);
   try{
     const url=`${SKE_REVERSE_GEOCODE_URL}?latitude=${encodeURIComponent(loc.lat)}&longitude=${encodeURIComponent(loc.lng)}&localityLanguage=th`;
     const response=await fetch(url,{cache:'no-store',signal:controller.signal});
@@ -7793,41 +7799,81 @@ function queueEmployeePhonePlaceLookup(empId,loc){
   if(!empId||!loc||!_skePhonePlaceNeedsResolve(loc))return;
   const key=String(empId);
   if(_skePhonePlacePending.has(key)||Date.now()<Number(_skePhonePlaceRetryAfter.get(key)||0))return;
+  const oldTimer=_skePhonePlaceRetryTimers.get(key);
+  if(oldTimer){
+    clearTimeout(oldTimer);
+    _skePhonePlaceRetryTimers.delete(key);
+  }
   _skePhonePlacePending.add(key);
+  _skePhonePlaceUiState.set(key,'loading');
   _skePhonePlaceQueue.push({empId:key,capturedAt:loc.capturedAt||'',lat:loc.lat,lng:loc.lng});
-  void _skeRunPhonePlaceWorker();
+  _skeRunPhonePlaceWorkers();
 }
 
-async function _skeRunPhonePlaceWorker(){
-  if(_skePhonePlaceWorkerRunning)return;
-  _skePhonePlaceWorkerRunning=true;
-  while(_skePhonePlaceQueue.length){
-    const task=_skePhonePlaceQueue.shift();
-    try{
-      const place=await _skeFetchPhonePlace(task);
-      const emp=(employees||[]).find(e=>e&&String(e.id)===task.empId);
-      const current=getEmployeePhoneLocation(emp);
-      if(place&&current&&_skeGpsDistanceMeters(current,task)<=250){
-        const phoneLocation={
-          ...current,
-          ...place,
-          resolvedAt:new Date().toISOString(),
-          resolvedLat:current.lat,
-          resolvedLng:current.lng
-        };
-        _skeApplyPhoneLocationLocal(task.empId,phoneLocation);
-        await fbPatchEmployee(task.empId,{phoneLocation});
-      }else if(!place){
-        _skePhonePlaceRetryAfter.set(task.empId,Date.now()+5*60*1000);
-      }
-    }catch(error){
-      console.warn('[SKE GPS] แปลงพิกัดเป็นชื่อจังหวัดไม่สำเร็จ',error);
-      _skePhonePlaceRetryAfter.set(task.empId,Date.now()+5*60*1000);
-    }finally{
-      _skePhonePlacePending.delete(task.empId);
+function _skeRefreshPhonePlaceUiSoon(){
+  clearTimeout(_skePhonePlaceRenderTimer);
+  _skePhonePlaceRenderTimer=setTimeout(()=>{
+    const dash=document.getElementById('dashboard');
+    if(dash&&!dash.classList.contains('hidden')&&typeof renderDashboard==='function')renderDashboard();
+  },180);
+}
+
+function _skeSchedulePhonePlaceRetry(task){
+  const key=String(task.empId);
+  const retryAt=Date.now()+SKE_PHONE_PLACE_RETRY_MS;
+  _skePhonePlaceRetryAfter.set(key,retryAt);
+  clearTimeout(_skePhonePlaceRetryTimers.get(key));
+  _skePhonePlaceRetryTimers.set(key,setTimeout(()=>{
+    _skePhonePlaceRetryTimers.delete(key);
+    _skePhonePlaceRetryAfter.delete(key);
+    const emp=(employees||[]).find(e=>e&&String(e.id)===key);
+    const current=getEmployeePhoneLocation(emp);
+    if(current&&_skePhonePlaceNeedsResolve(current))queueEmployeePhonePlaceLookup(key,current);
+  },SKE_PHONE_PLACE_RETRY_MS+100));
+}
+
+async function _skeResolvePhonePlaceTask(task){
+  let resolved=false;
+  try{
+    const place=await _skeFetchPhonePlace(task);
+    const emp=(employees||[]).find(e=>e&&String(e.id)===task.empId);
+    const current=getEmployeePhoneLocation(emp);
+    if(place&&current&&_skeGpsDistanceMeters(current,task)<=250){
+      const phoneLocation={
+        ...current,
+        ...place,
+        resolvedAt:new Date().toISOString(),
+        resolvedLat:current.lat,
+        resolvedLng:current.lng
+      };
+      resolved=true;
+      _skePhonePlaceUiState.delete(task.empId);
+      _skePhonePlaceRetryAfter.delete(task.empId);
+      clearTimeout(_skePhonePlaceRetryTimers.get(task.empId));
+      _skePhonePlaceRetryTimers.delete(task.empId);
+      _skeApplyPhoneLocationLocal(task.empId,phoneLocation);
+      await fbPatchEmployee(task.empId,{phoneLocation});
     }
+  }catch(error){
+    console.warn('[SKE GPS] แปลงพิกัดเป็นชื่อจังหวัดไม่สำเร็จ',error);
+  }finally{
+    if(!resolved){
+      _skePhonePlaceUiState.set(task.empId,'retry');
+      _skeSchedulePhonePlaceRetry(task);
+    }
+    _skePhonePlacePending.delete(task.empId);
+    _skePhonePlaceActiveWorkers=Math.max(0,_skePhonePlaceActiveWorkers-1);
+    _skeRefreshPhonePlaceUiSoon();
+    _skeRunPhonePlaceWorkers();
   }
-  _skePhonePlaceWorkerRunning=false;
+}
+
+function _skeRunPhonePlaceWorkers(){
+  while(_skePhonePlaceActiveWorkers<SKE_PHONE_PLACE_MAX_CONCURRENCY&&_skePhonePlaceQueue.length){
+    const task=_skePhonePlaceQueue.shift();
+    _skePhonePlaceActiveWorkers++;
+    void _skeResolvePhonePlaceTask(task);
+  }
 }
 
 function getEmployeePhoneLocation(e){
@@ -7852,7 +7898,10 @@ function renderEmployeePhoneLocation(e){
   const accuracyText=Number.isFinite(accuracy)?` · ±${Math.round(accuracy)} ม.`:'';
   const timeText=Number.isFinite(capturedMs)?fmt(loc.capturedAt):'ไม่ระบุเวลา';
   const placeParts=[String(loc.locality||'').trim(),String(loc.province||'').trim()].filter((value,index,array)=>value&&array.indexOf(value)===index);
-  const placeText=placeParts.length?placeParts.join(' · '):'กำลังระบุอำเภอ/จังหวัด...';
+  const placeState=_skePhonePlaceUiState.get(String(e.id));
+  const placeText=placeParts.length
+    ?placeParts.join(' · ')
+    :(placeState==='retry'?'ยังระบุจังหวัดไม่ได้ — กำลังลองใหม่...':'กำลังระบุอำเภอ/จังหวัด...');
   const latText=loc.lat.toFixed(5),lngText=loc.lng.toFixed(5);
   const mapUrl=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(latText+','+lngText)}`;
   return `<div class="ske-status-person-location ${freshness}">
