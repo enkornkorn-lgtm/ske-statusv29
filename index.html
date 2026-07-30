@@ -721,7 +721,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.12R');
+  console.log('[SKE TRUCK] app version: v3.2.13S');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2712,7 +2712,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.12R</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.13S</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2720,7 +2720,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.12R</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.13S</div>
       </div>
     </div>
 
@@ -2838,7 +2838,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.12R</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.13S</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3094,7 +3094,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.12R</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.13S</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3726,7 +3726,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.12R';
+const SKE_APP_VERSION='v3.2.13S';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -7439,13 +7439,12 @@ function updateLeaveBadge(){
 
 // รายชื่อพนักงานแบบเรียบ (ไม่จัดกลุ่มจังหวัด) ใช้กับสถานะอื่นๆ ที่ไม่ใช่ standby/traveling
 function renderStatusEmployeeList(st){
-  const todayISO=todayStrJP();
   const list=_dedupByPlate(employees).filter(e=>{
     if(e.status!==st.id||isLeaveActiveToday(e))return false;
-    // รถร่วมในสถานะ "ได้งานแล้ว" — ถ้าวันที่ของงานที่จ่ายไปไม่ตรงกับวันนี้อีกต่อไป (ผ่านไปแล้ว) ให้หายจากลิสต์นี้ไปเลย
-    // เพราะรถร่วมไม่ได้ใช้แอปเอง ไม่มีทางอัพเดทสถานะตัวเองเมื่อจบงานแล้ว ถ้าไม่กรองจะค้างโชว์เป็นข้อมูลเก่าเรื่อยๆ
-    // (ไม่แตะ/ไม่เปลี่ยนสถานะจริงในฐานข้อมูลเลย แค่ไม่นำมาแสดงในลิสต์นี้เท่านั้น ยังดูได้จากหน้าจัดการพนักงานตามปกติ)
-    if(st.id==='got_job'&&e.position==='รถร่วม'&&e.jobWorkDate&&e.jobWorkDate!==todayISO)return false;
+    // รถร่วมในสถานะ "ได้งานแล้ว" ต้องแสดงทันทีทั้งงานวันนี้และงานอนาคต เพื่อให้ส่วนกลางรู้ว่ารถคันนี้มีงานแล้ว
+    // ซ่อนเฉพาะงานย้อนหลังที่ค้างอยู่ เพราะรถร่วมไม่ได้ใช้แอปเองและอาจไม่มีผู้กดจบงาน
+    // (ไม่แตะ/ไม่เปลี่ยนสถานะจริงในฐานข้อมูล แค่ไม่นำงานย้อนหลังมาแสดงในลิสต์นี้)
+    if(st.id==='got_job'&&e.position==='รถร่วม'&&e.jobWorkDate&&isPastWorkDate(e.jobWorkDate))return false;
     return true;
   });
   if(!list.length)return'';
