@@ -721,7 +721,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v2026.07.30-dev-v3.2.2.9-shared-truck-permissions-app-check-v3');
+  console.log('[SKE TRUCK] app version: v2026.07.30-dev-v3.2.2.10-finish-job-flow-app-check-v3');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2712,7 +2712,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.30-dev-v3.2.2.9-shared-truck-permissions-app-check-v3</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.30-dev-v3.2.2.10-finish-job-flow-app-check-v3</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2720,7 +2720,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.30-dev-v3.2.2.9-shared-truck-permissions-app-check-v3</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v2026.07.30-dev-v3.2.2.10-finish-job-flow-app-check-v3</div>
       </div>
     </div>
 
@@ -2838,7 +2838,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.30-dev-v3.2.2.9-shared-truck-permissions-app-check-v3</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v2026.07.30-dev-v3.2.2.10-finish-job-flow-app-check-v3</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3094,7 +3094,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.30-dev-v3.2.2.9-shared-truck-permissions-app-check-v3</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v2026.07.30-dev-v3.2.2.10-finish-job-flow-app-check-v3</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3520,6 +3520,10 @@ const STATUSES=[
   {id:"repairing",  label:"กำลังซ่อมรถอยู่",       ic:"wrench",   emoji:"🔧",color:"#B91C1C",bg:"#FEF2F2",border:"#FCA5A5"},
   {id:"done",       label:"สแตนบายว่างงาน",        ic:"idle",     emoji:"✅",color:"#065F46",bg:"#ECFDF5",border:"#6EE7B7"},
 ];
+// "จบงาน" เป็นคำสั่งเปลี่ยนผ่านสำหรับหน้าพนักงาน ไม่ใช่สถานะที่บันทึกค้างในฐานข้อมูล:
+// เมื่อกดแล้ว ระบบจะเลื่อนงาน queued เป็น got_job หรือเปลี่ยนเป็น done หากไม่มีงานถัดไป
+const FINISH_JOB_STATUS={id:"finish_job",label:"จบงาน",ic:"idle",emoji:"🏁",color:"#047857",bg:"#ECFDF5",border:"#34D399"};
+const EMPLOYEE_FINISHABLE_STATUSES=new Set(['got_job','loading_bay','unload_bay','loading','unloading','traveling','returning']);
 const INACTIVE_STATUS={id:"inactive",label:"ยังไม่ได้ผูกรถ (ถูกสลับออก)",ic:"idle",emoji:"⚪",color:"#64748B",bg:"#F1F5F9",border:"#CBD5E1"};
 function getS(id){if(id==='inactive')return INACTIVE_STATUS;return STATUSES.find(s=>s.id===id)||STATUSES.find(s=>s.id==='standby')||STATUSES[0];}
 // ── กันข้อมูลซ้ำ: ถ้ามีพนักงาน 2 คนขึ้นไปถือทะเบียนรถเดียวกันพร้อมกัน (เช่น แก้ไขโปรไฟล์ตรงๆ โดยไม่ผ่าน "สลับคนขับ"
@@ -3722,7 +3726,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v2026.07.30-dev-v3.2.2.9-shared-truck-permissions-app-check-v3';
+const SKE_APP_VERSION='v2026.07.30-dev-v3.2.2.10-finish-job-flow-app-check-v3';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -6477,13 +6481,15 @@ function provHTML(sid,curProv){
     standby:`${skeIcon('pin')} จังหวัดที่สแตนบาย`,
     traveling:`🏁 จังหวัดปลายทาง`,
     returning:`🔁 จังหวัดที่กำลังไหลกลับผ่าน/ปลายทางขากลับ`,
-    done:`${skeIcon('pin')} จังหวัดที่ว่างงาน`
+    done:`${skeIcon('pin')} จังหวัดที่ว่างงาน`,
+    finish_job:`${skeIcon('pin')} จังหวัดที่จะสแตนบายหลังจบงาน`
   };
   const phs={
     standby:'พิมพ์ค้นหาจังหวัด...',
     traveling:'พิมพ์ค้นหาปลายทาง...',
     returning:'พิมพ์ค้นหาจังหวัด...',
-    done:'พิมพ์ค้นหาจังหวัด...'
+    done:'พิมพ์ค้นหาจังหวัด...',
+    finish_job:'พิมพ์ค้นหาจังหวัด...'
   };
   if(!titles[sid])return'';
   // ใช้ input+datalist แทน select เดิม เพื่อให้พิมพ์ค้นหาจังหวัดได้ (native select ธรรมดาเลื่อนหาอย่างเดียว)
@@ -7504,6 +7510,12 @@ function openStatusModal(){
   _selProv=me.province||'';
   closeStatusModal(false);
   editOpen=true; // สำคัญ: กันไม่ให้ renderDashboard (ที่ทำงานพื้นหลังตอนมีข้อมูลอัพเดทจากคนอื่น) มาทับค่าที่กำลังกรอกอยู่ในฟอร์มนี้
+  const canFinishJob=Boolean(getCurrentEmployeeJobRow(me))||EMPLOYEE_FINISHABLE_STATUSES.has(me.status);
+  // ระหว่างมีงาน ให้ใช้ปุ่ม "จบงาน" เพื่อปิดแถวงานและจัดการคิวอย่างถูกต้อง
+  // จึงซ่อนปุ่มสแตนบายว่างงานที่เคยทำหน้าที่นี้แบบไม่ชัดเจน
+  const employeeStatusOptions=canFinishJob
+    ?STATUSES.filter(st=>st.id!=='done').concat([FINISH_JOB_STATUS])
+    :STATUSES;
   const modal=document.createElement('div');
   modal.id='statusEditModal';
   modal.className='status-modal';
@@ -7517,7 +7529,7 @@ function openStatusModal(){
         <button class="status-close" onclick="closeStatusModal()">✕</button>
       </div>
       <div class="inp-label">เลือกสถานะ</div>
-      <div class="status-grid">${STATUSES.map(st=>{
+      <div class="status-grid">${employeeStatusOptions.map(st=>{
         const meOffice=!canSelfUpdateVehicleStatus(me.position);
         const disabled=meOffice&&st.id==='standby';
         return`
@@ -7571,7 +7583,7 @@ function selStat(id){
   const curSel=document.getElementById('provSel');
   if(curSel)_selProv=curSel.value;
   _selStatus=id;
-  STATUSES.forEach(st=>{
+  [...STATUSES,FINISH_JOB_STATUS].forEach(st=>{
     const b=document.getElementById('sopt_'+st.id);if(!b)return;
     b.style.borderColor=id===st.id?st.color:'#E8EAF0';
     b.style.color=id===st.id?st.color:'#888';
@@ -7581,7 +7593,7 @@ function selStat(id){
   const w=document.getElementById('provWrap');
   if(w){
     const isOffice=!canSelfUpdateVehicleStatus(currentUser?.position)||!(currentUser&&currentUser.plate);
-    w.innerHTML=isOffice?'<div style="font-size:11.5px;color:#94A3B8;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:8px 10px;">📍 ไม่ต้องระบุจังหวัดสแตนบาย (ไม่มีสิทธิ์ติดตามรถหรือยังไม่มีทะเบียน)</div>':provHTML(id,(id==='standby'||id==='traveling'||id==='returning'||id==='done')?_selProv:'');
+    w.innerHTML=isOffice?'<div style="font-size:11.5px;color:#94A3B8;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:8px 10px;">📍 ไม่ต้องระบุจังหวัดสแตนบาย (ไม่มีสิทธิ์ติดตามรถหรือยังไม่มีทะเบียน)</div>':provHTML(id,(id==='standby'||id==='traveling'||id==='returning'||id==='done'||id==='finish_job')?_selProv:'');
   }
 }
 
@@ -7607,13 +7619,15 @@ async function doSave(){
   const note=document.getElementById('noteInp')?.value||'';
   const provSel=document.getElementById('provSel');
   const empId=currentUser.id;
+  const prev=employees.find(e=>e.id===empId);
+  const isFinishAction=_selStatus==='finish_job';
   // พนักงานตำแหน่งออฟฟิศ (เช่นแอดมิน) หรือไม่มีทะเบียนรถผูกอยู่ ไม่ต้องเลือกจังหวัดสแตนบาย
   const isOffice=!canSelfUpdateVehicleStatus(currentUser?.position)||!(currentUser&&currentUser.plate);
   if(isOffice&&_selStatus==='standby'){
     alert('⚠️ ตำแหน่งนี้ไม่สามารถเลือกสถานะ "สแตนบายรอขึ้นงาน" ได้');
     return;
   }
-  const needProv=!isOffice&&(_selStatus==='standby'||_selStatus==='traveling'||_selStatus==='returning'||_selStatus==='done');
+  const needProv=!isOffice&&(_selStatus==='standby'||_selStatus==='traveling'||_selStatus==='returning'||_selStatus==='done'||isFinishAction);
   const prov=needProv?String((provSel?provSel.value:_selProv)||'').trim():'';
   if(needProv&&!prov){
     alert('⚠️ กรุณาเลือกจังหวัดก่อนบันทึกสถานะ');
@@ -7627,11 +7641,12 @@ async function doSave(){
   }
   const now=new Date().toISOString();
   // บันทึก standbyAt เมื่อเปลี่ยนมาเป็น standby ครั้งแรก
-  const prev=employees.find(e=>e.id===empId);
   const standbyAt=(_selStatus==='standby'&&prev?.status!=='standby')?now:(prev?.standbyAt||null);
-  // เมื่อพนักงานกด "สแตนบายว่างงาน" ถือว่าจบงานปัจจุบัน:
+  // "จบงาน" เป็นคำสั่งเปลี่ยนผ่าน:
   // ปิดแถวงานเดิม แล้วเลื่อนงาน queued แรกขึ้นเป็น "ได้งานแล้ว" อัตโนมัติ
-  const promotedJob=_selStatus==='done'?await finishCurrentJobAndPromoteNext(prev):null;
+  // หากไม่มีงาน queued จะบันทึกสถานะปลายทางเป็น "สแตนบายว่างงาน"
+  const promotedJob=isFinishAction?await finishCurrentJobAndPromoteNext(prev):null;
+  const finalStatus=isFinishAction?'done':_selStatus;
   const patch=promotedJob?{
     status:'got_job',
     province:'',
@@ -7645,14 +7660,14 @@ async function doSave(){
     previousNote:note,
     previousStandbyAt:null
   }:{
-    status:_selStatus,
+    status:finalStatus,
     province:prov,
     note,
     updatedAt:now,
-    standbyAt:_selStatus==='standby'?standbyAt:null,
-    ...clearJobLinkWhenLeavingGotJob(_selStatus)
+    standbyAt:finalStatus==='standby'?standbyAt:null,
+    ...clearJobLinkWhenLeavingGotJob(finalStatus)
   };
-  recordRunLogIfNeeded(prev,_selStatus,note,empId,prev?.plate||currentUser.plate,prev?.name||currentUser.name);
+  recordRunLogIfNeeded(prev,finalStatus,note,empId,prev?.plate||currentUser.plate,prev?.name||currentUser.name);
   const reapplySavedPatch=()=>{
     employees=(employees||[]).map(e=>e&&e.id===empId?{...e,...patch}:e);
     if(currentUser?.id===empId)currentUser={...currentUser,...patch};
@@ -7682,6 +7697,8 @@ async function doSave(){
     renderDashboard();
     if(promotedJob){
       showDocUploadToast('✅ จบงานเดิมแล้ว — ระบบเลื่อนงานถัดไปขึ้นเป็น "ได้งานแล้ว" อัตโนมัติ',true);
+    }else if(isFinishAction){
+      showDocUploadToast('✅ จบงานแล้ว — ไม่มีงานถัดไป ระบบเปลี่ยนเป็น "สแตนบายว่างงาน" อัตโนมัติ',true);
     }else{
       showEmployeeStatusSavedPopup();
     }
@@ -8574,12 +8591,19 @@ function getOpenEmployeeJobRows(empId,excludeRowId){
 }
 function getCurrentEmployeeJobRow(emp,excludeRowId){
   if(!emp)return null;
-  const rows=getOpenEmployeeJobRows(emp.id,excludeRowId);
   const linkedId=String(emp.currentJobPlanId||'');
   if(linkedId){
-    const linked=rows.find(r=>String(r.id)===linkedId);
+    // งานอาจเริ่มก่อนเที่ยงคืนและมาจบในวันถัดไป จึงต้องหาแถวที่ผูกไว้โดยตรง
+    // โดยไม่ตัดทิ้งเพียงเพราะ workDate กลายเป็นวันย้อนหลังแล้ว
+    const linked=(jobPlanRows||[]).find(r=>r&&r.dispatched
+      &&String(r.empId||'')===String(emp.id||'')
+      &&r.id!==excludeRowId
+      &&String(r.id)===linkedId
+      &&!isCancelledJobPlanRow(r)
+      &&!JOB_ASSIGNMENT_DONE_STATES.has(r.assignmentState));
     if(linked)return linked;
   }
+  const rows=getOpenEmployeeJobRows(emp.id,excludeRowId);
   const explicit=rows.find(r=>r.assignmentState==='active');
   if(explicit)return explicit;
   // รองรับข้อมูลเก่าก่อนมี assignmentState: ถ้าสถานะบอกว่ากำลังทำงาน ให้ถือแถวแรกที่จ่ายแล้วเป็นงานปัจจุบัน
@@ -8650,7 +8674,7 @@ function renderJobPlanRowTR(row){
     </td>
     <td style="padding:6px;text-align:center;min-width:76px;white-space:nowrap;position:sticky;right:0;background:${bg};box-shadow:-4px 0 6px -4px rgba(0,0,0,.15);">
       <button onclick="copyRouteToDate('${row.id}')" title="คัดลอกเส้นทางนี้ไปวันอื่น" style="background:none;border:none;color:#1E90D6;font-size:14px;cursor:pointer;">📋</button>
-      ${row.dispatched?`<span title="${row.assignmentState==='queued'?'จ่ายงานแล้ว — อยู่ในคิวงานถัดไป':(row.assignmentState==='completed'?'จ่ายงานแล้ว — พนักงานจบงานแล้ว':'จ่ายงานแล้ว')}">${row.assignmentState==='queued'?'⏳ ':''}✅</span>`:`
+      ${row.dispatched?`<span title="${row.assignmentState==='queued'?'จ่ายงานแล้ว — อยู่ในคิวงานถัดไป':(row.assignmentState==='completed'?'พนักงานจบงานนี้แล้ว':'จ่ายงานแล้ว')}">${row.assignmentState==='completed'?'🏁 จบงาน':(row.assignmentState==='queued'?'⏳ ✅':'✅')}</span>`:`
         ${row.empId?`<button onclick="dispatchJobPlanRow('${row.id}')" title="จ่ายงานเส้นทางนี้เลย" style="background:none;border:none;color:#059669;font-size:14px;cursor:pointer;">🚀</button>`:''}
         <button onclick="delJobPlanRow('${row.id}')" title="ลบเส้นทางนี้" style="background:none;border:none;color:#DC2626;font-size:14px;cursor:pointer;">🗑️</button>`}
     </td>
