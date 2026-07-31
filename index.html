@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.21G');
+  console.log('[SKE TRUCK] app version: v3.2.22G');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2849,7 +2849,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.21G</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.22G</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2857,7 +2857,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.21G</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.22G</div>
       </div>
     </div>
 
@@ -2975,7 +2975,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.21G</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.22G</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3231,7 +3231,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.21G</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.22G</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3645,17 +3645,18 @@ const SKE_ICONS = {
 function skeIcon(name){const p=SKE_ICONS[name];return p?('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;display:inline-block;vertical-align:-.18em;flex-shrink:0" aria-hidden="true">'+p+'</svg>'):'';}
 window.skeIcon = skeIcon;
 
+// ชุดสีแยกคนละโทนชัดเจน: เขียวเข้ม / น้ำเงิน / เหลือง / ส้ม / ฟ้า / เขียวอมฟ้า / ม่วง / ชมพู / แดง / เขียวมะนาว
 const STATUSES=[
-  {id:"loading_bay",label:"เข้าช่องขึ้นงานแล้ว",sub:"รถเข้าช่องและพร้อมขึ้นสินค้า",ic:"bayin",emoji:"🟢",color:"#15803D",bg:"#F0FDF4",border:"#86EFAC"},
-  {id:"unload_bay", label:"ถึงแล้วรอลงงาน",sub:"รถถึงจุดส่งและรอเข้าช่อง",ic:"arrived",emoji:"🔵",color:"#1D4ED8",bg:"#EFF6FF",border:"#93C5FD"},
-  {id:"loading",    label:"กำลังขึ้นงาน",sub:"กำลังรับสินค้าและเตรียมเดินทาง",ic:"boxup",emoji:"🟡",color:"#92400E",bg:"#FFFBEB",border:"#FCD34D"},
-  {id:"unloading",  label:"กำลังลงงาน",sub:"รถถึงจุดส่งและกำลังปฏิบัติงาน",ic:"boxdown",emoji:"🟠",color:"#C2410C",bg:"#FFF7ED",border:"#FCA5A5"},
-  {id:"traveling",  label:"ออกเดินทาง",sub:"กำลังมุ่งหน้าไปยังปลายทาง",ic:"truck",emoji:"🚛",color:"#0E7490",bg:"#ECFEFF",border:"#67E8F9"},
-  {id:"returning",  label:"กำลังไหลกลับ",sub:"กำลังเดินทางกลับหรือรอถึงจุดพัก",ic:"returning",emoji:"🔁",color:"#0F766E",bg:"#F0FDFA",border:"#5EEAD4"},
-  {id:"standby",    label:"สแตนบายรอขึ้นงาน",sub:"อยู่ระหว่างรอเข้าช่องขึ้นสินค้า",ic:"hourglass",emoji:"⏳",color:"#6D28D9",bg:"#F5F3FF",border:"#C4B5FD"},
-  {id:"got_job",    label:"ได้งานแล้ว",sub:"รับงานแล้ว รอถึงเวลาออกเดินทาง",ic:"box",emoji:"📦",color:"#4F46E5",bg:"#EEF2FF",border:"#A5B4FC"},
-  {id:"repairing",  label:"กำลังซ่อมรถอยู่",sub:"รถอยู่ระหว่างตรวจเช็กหรือซ่อมบำรุง",ic:"wrench",emoji:"🔧",color:"#B91C1C",bg:"#FEF2F2",border:"#FCA5A5"},
-  {id:"done",       label:"สแตนบายว่างงาน",sub:"พร้อมรับงานใหม่",ic:"idle",emoji:"✅",color:"#065F46",bg:"#ECFDF5",border:"#6EE7B7"},
+  {id:"loading_bay",label:"เข้าช่องขึ้นงานแล้ว",sub:"รถเข้าช่องและพร้อมขึ้นสินค้า",ic:"bayin",emoji:"🟢",color:"#15803D",bg:"#F0FDF4",border:"#22C55E"},
+  {id:"unload_bay", label:"ถึงแล้วรอลงงาน",sub:"รถถึงจุดส่งและรอเข้าช่อง",ic:"arrived",emoji:"🔵",color:"#1D4ED8",bg:"#EFF6FF",border:"#3B82F6"},
+  {id:"loading",    label:"กำลังขึ้นงาน",sub:"กำลังรับสินค้าและเตรียมเดินทาง",ic:"boxup",emoji:"🟡",color:"#A16207",bg:"#FEFCE8",border:"#EAB308"},
+  {id:"unloading",  label:"กำลังลงงาน",sub:"รถถึงจุดส่งและกำลังปฏิบัติงาน",ic:"boxdown",emoji:"🟠",color:"#C2410C",bg:"#FFF7ED",border:"#F97316"},
+  {id:"traveling",  label:"ออกเดินทาง",sub:"กำลังมุ่งหน้าไปยังปลายทาง",ic:"truck",emoji:"🚛",color:"#0E7490",bg:"#ECFEFF",border:"#06B6D4"},
+  {id:"returning",  label:"กำลังไหลกลับ",sub:"กำลังเดินทางกลับหรือรอถึงจุดพัก",ic:"returning",emoji:"🔁",color:"#0F766E",bg:"#F0FDFA",border:"#14B8A6"},
+  {id:"standby",    label:"สแตนบายรอขึ้นงาน",sub:"อยู่ระหว่างรอเข้าช่องขึ้นสินค้า",ic:"hourglass",emoji:"⏳",color:"#6D28D9",bg:"#F5F3FF",border:"#8B5CF6"},
+  {id:"got_job",    label:"ได้งานแล้ว",sub:"รับงานแล้ว รอถึงเวลาออกเดินทาง",ic:"box",emoji:"📦",color:"#BE185D",bg:"#FDF2F8",border:"#EC4899"},
+  {id:"repairing",  label:"กำลังซ่อมรถอยู่",sub:"รถอยู่ระหว่างตรวจเช็กหรือซ่อมบำรุง",ic:"wrench",emoji:"🔧",color:"#B91C1C",bg:"#FEF2F2",border:"#EF4444"},
+  {id:"done",       label:"สแตนบายว่างงาน",sub:"พร้อมรับงานใหม่",ic:"idle",emoji:"✅",color:"#3F6212",bg:"#F7FEE7",border:"#84CC16"},
 ];
 // "จบงาน" เป็นคำสั่งเปลี่ยนผ่านสำหรับหน้าพนักงาน ไม่ใช่สถานะที่บันทึกค้างในฐานข้อมูล:
 // เมื่อกดแล้ว ระบบจะเลื่อนงาน queued เป็น got_job หรือเปลี่ยนเป็น done หากไม่มีงานถัดไป
@@ -3863,7 +3864,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.21G';
+const SKE_APP_VERSION='v3.2.22G';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
