@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.20G');
+  console.log('[SKE TRUCK] app version: v3.2.21G');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2740,7 +2740,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 @keyframes docSpin{to{transform:rotate(360deg)}}
 @keyframes docToastIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 
-/* ══ Dashboard status cards V3.2.14D ══ */
+/* ══ Dashboard status cards V3.2.21G — กรอบสีแยกตามสถานะ ══ */
 .ske-summary-date{position:relative;overflow:hidden;text-align:center;margin-bottom:10px;padding:10px 14px;background:linear-gradient(135deg,#7542ED 0%,#168ED9 100%);border-radius:15px;box-shadow:0 8px 20px rgba(59,94,216,.20);}
 .ske-summary-date::after{content:"";position:absolute;inset:auto -28px -50px auto;width:128px;height:128px;border-radius:50%;background:rgba(255,255,255,.10);}
 .ske-summary-date-main{position:relative;z-index:1;font-size:16px;font-weight:900;color:#fff;letter-spacing:.7px;}
@@ -2766,8 +2766,8 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-status-nav-count{position:absolute;top:5px;right:5px;min-width:19px;height:19px;padding:0 4px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:var(--status-bg);border:1px solid var(--status-border);font-size:9px;font-weight:950;}
 .ske-status-board-title{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#475569;font-size:11.5px;font-weight:900;letter-spacing:.3px;margin:3px 2px 9px;}
 .ske-status-board-title span:last-child{font-size:9.5px;color:#A0A8B4;font-weight:700;}
-.ske-status-section{--status-color:#168ED9;--status-bg:#EFF8FF;--status-border:#B9E4F7;position:relative;background:#fff;border-radius:18px;padding:13px 13px 12px;margin-bottom:12px;box-shadow:0 8px 24px rgba(15,23,42,.07);border:1px solid #E7EDF5;scroll-margin-top:84px;transition:box-shadow .2s ease,transform .2s ease;}
-.ske-status-section-head{display:flex;align-items:center;gap:10px;padding-bottom:9px;border-bottom:1px solid #EDF1F6;}
+.ske-status-section{--status-color:#168ED9;--status-bg:#EFF8FF;--status-border:#B9E4F7;position:relative;background:linear-gradient(180deg,var(--status-bg) 0,#fff 58px);border-radius:18px;padding:13px 13px 12px;margin-bottom:12px;box-shadow:0 8px 24px rgba(15,23,42,.07),inset 0 3px 0 var(--status-color);border:2px solid var(--status-border);scroll-margin-top:84px;transition:box-shadow .2s ease,transform .2s ease;}
+.ske-status-section-head{display:flex;align-items:center;gap:10px;padding-bottom:9px;border-bottom:1px solid var(--status-border);}
 .ske-status-icon-tile{width:38px;height:38px;flex:0 0 38px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--status-bg);color:var(--status-color);font-size:20px;box-shadow:inset 0 0 0 1px var(--status-border);}
 .ske-status-heading{flex:1;min-width:0;}
 .ske-status-heading-title{font-size:14px;line-height:1.2;font-weight:950;color:var(--status-color);}
@@ -2779,8 +2779,8 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-status-place-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ske-status-place-count{min-width:21px;height:19px;padding:0 6px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:var(--status-bg);color:var(--status-color);font-size:9.5px;font-weight:950;}
 .ske-status-list{display:flex;flex-direction:column;gap:5px;}
-.ske-status-person{position:relative;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:start;gap:9px;padding:8px 8px 8px 10px;background:#F8FAFC;border-radius:12px;border:1px solid #EEF2F6;overflow:hidden;}
-.ske-status-person::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--status-color);opacity:.78;}
+.ske-status-person{position:relative;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:start;gap:9px;padding:8px 8px 8px 10px;background:linear-gradient(90deg,var(--status-bg) 0,#F8FAFC 34%);border-radius:12px;border:1px solid var(--status-border);overflow:hidden;}
+.ske-status-person::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--status-color);opacity:1;}
 .ske-status-person-main{min-width:0;}
 .ske-status-avatar{position:relative;width:34px!important;height:34px!important;min-width:34px!important;font-size:14px!important;border-radius:11px!important;background:var(--status-bg)!important;color:var(--status-color)!important;box-shadow:none!important;overflow:visible!important;}
 .ske-status-avatar img{width:34px!important;height:34px!important;border-radius:11px!important;}
@@ -2849,7 +2849,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.20G</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.21G</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2857,7 +2857,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.20G</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.21G</div>
       </div>
     </div>
 
@@ -2975,7 +2975,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.20G</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.21G</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3231,7 +3231,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.20G</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.21G</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3863,7 +3863,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.20G';
+const SKE_APP_VERSION='v3.2.21G';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
