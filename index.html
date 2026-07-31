@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.17G');
+  console.log('[SKE TRUCK] app version: v3.2.20G');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1139,6 +1139,67 @@
     employees = (employees || []).map(e => e && e.id === empId ? { ...e, ...patch } : e);
     _skeCacheSet('ske_emp', employees);
   };
+
+  // แคชชื่อพื้นที่จาก GPS แบบใช้ร่วมกันทุกเครื่อง
+  // คีย์เป็นกริดพิกัดปัด 3 ตำแหน่ง (ประมาณ 100 เมตร) และไม่มีอักขระต้องห้ามของ RTDB
+  // การเรียกบริการแปลงพิกัดจริงต้องเกิดบนโทรศัพท์เจ้าของ GPS เท่านั้น ส่วนเครื่องอื่นอ่านผลจากแคชนี้
+  const _sharedPhonePlaceCache = {};
+  window._skeSharedPhonePlaceCache = _sharedPhonePlaceCache;
+  function _safePhonePlaceCacheKey(value) {
+    const key = String(value || '').trim();
+    return /^g_[pm]\d+_[pm]\d+$/.test(key) ? key : '';
+  }
+  window.fbGetPhonePlaceCache = async function(cacheKey) {
+    const key = _safePhonePlaceCacheKey(cacheKey);
+    if (!key) return null;
+    if (_sharedPhonePlaceCache[key]) return { ..._sharedPhonePlaceCache[key] };
+    const snap = await _withTimeout(
+      get(ref(db, 'phonePlaceCache/' + key)),
+      SKE_WRITE_TIMEOUT_MS,
+      'timeout:phone-place-cache-get'
+    );
+    const value = snap.val();
+    if (value && typeof value === 'object') {
+      _sharedPhonePlaceCache[key] = value;
+      return { ...value };
+    }
+    return null;
+  };
+  window.fbSavePhonePlaceCache = async function(cacheKey, value) {
+    const key = _safePhonePlaceCacheKey(cacheKey);
+    if (!key || !value || typeof value !== 'object') return false;
+    const record = {
+      locality: String(value.locality || '').slice(0, 120),
+      province: String(value.province || '').slice(0, 120),
+      countryName: String(value.countryName || '').slice(0, 120),
+      sampleLat: Number(value.sampleLat),
+      sampleLng: Number(value.sampleLng),
+      cachedAt: Number(value.cachedAt) || Date.now(),
+      source: 'employee-phone'
+    };
+    if (!Number.isFinite(record.sampleLat) || !Number.isFinite(record.sampleLng) || (!record.province && !record.locality)) {
+      return false;
+    }
+    _sharedPhonePlaceCache[key] = record;
+    await _withTimeout(
+      update(ref(db), { ['phonePlaceCache/' + key]: record }),
+      SKE_WRITE_TIMEOUT_MS,
+      'timeout:phone-place-cache-save'
+    );
+    return true;
+  };
+  onValue(ref(db, 'phonePlaceCache'), (snapshot) => {
+    const data = snapshot.val();
+    Object.keys(_sharedPhonePlaceCache).forEach(key => delete _sharedPhonePlaceCache[key]);
+    if (data && typeof data === 'object') {
+      Object.entries(data).forEach(([key, value]) => {
+        if (_safePhonePlaceCacheKey(key) && value && typeof value === 'object') {
+          _sharedPhonePlaceCache[key] = value;
+        }
+      });
+    }
+    window.dispatchEvent(new CustomEvent('ske-phone-place-cache-updated'));
+  }, error => console.warn('[SKE GPS] โหลดแคชชื่อพื้นที่ส่วนกลางไม่สำเร็จ', error));
 
   // ลบพนักงานและข้อมูลที่ผูกกับพนักงานคนนั้นจาก Firebase ใน update เดียว
   // พร้อมสร้าง tombstone เพื่อบังคับออกจากระบบทุกเครื่องและกัน cache เก่าฟื้นบัญชีกลับมา
@@ -2788,7 +2849,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.17G</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.20G</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2796,7 +2857,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.17G</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.20G</div>
       </div>
     </div>
 
@@ -2914,7 +2975,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.17G</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.20G</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3170,7 +3231,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.17G</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.20G</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3802,7 +3863,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.17G';
+const SKE_APP_VERSION='v3.2.20G';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -4110,6 +4171,7 @@ async function _skeSendPhoneLocation(position,force=false){
   let phoneLocation=_skePhoneLocationFromPosition(position);
   if(!phoneLocation)return false;
   phoneLocation=_skeCarryPhoneLocationPlace(phoneLocation,currentUser&&currentUser.phoneLocation);
+  phoneLocation=_skeAttachCachedPhonePlace(phoneLocation);
   const now=Date.now();
   const elapsed=now-_skePhoneGpsLastSentAt;
   const moved=_skeGpsDistanceMeters(_skePhoneGpsLastSentCoords,phoneLocation);
@@ -4122,6 +4184,9 @@ async function _skeSendPhoneLocation(position,force=false){
   _skeApplyPhoneLocationLocal(empId,phoneLocation);
   try{
     await fbPatchEmployee(empId,{phoneLocation});
+    if(_skePhonePlaceNeedsResolve(phoneLocation)){
+      queueEmployeePhonePlaceLookup(empId,phoneLocation);
+    }
     return true;
   }catch(error){
     console.warn('[SKE GPS] รอส่งตำแหน่งเมื่อกลับมาออนไลน์',error);
@@ -4163,10 +4228,10 @@ function startEmployeePhoneGps(){
 function getEmployeePhoneLocationForSave(){
   if(!navigator.geolocation||!currentUser)return Promise.resolve(null);
   if(_skePhoneGpsLastPosition&&Date.now()-(Number(_skePhoneGpsLastPosition.timestamp)||0)<=2*60*1000){
-    return Promise.resolve(_skeCarryPhoneLocationPlace(
+    return Promise.resolve(_skeAttachCachedPhonePlace(_skeCarryPhoneLocationPlace(
       _skePhoneLocationFromPosition(_skePhoneGpsLastPosition),
       currentUser.phoneLocation
-    ));
+    )));
   }
   return new Promise(resolve=>{
     let settled=false;
@@ -4177,10 +4242,10 @@ function getEmployeePhoneLocationForSave(){
         clearTimeout(guard);
         _skePhoneGpsLastError=null;
         _skePhoneGpsLastPosition=position;
-        finish(_skeCarryPhoneLocationPlace(
+        finish(_skeAttachCachedPhonePlace(_skeCarryPhoneLocationPlace(
           _skePhoneLocationFromPosition(position),
           currentUser&&currentUser.phoneLocation
-        ));
+        )));
         startEmployeePhoneGps();
       },error=>{
         clearTimeout(guard);
@@ -7723,6 +7788,9 @@ const SKE_REVERSE_GEOCODE_URL='https://api.bigdatacloud.net/data/reverse-geocode
 const SKE_PHONE_PLACE_TIMEOUT_MS=5000;
 const SKE_PHONE_PLACE_RETRY_MS=20000;
 const SKE_PHONE_PLACE_MAX_CONCURRENCY=4;
+// 0 = เก็บถาวร: แคชส่วนกลางของคลัง/ลานจอด/จุดที่รถผ่านซ้ำไม่มีวันหมดอายุ
+const SKE_PHONE_PLACE_CACHE_TTL_MS=0;
+const SKE_PHONE_PLACE_CACHE_RADIUS_M=300;
 const _skePhonePlacePending=new Set();
 const _skePhonePlaceQueue=[];
 const _skePhonePlaceRetryAfter=new Map();
@@ -7737,18 +7805,102 @@ let _skePhonePlaceCache=(()=>{
   }catch(_){return{};}
 })();
 
-function _skePhonePlaceCacheKey(loc){
-  return `${Number(loc.lat).toFixed(3)},${Number(loc.lng).toFixed(3)}`;
+function _skePhonePlaceGridNumber(value){
+  const rounded=Math.round(Number(value)*1000);
+  return `${rounded<0?'m':'p'}${Math.abs(rounded)}`;
 }
 
-function _skeSavePhonePlaceCache(){
+function _skePhonePlaceCacheKey(loc){
+  return `g_${_skePhonePlaceGridNumber(loc.lat)}_${_skePhonePlaceGridNumber(loc.lng)}`;
+}
+
+function _skePhonePlaceCacheCandidateKeys(loc){
+  const lat=Math.round(Number(loc.lat)*1000);
+  const lng=Math.round(Number(loc.lng)*1000);
+  const encode=value=>`${value<0?'m':'p'}${Math.abs(value)}`;
+  const keys=[];
+  for(let dLat=-1;dLat<=1;dLat++){
+    for(let dLng=-1;dLng<=1;dLng++){
+      keys.push(`g_${encode(lat+dLat)}_${encode(lng+dLng)}`);
+    }
+  }
+  return keys;
+}
+
+function _skePersistPhonePlaceCache(){
   try{
     const entries=Object.entries(_skePhonePlaceCache)
       .sort((a,b)=>(b[1]?.cachedAt||0)-(a[1]?.cachedAt||0))
-      .slice(0,120);
+      .slice(0,300);
     _skePhonePlaceCache=Object.fromEntries(entries);
     localStorage.setItem('ske_phone_place_cache',JSON.stringify(_skePhonePlaceCache));
   }catch(_){}
+}
+
+function _skePhonePlaceCacheEntryValid(entry,loc){
+  if(!entry||typeof entry!=='object'||(!entry.province&&!entry.locality))return false;
+  const cachedAt=Number(entry.cachedAt||0);
+  const sampleLat=Number(entry.sampleLat),sampleLng=Number(entry.sampleLng);
+  if(!Number.isFinite(cachedAt)||cachedAt<=0)return false;
+  if(SKE_PHONE_PLACE_CACHE_TTL_MS>0&&Date.now()-cachedAt>SKE_PHONE_PLACE_CACHE_TTL_MS)return false;
+  if(!Number.isFinite(sampleLat)||!Number.isFinite(sampleLng))return false;
+  return _skeGpsDistanceMeters(loc,{lat:sampleLat,lng:sampleLng})<=SKE_PHONE_PLACE_CACHE_RADIUS_M;
+}
+
+function _skeReadPhonePlaceCache(loc){
+  let best=null;
+  const shared=window._skeSharedPhonePlaceCache||{};
+  _skePhonePlaceCacheCandidateKeys(loc).forEach(key=>{
+    [ _skePhonePlaceCache[key], shared[key] ].forEach(entry=>{
+      if(!_skePhonePlaceCacheEntryValid(entry,loc))return;
+      const distance=_skeGpsDistanceMeters(loc,{lat:Number(entry.sampleLat),lng:Number(entry.sampleLng)});
+      if(!best||distance<best.distance)best={entry,key,distance};
+    });
+  });
+  if(!best)return null;
+  const place={
+    locality:String(best.entry.locality||''),
+    province:String(best.entry.province||''),
+    countryName:String(best.entry.countryName||'')
+  };
+  _skePhonePlaceCache[best.key]={...best.entry};
+  _skePersistPhonePlaceCache();
+  return place;
+}
+
+function _skeAttachCachedPhonePlace(loc){
+  if(!loc)return loc;
+  const place=_skeReadPhonePlaceCache(loc);
+  if(!place)return loc;
+  return {
+    ...loc,
+    ...place,
+    resolvedAt:new Date().toISOString(),
+    resolvedLat:loc.lat,
+    resolvedLng:loc.lng,
+    placeSource:'shared-cache'
+  };
+}
+
+function _skeStorePhonePlaceCache(loc,place){
+  if(!loc||!place||(!place.province&&!place.locality))return;
+  const key=_skePhonePlaceCacheKey(loc);
+  const record={
+    locality:String(place.locality||''),
+    province:String(place.province||''),
+    countryName:String(place.countryName||''),
+    sampleLat:Number(loc.lat),
+    sampleLng:Number(loc.lng),
+    cachedAt:Date.now(),
+    source:'employee-phone'
+  };
+  _skePhonePlaceCache[key]=record;
+  _skePersistPhonePlaceCache();
+  if(window.fbSavePhonePlaceCache){
+    window.fbSavePhonePlaceCache(key,record).catch(error=>
+      console.warn('[SKE GPS] บันทึกแคชชื่อพื้นที่ส่วนกลางไม่สำเร็จ',error)
+    );
+  }
 }
 
 function _skePhonePlaceFromResponse(data){
@@ -7764,12 +7916,30 @@ function _skePhonePlaceFromResponse(data){
   };
 }
 
-async function _skeFetchPhonePlace(loc){
-  const key=_skePhonePlaceCacheKey(loc);
-  const cached=_skePhonePlaceCache[key];
-  if(cached&&Date.now()-Number(cached.cachedAt||0)<30*24*60*60*1000){
-    return {locality:cached.locality||'',province:cached.province||'',countryName:cached.countryName||''};
-  }
+// จังหวัดสำรองใช้พิกัด GPS โทรศัพท์จริงเทียบกับศูนย์กลางจังหวัดที่ใกล้ที่สุด
+// ไม่เกี่ยวกับจังหวัดที่พนักงานเลือกในสถานะ และไม่บันทึกค่าประมาณนี้กลับ Firebase
+function _skeNearestProvinceFromGps(loc){
+  const lat=Number(loc&&loc.lat),lng=Number(loc&&loc.lng);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
+  // ป้องกันการแสดงจังหวัดไทยผิด ๆ เมื่อโทรศัพท์อยู่นอกประเทศไทย
+  if(lat<5.4||lat>20.7||lng<97.2||lng>106.0)return null;
+  let nearest=null;
+  Object.entries(PROVINCE_COORDS).forEach(([province,coord])=>{
+    const distance=_skeGpsDistanceMeters({lat,lng},{lat:coord[0],lng:coord[1]});
+    if(!nearest||distance<nearest.distance){
+      nearest={province,distance};
+    }
+  });
+  return nearest;
+}
+
+async function _skeFetchPhonePlace(loc,allowNetwork=false){
+  const cached=_skeReadPhonePlaceCache(loc);
+  if(cached)return cached;
+  // แคชส่วนกลางถูก sync แบบ realtime ไว้ใน window._skeSharedPhonePlaceCache แล้ว
+  // ถ้ายังโหลดไม่ทัน ให้โทรศัพท์เจ้าของตำแหน่งค้นหาจาก GPS ปัจจุบันต่อได้เลย
+  // ไม่วนอ่าน Firebase ทีละช่อง เพราะจะทำให้การแสดงตำแหน่งใหม่ช้าลง
+  if(!allowNetwork)return null;
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),SKE_PHONE_PLACE_TIMEOUT_MS);
   try{
@@ -7778,8 +7948,7 @@ async function _skeFetchPhonePlace(loc){
     if(!response.ok)throw new Error('reverse geocode HTTP '+response.status);
     const place=_skePhonePlaceFromResponse(await response.json());
     if(place){
-      _skePhonePlaceCache[key]={...place,cachedAt:Date.now()};
-      _skeSavePhonePlaceCache();
+      _skeStorePhonePlaceCache(loc,place);
     }
     return place;
   }finally{
@@ -7798,6 +7967,12 @@ function _skePhonePlaceNeedsResolve(loc){
 function queueEmployeePhonePlaceLookup(empId,loc){
   if(!empId||!loc||!_skePhonePlaceNeedsResolve(loc))return;
   const key=String(empId);
+  // บริการฟรีอนุญาตเฉพาะ GPS ปัจจุบันจากโทรศัพท์เครื่องที่ขอตำแหน่งนั้น
+  // หน้าแอดมินและพนักงานคนอื่นจึงอ่านได้เฉพาะแคช ไม่ยิงพิกัดที่เก็บไว้ไปยังบริการภายนอก
+  if(adminMode||!currentUser||String(currentUser.id)!==key)return;
+  const freshPosition=_skePhoneGpsLastPosition&&Date.now()-(Number(_skePhoneGpsLastPosition.timestamp)||0)<=2*60*1000
+    ?_skePhoneLocationFromPosition(_skePhoneGpsLastPosition):null;
+  if(!freshPosition||_skeGpsDistanceMeters(freshPosition,loc)>250)return;
   if(_skePhonePlacePending.has(key)||Date.now()<Number(_skePhonePlaceRetryAfter.get(key)||0))return;
   const oldTimer=_skePhonePlaceRetryTimers.get(key);
   if(oldTimer){
@@ -7806,7 +7981,7 @@ function queueEmployeePhonePlaceLookup(empId,loc){
   }
   _skePhonePlacePending.add(key);
   _skePhonePlaceUiState.set(key,'loading');
-  _skePhonePlaceQueue.push({empId:key,capturedAt:loc.capturedAt||'',lat:loc.lat,lng:loc.lng});
+  _skePhonePlaceQueue.push({empId:key,capturedAt:loc.capturedAt||'',lat:loc.lat,lng:loc.lng,allowNetwork:true});
   _skeRunPhonePlaceWorkers();
 }
 
@@ -7835,7 +8010,7 @@ function _skeSchedulePhonePlaceRetry(task){
 async function _skeResolvePhonePlaceTask(task){
   let resolved=false;
   try{
-    const place=await _skeFetchPhonePlace(task);
+    const place=await _skeFetchPhonePlace(task,task.allowNetwork===true);
     const emp=(employees||[]).find(e=>e&&String(e.id)===task.empId);
     const current=getEmployeePhoneLocation(emp);
     if(place&&current&&_skeGpsDistanceMeters(current,task)<=250){
@@ -7887,9 +8062,9 @@ function getEmployeePhoneLocation(e){
 function renderEmployeePhoneLocation(e){
   const loc=getEmployeePhoneLocation(e);
   if(!loc)return'';
-  if(_skePhonePlaceNeedsResolve(loc)){
-    setTimeout(()=>queueEmployeePhonePlaceLookup(e.id,loc),0);
-  }
+  // ใช้แคชร่วมแสดงผลได้ทุกเครื่อง แต่ไม่ให้หน้าแอดมินยิงพิกัดเก่าของคนอื่นไปยังบริการฟรี
+  const cachedPlace=_skeReadPhonePlaceCache(loc);
+  const displayLoc=cachedPlace?{...loc,...cachedPlace}:loc;
   const captured=new Date(loc.capturedAt||0);
   const capturedMs=captured.getTime();
   const ageMs=Number.isFinite(capturedMs)?Math.max(0,Date.now()-capturedMs):Infinity;
@@ -7897,11 +8072,14 @@ function renderEmployeePhoneLocation(e){
   const accuracy=Number(loc.accuracy);
   const accuracyText=Number.isFinite(accuracy)?` · ±${Math.round(accuracy)} ม.`:'';
   const timeText=Number.isFinite(capturedMs)?fmt(loc.capturedAt):'ไม่ระบุเวลา';
-  const placeParts=[String(loc.locality||'').trim(),String(loc.province||'').trim()].filter((value,index,array)=>value&&array.indexOf(value)===index);
+  const placeParts=[String(displayLoc.locality||'').trim(),String(displayLoc.province||'').trim()].filter((value,index,array)=>value&&array.indexOf(value)===index);
   const placeState=_skePhonePlaceUiState.get(String(e.id));
+  const nearestProvince=placeParts.length?null:_skeNearestProvinceFromGps(loc);
   const placeText=placeParts.length
     ?placeParts.join(' · ')
-    :(placeState==='retry'?'ยังระบุจังหวัดไม่ได้ — กำลังลองใหม่...':'กำลังระบุอำเภอ/จังหวัด...');
+    :(nearestProvince
+      ?`ใกล้จังหวัด${nearestProvince.province} (ประมาณ)`
+      :(placeState==='retry'?'ยังระบุจังหวัดไม่ได้ — กำลังลองใหม่...':'กำลังระบุอำเภอ/จังหวัด...'));
   const latText=loc.lat.toFixed(5),lngText=loc.lng.toFixed(5);
   const mapUrl=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(latText+','+lngText)}`;
   return `<div class="ske-status-person-location ${freshness}">
@@ -8164,6 +8342,9 @@ async function doSave(){
   if(phoneLocation){
     _skePhoneGpsLastSentAt=Date.now();
     _skePhoneGpsLastSentCoords={lat:phoneLocation.lat,lng:phoneLocation.lng};
+    if(_skePhonePlaceNeedsResolve(phoneLocation)){
+      setTimeout(()=>queueEmployeePhonePlaceLookup(empId,phoneLocation),0);
+    }
   }
   recordRunLogIfNeeded(prev,finalStatus,note,empId,prev?.plate||currentUser.plate,prev?.name||currentUser.name);
   const reapplySavedPatch=()=>{
