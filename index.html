@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.23L');
+  console.log('[SKE TRUCK] app version: v3.2.24R');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2887,7 +2887,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.23L</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.24R</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2895,7 +2895,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.23L</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.24R</div>
       </div>
     </div>
 
@@ -3013,7 +3013,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.23L</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.24R</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3269,7 +3269,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.23L</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.24R</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3902,7 +3902,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.23L';
+const SKE_APP_VERSION='v3.2.24R';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -7100,11 +7100,38 @@ function backfillMissedRunLogs(){
     saveRunLogs();
   }
 }
-function getRunLogEntriesForEmployee(e){
+function _runLogMonthKeyFromValue(value){
+  const d=value instanceof Date?value:new Date(value);
+  if(Number.isNaN(d.getTime()))return'';
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit'}).formatToParts(d);
+  const year=parts.find(p=>p.type==='year')?.value||'';
+  const month=parts.find(p=>p.type==='month')?.value||'';
+  return year&&month?`${year}-${month}`:'';
+}
+function _runLogCurrentMonthKey(){return _runLogMonthKeyFromValue(new Date());}
+function _runLogMonthLabel(monthKey){
+  const m=String(monthKey||'').match(/^(\d{4})-(\d{2})$/);
+  if(!m)return'ไม่ระบุเดือน';
+  return new Date(Number(m[1]),Number(m[2])-1,15).toLocaleDateString('th-TH',{month:'long',year:'numeric'});
+}
+function _runLogAvailableMonthsForEmployee(e){
+  if(!e)return[_runLogCurrentMonthKey()];
+  const cutoff=_runLogCutoff();
+  const keys=new Set([_runLogCurrentMonthKey()]);
+  (runLogs||[]).forEach(r=>{
+    if(r.empId!==e.id)return;
+    const time=r.createdAt?new Date(r.createdAt).getTime():NaN;
+    if(Number.isFinite(time)&&time<cutoff)return;
+    const key=_runLogMonthKeyFromValue(r.createdAt);
+    if(key)keys.add(key);
+  });
+  return[...keys].sort((a,b)=>b.localeCompare(a));
+}
+function getRunLogEntriesForEmployee(e,monthKey=_runLogCurrentMonthKey()){
   if(!e)return[];
-  const cutoff=_runLogCutoff(); // แสดงเฉพาะย้อนหลัง 3 เดือนปฏิทิน (เดือนนี้ + 2 เดือนก่อนหน้า)
+  const cutoff=_runLogCutoff(); // ข้อมูลย้อนหลังยังเก็บ 3 เดือนปฏิทิน แต่ยอดแต่ละหน้าจะแยกนับตามเดือนที่เลือก
   return (runLogs||[])
-    .filter(r=>r.empId===e.id&&(!r.createdAt||new Date(r.createdAt).getTime()>=cutoff))
+    .filter(r=>r.empId===e.id&&r.createdAt&&new Date(r.createdAt).getTime()>=cutoff&&_runLogMonthKeyFromValue(r.createdAt)===monthKey)
     .sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
     .map((r,idx)=>({
       no:idx+1,
@@ -7118,7 +7145,9 @@ function getRunLogEntriesForEmployee(e){
     }));
 }
 function renderEmployeeRunLogCard(me){
-  const entries=getRunLogEntriesForEmployee(me);
+  const currentMonthKey=_runLogCurrentMonthKey();
+  const currentMonthLabel=_runLogMonthLabel(currentMonthKey);
+  const entries=getRunLogEntriesForEmployee(me,currentMonthKey);
   const total=entries.reduce((s,x)=>s+(Number(x.trips)||0),0);
   const latest=entries.slice(0,3).map(x=>`<div style="display:flex;gap:8px;align-items:flex-start;background:#fff;border:1px solid #BBF7D0;border-radius:12px;padding:9px 10px;margin-top:8px;">
     <span style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:#DCFCE7;color:#047857;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;">${x.no}</span>
@@ -7139,14 +7168,14 @@ function renderEmployeeRunLogCard(me){
       <div style="display:flex;align-items:center;gap:10px;min-width:0;">
         <div style="width:42px;height:42px;border-radius:50%;background:#DCFCE7;display:flex;align-items:center;justify-content:center;font-size:25px;">🚚</div>
         <div style="min-width:0;">
-          <div style="font-size:14px;font-weight:900;color:#065F46;">บันทึกวิ่งงาน</div>
-          <div style="font-size:11.5px;color:#64748B;line-height:1.35;">นับเฉพาะสถานะออกเดินทาง + หมายเหตุมีคำว่า 6W</div>
+          <div style="font-size:14px;font-weight:900;color:#065F46;">บันทึกวิ่งงาน · ${esc(currentMonthLabel)}</div>
+          <div style="font-size:11.5px;color:#64748B;line-height:1.35;">นับเฉพาะเดือนปัจจุบัน · เดือนก่อนเก็บไว้ในประวัติ</div>
         </div>
       </div>
       <div class="rl-total-box" data-total="${total}" data-revealed="0" onclick="toggleRunLogTotal(this)" style="text-align:center;color:#047857;font-weight:900;font-size:22px;line-height:1;cursor:pointer;min-width:64px;">🙈<div class="rl-hint" style="font-size:10.5px;margin-top:3px;font-weight:700;">แตะเพื่อดู</div></div>
     </div>
     ${entries.length?latest:`<div style="margin-top:10px;background:#fff;border:1px dashed #BBF7D0;border-radius:12px;padding:10px;color:#64748B;font-size:12px;line-height:1.55;">ยังไม่พบเที่ยววิ่งที่นับได้<br>ต้องเป็นสถานะ <b>ออกเดินทาง</b> และในหมายเหตุมีคำว่า <b>6W</b></div>`}
-    <button class="btn btn-green btn-full" style="margin-top:10px;font-size:13px;" onclick="openEmployeeRunLogModal()">ดูเที่ยวงานของฉันทั้งหมด</button>
+    <button class="btn btn-green btn-full" style="margin-top:10px;font-size:13px;" onclick="openEmployeeRunLogModal()">ดูเที่ยวงานและประวัติรายเดือน</button>
   </div>`;
 }
 // สลับซ่อน/แสดงจำนวนเที่ยวรวม — ค่าเริ่มต้นซ่อนไว้เสมอทุกครั้งที่หน้าโหลดใหม่ (ป้องกันหลุดผ่านสกรีนช็อตที่แชร์กลุ่ม)
@@ -7162,10 +7191,13 @@ function toggleRunLogEntryCount(el,ev){
   el.dataset.revealed=revealed?'0':'1';
   el.textContent=revealed?'🙈 •••':el.dataset.trips+' เที่ยว';
 }
-function openEmployeeRunLogModal(){
+let _runLogModalMonthKey='';
+function openEmployeeRunLogModal(keepSelectedMonth=false){
   const me=employees.find(e=>e.id===currentUser?.id)||currentUser;
   if(!me)return;
-  const entries=getRunLogEntriesForEmployee(me);
+  const months=_runLogAvailableMonthsForEmployee(me);
+  if(!keepSelectedMonth||!months.includes(_runLogModalMonthKey))_runLogModalMonthKey=_runLogCurrentMonthKey();
+  const entries=getRunLogEntriesForEmployee(me,_runLogModalMonthKey);
   const total=entries.reduce((s,x)=>s+(Number(x.trips)||0),0);
   const old=document.getElementById('employeeRunLogModal'); if(old)old.remove();
   const modal=document.createElement('div');
@@ -7189,14 +7221,32 @@ function openEmployeeRunLogModal(){
       <div><div style="font-size:18px;font-weight:900;color:#0F172A;">🚚 บันทึกวิ่งงานของฉัน</div><div style="font-size:12px;color:#64748B;margin-top:2px;">${esc(me.name||'-')} · ${esc(me.plate||'-')}</div></div>
       <button onclick="closeEmployeeRunLogModal()" style="width:36px;height:36px;border-radius:50%;background:#F1F5F9;color:#334155;font-size:20px;font-weight:900;">×</button>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:10px 0 8px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:8px 10px;">
+      <label for="employeeRunLogMonthSelect" style="font-size:11.5px;font-weight:900;color:#475569;white-space:nowrap;">📅 เลือกเดือน</label>
+      <select id="employeeRunLogMonthSelect" class="inp" style="margin:0;padding:7px 9px;font-size:12px;" onchange="_runLogModalMonthKey=this.value;openEmployeeRunLogModal(true)">
+        ${months.map(key=>`<option value="${esc(key)}" ${key===_runLogModalMonthKey?'selected':''}>${esc(_runLogMonthLabel(key))}${key===_runLogCurrentMonthKey()?' (เดือนปัจจุบัน)':''}</option>`).join('')}
+      </select>
+    </div>
     <div style="background:#ECFDF5;border:1px solid #BBF7D0;border-radius:14px;padding:12px;color:#065F46;font-weight:900;display:flex;justify-content:space-between;align-items:center;">
-      <span>รวมเที่ยววิ่งที่นับได้</span><span class="rl-total-box" data-total="${total}" data-revealed="0" onclick="toggleRunLogTotal(this)" style="font-size:16px;cursor:pointer;">🙈 แตะเพื่อดู</span>
+      <span>รวมเที่ยววิ่ง ${esc(_runLogMonthLabel(_runLogModalMonthKey))}</span><span class="rl-total-box" data-total="${total}" data-revealed="0" onclick="toggleRunLogTotal(this)" style="font-size:16px;cursor:pointer;">🙈 แตะเพื่อดู</span>
     </div>
     ${list}
   </div>`;
   document.body.appendChild(modal);
 }
 function closeEmployeeRunLogModal(){document.getElementById('employeeRunLogModal')?.remove();}
+
+// เปิดแอปค้างข้ามเดือนก็เริ่มยอดเดือนใหม่ให้อัตโนมัติ โดยข้อมูลเดือนก่อนยังอยู่ในตัวเลือกประวัติ
+let _runLogRenderedMonthKey=_runLogCurrentMonthKey();
+setInterval(()=>{
+  const monthKey=_runLogCurrentMonthKey();
+  if(monthKey===_runLogRenderedMonthKey)return;
+  _runLogRenderedMonthKey=monthKey;
+  _runLogModalMonthKey=monthKey;
+  if(currentUser)renderDashboard();
+  if(document.getElementById('employeeRunLogModal'))openEmployeeRunLogModal(true);
+},60*1000);
+
 // ── ลบเที่ยววิ่งที่บันทึกไว้ 1 รายการ (พนักงานลบของตัวเองได้) ──
 async function doDeleteRunLogEntry(id){
   const log=(runLogs||[]).find(r=>r.id===id);
@@ -7208,7 +7258,7 @@ async function doDeleteRunLogEntry(id){
     runLogs=runLogs.filter(r=>r.id!==id);
     _cacheSet('ske_runlogs',runLogs);
     renderDashboard();
-    if(document.getElementById('employeeRunLogModal'))openEmployeeRunLogModal();
+    if(document.getElementById('employeeRunLogModal'))openEmployeeRunLogModal(true);
   }catch(e){
     console.error('delete run log failed',e);
     alert('❌ ลบเที่ยววิ่งไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
@@ -7242,7 +7292,7 @@ function saveEditRunLogEntry(id){
   saveRunLogs();
   closeEditRunLogModal();
   renderDashboard();
-  if(document.getElementById('employeeRunLogModal'))openEmployeeRunLogModal();
+  if(document.getElementById('employeeRunLogModal'))openEmployeeRunLogModal(true);
 }
 
 // ── สิทธิ์ตำแหน่ง "รถร่วม" ────────────────────────────────────────────────
