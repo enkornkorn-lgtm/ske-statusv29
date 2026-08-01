@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.22G');
+  console.log('[SKE TRUCK] app version: v3.2.23L');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2222,6 +2222,44 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .avatar-upload-overlay span{color:#fff;font-size:18px;}
 .leave-badge{position:absolute;bottom:-3px;right:-3px;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid #FDE68A;display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.25);}
 
+/* ── Admin leave page: current-month compact layout ── */
+.leave-month-head{background:linear-gradient(135deg,#FFF7ED 0%,#FFF 54%,#F5F3FF 100%);border:1.5px solid #FED7AA;border-radius:18px;padding:14px 16px;margin-bottom:12px;box-shadow:0 4px 16px rgba(124,45,18,.06);}
+.leave-month-title-row{display:flex;align-items:center;gap:11px;}
+.leave-month-icon{width:42px;height:42px;border-radius:13px;background:#FFF7ED;border:1.5px solid #FDBA74;color:#C2410C;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.leave-month-icon .ic{width:23px;height:23px;}
+.leave-month-title{font-size:15px;font-weight:900;color:#1E293B;line-height:1.25;}
+.leave-month-sub{font-size:10.5px;color:#64748B;margin-top:3px;}
+.leave-month-total{margin-left:auto;background:#fff;border:1.5px solid #FDBA74;color:#C2410C;border-radius:999px;padding:5px 11px;font-size:11.5px;font-weight:900;white-space:nowrap;}
+.leave-month-stats{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;}
+.leave-month-stat{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:800;border:1px solid;}
+.leave-month-stat strong{font-size:14px;line-height:1;}
+.leave-month-stat.wait{background:#FFFBEB;color:#92400E;border-color:#FCD34D;}
+.leave-month-stat.ok{background:#ECFDF5;color:#047857;border-color:#6EE7B7;}
+.leave-admin-list{display:flex;flex-direction:column;gap:8px;}
+.leave-admin-card{--leave-accent:#F59E0B;background:#fff;border:1px solid #E2E8F0;border-left:4px solid var(--leave-accent);border-radius:14px;box-shadow:0 2px 9px rgba(15,23,42,.045);overflow:hidden;}
+.leave-admin-main{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 12px;}
+.leave-admin-info{min-width:0;}
+.leave-admin-name-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.leave-admin-name{font-size:13.5px;font-weight:900;color:#172033;}
+.leave-admin-meta{font-size:10.8px;color:#64748B;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.leave-admin-range{display:inline-flex;align-items:center;gap:5px;margin-top:5px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:4px 7px;font-size:11.5px;color:#334155;font-weight:750;}
+.leave-admin-note{font-size:11px;color:#64748B;margin-top:5px;line-height:1.45;white-space:pre-wrap;}
+.leave-admin-side{display:flex;flex-direction:column;align-items:flex-end;gap:7px;min-width:180px;}
+.leave-admin-pill{border-radius:999px;padding:3px 9px;font-size:9.5px;font-weight:900;border:1px solid;white-space:nowrap;}
+.leave-admin-actions{display:flex;gap:6px;}
+.leave-admin-actions .btn{padding:6px 10px;font-size:10.8px;min-height:30px;white-space:nowrap;}
+.leave-admin-reply{border-top:1px solid #F1F5F9;background:#FCFDFE;padding:7px 12px;}
+.leave-admin-empty{background:#fff;border:1.5px dashed #CBD5E1;border-radius:16px;padding:34px 16px;text-align:center;color:#64748B;}
+@media(max-width:640px){
+  .leave-month-head{padding:12px;}
+  .leave-month-title{font-size:14px;}
+  .leave-month-total{padding:4px 8px;font-size:10.5px;}
+  .leave-admin-main{grid-template-columns:38px minmax(0,1fr);padding:10px;}
+  .leave-admin-main>.avatar{width:38px!important;height:38px!important;}
+  .leave-admin-side{grid-column:1/-1;min-width:0;flex-direction:row;align-items:center;justify-content:space-between;padding-left:48px;margin-top:-2px;}
+  .leave-admin-actions .btn{padding:6px 8px;font-size:10.3px;}
+}
+
 /* ── Login page ── */
 #login{background:#F5F6FA;overflow-y:auto;}
 .login-inner{max-width:420px;margin:0 auto;padding:24px 16px 100px;}
@@ -2849,7 +2887,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.22G</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.23L</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2857,7 +2895,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.22G</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.23L</div>
       </div>
     </div>
 
@@ -2975,7 +3013,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.22G</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.23L</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3231,7 +3269,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.22G</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.23L</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3864,7 +3902,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.22G';
+const SKE_APP_VERSION='v3.2.23L';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติ — ไม่ต้องมีไฟล์ version.json แยก ไม่ต้องจำอัปเดตคู่กันทุกครั้ง ══
 // ปัญหาที่แก้: พนักงานเปิดแอปค้างไว้นานๆ (ทั้งวัน/หลายวัน) โค้ดที่รันอยู่ในเครื่องจะเป็นเวอร์ชันเดิมตลอด
@@ -6279,7 +6317,7 @@ function markSeenCash(){
 }
 function markSeenLeave(){
   const seen=_loadSeen('leave');
-  employees.filter(e=>e.onLeave).forEach(e=>seen.add(e.id+'_'+e.leaveAt));
+  employees.filter(e=>e.onLeave&&_leaveOverlapsCurrentMonth(e)).forEach(e=>seen.add(_leaveSeenKey(e)));
   _saveSeen('leave',seen);
   updateLeaveBadge();
 }
@@ -6295,7 +6333,7 @@ function _countNewCash(){
 }
 function _countNewLeave(){
   const seen=_loadSeen('leave');
-  return employees.filter(e=>e.onLeave&&!seen.has(e.id+'_'+e.leaveAt)).length;
+  return employees.filter(e=>e.onLeave&&_leaveOverlapsCurrentMonth(e)&&!seen.has(_leaveSeenKey(e))).length;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -7381,6 +7419,34 @@ function fmtLeaveRange(e){
   return fmtD(e.leaveFrom);
 }
 
+// หน้าลาผู้ดูแลยึดตามเดือนปฏิทินปัจจุบันเท่านั้น
+// ถ้าลาคาบเกี่ยวปลายเดือนก่อน/ต้นเดือนนี้ ยังต้องแสดง เพราะมีวันลาอยู่ในเดือนปัจจุบันจริง
+function _leaveCurrentMonthBounds(refDate=new Date()){
+  const y=refDate.getFullYear(),m=refDate.getMonth();
+  const pad=n=>String(n).padStart(2,'0');
+  const start=`${y}-${pad(m+1)}-01`;
+  const lastDay=new Date(y,m+1,0).getDate();
+  const end=`${y}-${pad(m+1)}-${pad(lastDay)}`;
+  return{start,end,year:y,month:m};
+}
+function _leaveOverlapsCurrentMonth(e,refDate=new Date()){
+  if(!e)return false;
+  const rawFrom=e.leaveFrom||e.leaveAt||'';
+  if(!rawFrom)return false;
+  let from=String(rawFrom).slice(0,10);
+  let to=String(e.leaveTo||rawFrom).slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))return false;
+  if(to<from){const swap=from;from=to;to=swap;}
+  const month=_leaveCurrentMonthBounds(refDate);
+  return from<=month.end&&to>=month.start;
+}
+function _leaveCurrentMonthLabel(refDate=new Date()){
+  return refDate.toLocaleDateString('th-TH',{month:'long',year:'numeric'});
+}
+function _leaveSeenKey(e){
+  return `${e?.id||''}_${String(e?.leaveFrom||e?.leaveAt||'').slice(0,10)}_${String(e?.leaveTo||e?.leaveFrom||e?.leaveAt||'').slice(0,10)}`;
+}
+
 // เช็กว่าพนักงานคนนี้อยู่ในช่วงวันลาวันนี้จริงหรือไม่ (รวมวันเริ่มและวันสิ้นสุด)
 function _dateInLeaveRange(fromVal,toVal){
   if(!fromVal)return false;
@@ -7695,75 +7761,81 @@ function buildSummaryHTML(){
 // ── แท็บ "ลา" แยกต่างหาก — รวมรายชื่อพนักงานที่แจ้งลาทั้งหมด พร้อมปุ่มอนุมัติ/ไม่อนุมัติ ──
 function buildLeaveHTML(){
   const isViewer=adminRole==='viewer';
-  const onLeaveList=employees.filter(e=>e.onLeave);
+  // แสดงเฉพาะคำขอที่มีช่วงวันลาคาบเกี่ยวเดือนปัจจุบัน รายการเดือนก่อนยังอยู่ในประวัติแต่ไม่ปนหน้านี้
+  const onLeaveList=employees.filter(e=>e.onLeave&&_leaveOverlapsCurrentMonth(e));
   const pending=onLeaveList.filter(e=>!e.leaveApproval||e.leaveApproval==='pending').length;
   const approved=onLeaveList.filter(e=>e.leaveApproval==='approved').length;
-  // แสดง "ทุกสถานะ" ในหน้านี้ (รออนุมัติ/อนุมัติแล้ว/ไม่อนุมัติ) — เพื่อให้แอดมินเห็นภาพรวมว่าใครลาวันไหนบ้าง แม้กดอนุมัติไปแล้วก็ยังเห็นสถานะอยู่ในหน้าเดิม
-  // (เดิมซ่อนรายการที่อนุมัติแล้วออกจากหน้านี้ ทำให้พอกดอนุมัติปุ๊บ รายการหายไปทันที ต้องไปหาที่ "ดูประวัติการลา" ซึ่งเป็นคนละชุดข้อมูล/มุมมอง)
-  // เรียงให้ "รออนุมัติ" ขึ้นก่อนเสมอ (ต้องรีบดำเนินการ) ตามด้วยเรียงตามวันที่เริ่มลาล่าสุด
-  // เรียงตามวันที่เริ่มลา จากใกล้ถึงก่อนไปหลังสุด (วันที่น้อยกว่าอยู่บน) — ไม่ระบุวันที่ให้ไปอยู่ท้ายสุด
+  const monthLabel=_leaveCurrentMonthLabel();
+  // รออนุมัติขึ้นก่อน จากนั้นเรียงวันเริ่มลาใกล้ไปไกล
   const visibleList=onLeaveList.slice().sort((a,b)=>{
+    const ap=(!a.leaveApproval||a.leaveApproval==='pending')?0:1;
+    const bp=(!b.leaveApproval||b.leaveApproval==='pending')?0:1;
+    if(ap!==bp)return ap-bp;
     if(!a.leaveFrom&&!b.leaveFrom)return 0;
     if(!a.leaveFrom)return 1;
     if(!b.leaveFrom)return -1;
     return a.leaveFrom<b.leaveFrom?-1:a.leaveFrom>b.leaveFrom?1:0;
   });
-  if(!onLeaveList.length){
-    return '<div class="empty-state"><div class="empty-icon">'+skeIcon('leave')+'</div><div class="empty-text">ไม่มีพนักงานลาในขณะนี้</div></div>';
+  let html=`<div class="leave-month-head">
+    <div class="leave-month-title-row">
+      <span class="leave-month-icon">${skeIcon('leave')}</span>
+      <div style="flex:1;min-width:0;">
+        <div class="leave-month-title">รายการลา · ${esc(monthLabel)}</div>
+        <div class="leave-month-sub">แสดงเฉพาะช่วงวันที่คาบเกี่ยวเดือนนี้ · เดือนเก่าอยู่ในประวัติการลา</div>
+      </div>
+      <span class="leave-month-total">${onLeaveList.length} รายการ</span>
+    </div>
+    <div class="leave-month-stats">
+      <span class="leave-month-stat wait"><strong>${pending}</strong> 🕐 รออนุมัติ</span>
+      <span class="leave-month-stat ok"><strong>${approved}</strong> ✅ อนุมัติแล้ว</span>
+    </div>
+  </div>`;
+  if(!visibleList.length){
+    return html+`<div class="leave-admin-empty"><div style="font-size:32px;margin-bottom:8px;">${skeIcon('leave')}</div><div style="font-size:14px;font-weight:900;color:#334155;">ไม่มีรายการลาใน${esc(monthLabel)}</div><div style="font-size:11px;margin-top:4px;">เมื่อพนักงานส่งคำขอลาของเดือนนี้ รายการจะแสดงที่นี่อัตโนมัติ</div></div>`;
   }
-  let html=`
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
-    <div style="background:#fff;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #E8EAF0;">
-      <div style="font-size:22px;font-weight:900;color:#475569;">${onLeaveList.length}</div>
-      <div style="font-size:10px;color:#888;margin-top:2px;">${skeIcon('leave')} ลาทั้งหมด</div>
-    </div>
-    <div style="background:${pending>0?'#FFFBEB':'#fff'};border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${pending>0?'#FCD34D':'#E8EAF0'};">
-      <div style="font-size:22px;font-weight:900;color:${pending>0?'#92400E':'#1E90D6'};">${pending}</div>
-      <div style="font-size:10px;color:#888;margin-top:2px;">🕐 รออนุมัติ</div>
-    </div>
-    <div style="background:#F0FDF4;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid #86EFAC;">
-      <div style="font-size:22px;font-weight:900;color:#10B981;">${approved}</div>
-      <div style="font-size:10px;color:#888;margin-top:2px;">✅ อนุมัติแล้ว</div>
-    </div>
-  </div>
-  <div style="display:flex;flex-direction:column;gap:8px;">
+  html+=`
+  <div class="leave-admin-list">
     ${visibleList.map(e=>{
       const pill=leaveApprovalPill(e);
       const hasReply=!!e.leaveReply;
-      return`<div class="card" style="padding:12px;">
-        <div style="display:flex;align-items:flex-start;gap:10px;">
-          <div class="avatar" style="width:36px;height:36px;font-size:15px;flex-shrink:0;">${esc(e.name.charAt(0))}${leaveIcon(e)}</div>
-          <div style="flex:1;min-width:0;">
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <span style="font-size:13.5px;font-weight:700;color:#1a1a2e;">${esc(e.name)}</span>
-              <span class="pill" style="background:${pill.bg};color:${pill.color};border:1px solid ${pill.border};font-size:9px;padding:1px 7px;">${pill.text}</span>
+      return`<article class="leave-admin-card" style="--leave-accent:${pill.border};">
+        <div class="leave-admin-main">
+          <div class="avatar" style="width:42px;height:42px;font-size:17px;">${avatarImg(e,42)}</div>
+          <div class="leave-admin-info">
+            <div class="leave-admin-name-row">
+              <span class="leave-admin-name">${esc(e.name)}</span>
             </div>
-            <div style="font-size:11px;color:#888;margin-top:2px;">🚘 ${esc(e.plate||'-')}${phoneLink(e.phone)}${lineLink(e.lineId)}</div>
-            <div style="font-size:12px;color:#475569;margin-top:3px;">📅 ${fmtLeaveRange(getActiveLeaveRange(e))}${e.leaveNote?` · ${skeIcon('note')} ${esc(e.leaveNote)}`:''}</div>
+            <div class="leave-admin-meta">🚘 ${esc(e.plate||'-')}${phoneLink(e.phone)}${lineLink(e.lineId)}</div>
+            <div class="leave-admin-range">📅 ${fmtLeaveRange(e)}</div>
+            ${e.leaveNote?`<div class="leave-admin-note">${skeIcon('note')} ${esc(e.leaveNote)}</div>`:''}
+          </div>
+          <div class="leave-admin-side">
+            <span class="leave-admin-pill" style="background:${pill.bg};color:${pill.color};border-color:${pill.border};">${pill.text}</span>
+            ${isViewer?'':`<div class="leave-admin-actions">
+              <button class="btn ${e.leaveApproval==='approved'?'btn-green':'btn-gray'}" onclick="setLeaveApproval('${e.id}','approved')">✅ อนุมัติ</button>
+              <button class="btn btn-gray" onclick="setLeaveApproval('${e.id}','rejected')">❌ ไม่อนุมัติ</button>
+            </div>`}
           </div>
         </div>
-        ${isViewer?'':`<div style="display:flex;gap:6px;margin-top:10px;">
-          <button class="btn btn-sm ${e.leaveApproval==='approved'?'btn-green':'btn-gray'}" style="flex:1;font-size:11.5px;" onclick="setLeaveApproval('${e.id}','approved')">✅ อนุมัติ</button>
-          <button class="btn btn-sm ${e.leaveApproval==='rejected'?'btn-red':'btn-gray'}" style="flex:1;font-size:11.5px;" onclick="setLeaveApproval('${e.id}','rejected')">❌ ไม่อนุมัติ</button>
-        </div>`}
-        <div style="margin-top:9px;border-top:1px solid #F1F5F9;padding-top:8px;">
+        <div class="leave-admin-reply">
           ${isViewer?
-            (hasReply?`<div style="font-size:11px;color:#1E90D6;font-weight:600;">💬 ${esc(e.leaveReply)}<span style="color:#aaa;font-weight:400;"> · ${fmt(e.leaveReplyAt)}</span></div>`:'')
+            (hasReply?`<div style="font-size:11px;color:#1E90D6;font-weight:700;">💬 ${esc(e.leaveReply)}<span style="color:#94A3B8;font-weight:400;"> · ${fmt(e.leaveReplyAt)}</span></div>`:'<div style="font-size:10.5px;color:#94A3B8;">ยังไม่มีข้อความถึงพนักงาน</div>')
           :`
-          <button type="button" style="background:none;border:none;padding:0;width:100%;display:flex;align-items:center;gap:5px;cursor:pointer;color:#1E90D6;font-size:11.5px;font-weight:700;" onclick="const b=document.getElementById('lrbox_${e.id}');b.classList.toggle('hidden');this.querySelector('.lrarrow').style.transform=b.classList.contains('hidden')?'rotate(0deg)':'rotate(180deg)';">
+          <button type="button" style="background:none;border:none;padding:0;width:100%;display:flex;align-items:center;gap:5px;cursor:pointer;color:#1E90D6;font-size:11px;font-weight:800;" onclick="const b=document.getElementById('lrbox_${e.id}');b.classList.toggle('hidden');this.querySelector('.lrarrow').style.transform=b.classList.contains('hidden')?'rotate(0deg)':'rotate(180deg)';">
             <span>${skeIcon('note')}</span>
             <span style="flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${hasReply?esc(e.leaveReply):'ส่งข้อความถึงพนักงาน'}</span>
-            ${hasReply?`<span style="color:#aaa;font-weight:400;flex-shrink:0;">${fmt(e.leaveReplyAt)}</span>`:''}
+            ${hasReply?`<span style="color:#94A3B8;font-weight:400;flex-shrink:0;">${fmt(e.leaveReplyAt)}</span>`:''}
             <span class="lrarrow" style="transition:.2s;flex-shrink:0;">▾</span>
           </button>
           <div id="lrbox_${e.id}" class="hidden" style="margin-top:8px;">
-            <textarea class="inp" id="lr_${e.id}" rows="2" placeholder="เช่น อนุมัติแล้ว กลับมาตรงเวลานะครับ / ติดต่อหัวหน้าก่อนกลับ..." style="font-size:12.5px;">${esc(e.leaveReply||'')}</textarea>
-            <button class="btn btn-blue btn-sm btn-full" style="margin-top:6px;" onclick="saveLeaveReply('${e.id}')">💬 ${hasReply?'อัพเดทข้อความ':'ส่งข้อความถึงพนักงาน'}</button>
+            <textarea class="inp" id="lr_${e.id}" rows="2" placeholder="พิมพ์ข้อความแจ้งพนักงาน..." style="font-size:12px;">${esc(e.leaveReply||'')}</textarea>
+            <button class="btn btn-blue btn-sm btn-full" style="margin-top:6px;" onclick="saveLeaveReply('${e.id}')">💬 ${hasReply?'อัปเดตข้อความ':'ส่งข้อความ'}</button>
           </div>`}
         </div>
-      </div>`;
+      </article>`;
     }).join('')}
-  </div>`;
+  </div>
+  `;
   return html;
 }
 
@@ -7775,6 +7847,18 @@ function updateLeaveBadge(){
   const n=_countNewLeave();
   [badge,navBadge,moreBadge].forEach(b=>{if(!b)return;if(n>0){b.textContent=n;b.classList.remove('hidden');}else b.classList.add('hidden');});
 }
+
+// ถ้าเปิดแอปค้างข้ามเดือน ให้หน้าลาและตัวเลขแจ้งเตือนเปลี่ยนเดือนได้เองโดยไม่ต้องปิดแอป
+let _leaveAdminRenderedMonth=_leaveCurrentMonthBounds().start;
+setInterval(()=>{
+  const monthKey=_leaveCurrentMonthBounds().start;
+  if(monthKey===_leaveAdminRenderedMonth)return;
+  _leaveAdminRenderedMonth=monthKey;
+  const panel=document.getElementById('adminLeavePanel');
+  const content=document.getElementById('adminLeaveContent');
+  if(panel&&content&&!panel.classList.contains('hidden'))content.innerHTML=buildLeaveHTML();
+  updateLeaveBadge();
+},60*1000);
 
 function statusTimeShort(value){
   if(!value)return'ไม่ระบุ';
