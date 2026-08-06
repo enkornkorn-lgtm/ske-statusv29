@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.29P');
+  console.log('[SKE TRUCK] app version: v3.2.30P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2961,7 +2961,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.29P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.30P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2969,7 +2969,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.29P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.30P</div>
       </div>
     </div>
 
@@ -3087,7 +3087,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.29P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.30P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3343,7 +3343,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.29P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.30P</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3979,7 +3979,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.29P';
+const SKE_APP_VERSION='v3.2.30P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -9533,7 +9533,32 @@ function renderJobPlanRowTR(row){
   </tr>`;
 }
 
+// เรียงเฉพาะตอนแสดงผลภายในแต่ละวัน เพื่อให้งานที่ชื่อ/รหัสเส้นทางคล้ายกันอยู่ติดกัน
+// ไม่สลับลำดับข้อมูลจริงใน Firebase จึงไม่กระทบการจ่ายงานหรือรายการที่ทำเสร็จแล้ว
+function jobPlanRouteSortKey(route){
+  return String(route||'')
+    .normalize('NFKC')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s_>\/\\]+/g,'-')
+    .replace(/-+/g,'-');
+}
+function sortJobPlanRowsBySimilarRoute(rows){
+  return (rows||[])
+    .map((row,index)=>({row,index,key:jobPlanRouteSortKey(row?.route)}))
+    .sort((a,b)=>{
+      if(!a.key&&b.key)return 1;
+      if(a.key&&!b.key)return-1;
+      const byRoute=a.key.localeCompare(b.key,['en','th'],{numeric:true,sensitivity:'base'});
+      if(byRoute)return byRoute;
+      const byTime=String(a.row?.standbyTime||'').localeCompare(String(b.row?.standbyTime||''),undefined,{numeric:true});
+      return byTime||a.index-b.index;
+    })
+    .map(item=>item.row);
+}
+
 function renderJobPlanDateGroup(date,rows){
+  const sortedRows=sortJobPlanRowsBySimilarRoute(rows);
   return `<div style="margin-bottom:18px;">
     <div style="background:linear-gradient(90deg,#F97316,#FB923C);color:#fff;font-weight:800;font-size:13px;padding:9px 14px;border-radius:10px 10px 0 0;">
       📅 แผนงานวันที่ ${fmtJobDateFull(date)}
@@ -9549,7 +9574,7 @@ function renderJobPlanDateGroup(date,rows){
           <th style="padding:8px 6px;text-align:left;color:#1E40AF;font-weight:700;font-size:11px;border-bottom:2px solid #BFDBFE;">หมายเหตุ</th>
           <th style="padding:8px 6px;border-bottom:2px solid #BFDBFE;position:sticky;right:0;background:#EFF6FF;box-shadow:-4px 0 6px -4px rgba(0,0,0,.15);"></th>
         </tr></thead>
-        <tbody>${rows.map(r=>renderJobPlanRowTR(r)).join('')}</tbody>
+        <tbody>${sortedRows.map(r=>renderJobPlanRowTR(r)).join('')}</tbody>
       </table>
     </div>
     <div style="display:flex;gap:8px;margin-top:6px;">
