@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.30P');
+  console.log('[SKE TRUCK] app version: v3.2.31P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2927,6 +2927,345 @@ select.inp option{background:#fff;color:#1a1a2e;}
   .ske-status-person-time{font-size:9px;}
 }
 
+/* ══ Admin dashboard soft-3D theme V3.2.31P ══ */
+#admin{
+  --ske-3d-ink:#17233B;
+  --ske-3d-muted:#71809A;
+  position:relative;
+  isolation:isolate;
+  background:
+    radial-gradient(circle at 7% 8%,rgba(37,141,255,.14),transparent 27%),
+    radial-gradient(circle at 94% 18%,rgba(123,66,237,.13),transparent 26%),
+    linear-gradient(180deg,#F8FBFF 0%,#F3F6FC 48%,#F7F9FD 100%);
+}
+#admin .topbar{
+  height:66px;
+  margin:9px 12px 0;
+  padding:0 15px;
+  border:1px solid rgba(255,255,255,.96);
+  border-radius:20px;
+  background:linear-gradient(145deg,rgba(255,255,255,.98),rgba(242,247,255,.96));
+  box-shadow:0 13px 28px rgba(35,58,102,.13),inset 0 1px 0 #fff,inset 0 -1px 0 rgba(111,139,190,.12);
+  overflow:hidden;
+}
+#admin .topbar::after{
+  content:"";
+  position:absolute;
+  top:-44px;
+  right:10%;
+  width:180px;
+  height:92px;
+  border-radius:50%;
+  background:rgba(255,255,255,.56);
+  filter:blur(7px);
+  pointer-events:none;
+}
+#admin .topbar>*{position:relative;z-index:1;}
+#admin .topbar-logo{
+  border:1px solid rgba(255,255,255,.95)!important;
+  box-shadow:0 8px 16px rgba(28,73,135,.16),inset 0 1px 0 #fff!important;
+}
+#admin .topbar-title{color:var(--ske-3d-ink);font-size:16px;font-weight:950;}
+#admin .topbar-back{
+  width:40px;
+  height:40px;
+  border:1px solid #DCE6F4;
+  background:linear-gradient(145deg,#FFFFFF,#EAF0F8);
+  color:#50617C;
+  box-shadow:0 7px 13px rgba(40,65,107,.12),inset 0 1px 0 #fff,inset 0 -2px 3px rgba(96,119,158,.09);
+  transition:transform .16s ease,box-shadow .16s ease;
+}
+#admin .topbar-back:active{transform:translateY(2px);box-shadow:0 2px 6px rgba(40,65,107,.13),inset 0 2px 5px rgba(96,119,158,.12);}
+#admin .badge-admin,#admin .badge-viewer{
+  padding:5px 10px;
+  border:1px solid rgba(255,255,255,.7);
+  border-radius:999px;
+  box-shadow:0 6px 12px rgba(104,64,190,.22),inset 0 1px 0 rgba(255,255,255,.38);
+}
+#admin .list-area{
+  padding:18px 16px calc(24px + env(safe-area-inset-bottom,0px));
+  background:transparent;
+}
+#adminSummaryContent{width:100%;max-width:1280px;margin:0 auto;}
+
+.ske-summary-date{
+  min-height:60px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  margin-bottom:14px;
+  padding:12px 16px;
+  border:1px solid rgba(255,255,255,.52);
+  border-radius:21px;
+  background:linear-gradient(135deg,#7542ED 0%,#3C68E4 48%,#1395DB 100%);
+  box-shadow:0 15px 28px rgba(52,89,205,.27),inset 0 1px 0 rgba(255,255,255,.38),inset 0 -2px 5px rgba(25,63,154,.24);
+}
+.ske-summary-date::before{
+  content:"";
+  position:absolute;
+  inset:1px 12% auto;
+  height:42%;
+  border-radius:999px;
+  background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0));
+  pointer-events:none;
+}
+.ske-summary-date::after{right:-16px;bottom:-72px;width:170px;height:170px;background:rgba(255,255,255,.12);}
+.ske-summary-date-main{font-size:17px;text-shadow:0 2px 8px rgba(23,49,128,.24);}
+.ske-summary-date-sub{font-size:11px;color:rgba(255,255,255,.88);}
+
+.ske-summary-metrics{gap:16px;margin-bottom:18px;}
+.ske-summary-metric{
+  position:relative;
+  min-height:126px;
+  display:grid;
+  grid-template-columns:72px minmax(0,1fr);
+  align-items:center;
+  gap:14px;
+  padding:18px 22px;
+  overflow:hidden;
+  border:1px solid #DCE6F3;
+  border-radius:23px;
+  background:linear-gradient(145deg,#FFFFFF 0%,#F3F7FD 100%);
+  box-shadow:0 15px 28px rgba(38,61,103,.14),inset 0 1px 0 #fff,inset 0 -2px 5px rgba(91,117,159,.10);
+  transition:transform .18s ease,box-shadow .18s ease;
+}
+.ske-summary-metric::after{
+  content:"";
+  position:absolute;
+  top:-42px;
+  right:-30px;
+  width:150px;
+  height:96px;
+  border-radius:50%;
+  background:rgba(255,255,255,.72);
+  transform:rotate(12deg);
+  pointer-events:none;
+}
+.ske-summary-metric.warn{background:linear-gradient(145deg,#FFFDFD,#FFF1F1);border-color:#FFB2B2;}
+.ske-summary-metric.ok{background:linear-gradient(145deg,#FFFFFF,#EEFBF5);border-color:#9AE3C1;}
+.ske-summary-metric-icon{
+  position:relative;
+  z-index:1;
+  width:70px;
+  height:70px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid #CFE1F7;
+  border-radius:23px;
+  background:linear-gradient(145deg,#EEF7FF,#DCEEFF);
+  color:#198DE2;
+  font-size:34px;
+  box-shadow:0 12px 20px rgba(32,111,189,.20),inset 0 2px 1px rgba(255,255,255,.92),inset 0 -3px 6px rgba(63,130,194,.12);
+}
+.ske-summary-metric.warn .ske-summary-metric-icon{border-color:#FFD0D0;background:linear-gradient(145deg,#FFF7F7,#FFE3E3);color:#EF3F47;box-shadow:0 12px 20px rgba(211,57,69,.18),inset 0 2px 1px #fff,inset 0 -3px 6px rgba(211,57,69,.11);}
+.ske-summary-metric.ok .ske-summary-metric-icon{border-color:#B7EACF;background:linear-gradient(145deg,#F5FFF9,#DDF7E9);color:#0EA66E;box-shadow:0 12px 20px rgba(15,166,110,.17),inset 0 2px 1px #fff,inset 0 -3px 6px rgba(15,166,110,.10);}
+.ske-summary-metric-copy{position:relative;z-index:1;min-width:0;text-align:center;}
+.ske-summary-metric-value{font-size:42px;text-shadow:0 4px 10px rgba(22,142,217,.16);}
+.ske-summary-metric.warn .ske-summary-metric-value{text-shadow:0 4px 10px rgba(239,68,68,.14);}
+.ske-summary-metric.ok .ske-summary-metric-value{text-shadow:0 4px 10px rgba(15,185,129,.14);}
+.ske-summary-metric-label{font-size:13px;margin-top:8px;color:#66758D;}
+
+.ske-summary-search{
+  margin-bottom:15px;
+  padding:12px;
+  border:1px solid #DCE6F2;
+  border-radius:23px;
+  background:linear-gradient(145deg,#FFFFFF,#F1F5FB);
+  box-shadow:0 13px 25px rgba(38,61,103,.12),inset 0 1px 0 #fff,inset 0 -2px 4px rgba(93,116,153,.08);
+}
+.ske-summary-search input{
+  min-height:52px;
+  padding:12px 16px;
+  border:1px solid #9AB6D2;
+  border-radius:16px;
+  background:linear-gradient(180deg,#F7FAFE,#FFFFFF);
+  color:var(--ske-3d-ink);
+  font-size:14px;
+  box-shadow:inset 0 3px 7px rgba(38,61,103,.13),0 1px 0 #fff;
+  transition:border-color .16s ease,box-shadow .16s ease;
+}
+.ske-summary-search input:focus{border-color:#2196D3;box-shadow:inset 0 3px 7px rgba(38,61,103,.11),0 0 0 4px rgba(33,150,211,.14);}
+.ske-summary-search input::placeholder{color:#7A879B;opacity:1;}
+
+.ske-status-nav-label{margin:8px 4px 10px;color:#44536B;font-size:12px;}
+.ske-status-nav-hint{font-size:10px;color:#94A0B2;}
+.ske-status-nav{gap:13px;padding:2px 0 11px;margin-bottom:16px;}
+.ske-status-nav-btn{
+  min-height:112px;
+  gap:8px;
+  padding:13px 8px 11px;
+  overflow:hidden;
+  border:1px solid var(--status-border);
+  border-radius:21px;
+  background:linear-gradient(145deg,#FFFFFF 15%,var(--status-bg) 145%);
+  box-shadow:0 13px 23px rgba(38,61,103,.13),inset 0 1px 0 #fff,inset 0 -3px 5px rgba(83,104,137,.07);
+  transition:transform .17s ease,box-shadow .17s ease,filter .17s ease;
+}
+.ske-status-nav-btn::before{
+  content:"";
+  position:absolute;
+  inset:1px 10px auto;
+  height:32%;
+  border-radius:999px;
+  background:linear-gradient(180deg,rgba(255,255,255,.84),rgba(255,255,255,0));
+  pointer-events:none;
+}
+.ske-status-nav-btn:active{transform:translateY(2px) scale(.985);box-shadow:0 5px 10px rgba(38,61,103,.13),inset 0 3px 8px rgba(70,96,132,.09);}
+.ske-status-nav-icon{
+  position:relative;
+  z-index:1;
+  width:48px;
+  height:48px;
+  border:1px solid var(--status-border);
+  border-radius:17px;
+  background:linear-gradient(145deg,#FFFFFF,var(--status-bg));
+  font-size:24px;
+  box-shadow:0 9px 16px color-mix(in srgb,var(--status-color) 22%,transparent),inset 0 2px 1px rgba(255,255,255,.92),inset 0 -3px 5px color-mix(in srgb,var(--status-color) 11%,transparent);
+}
+.ske-status-nav-name{position:relative;z-index:1;min-height:0;font-size:11px;line-height:1.3;}
+.ske-status-nav-count{
+  z-index:2;
+  top:9px;
+  right:9px;
+  min-width:27px;
+  height:27px;
+  padding:0 7px;
+  border:1px solid var(--status-border);
+  background:linear-gradient(145deg,#FFFFFF,var(--status-bg));
+  font-size:11px;
+  box-shadow:0 6px 12px color-mix(in srgb,var(--status-color) 20%,transparent),inset 0 1px 0 #fff;
+}
+
+.ske-stale-panel,.ske-urgent-panel{
+  border-radius:21px!important;
+  box-shadow:0 13px 24px rgba(196,48,55,.14),inset 0 1px 0 rgba(255,255,255,.92),inset 0 -2px 5px rgba(211,57,69,.08);
+}
+.ske-stale-row{
+  border-radius:13px!important;
+  box-shadow:0 6px 12px rgba(114,37,42,.08),inset 0 1px 0 #fff;
+}
+.ske-urgent-row{border-radius:11px;padding:6px 8px!important;background:rgba(255,255,255,.54);}
+
+.ske-status-board-title{margin:7px 4px 11px;color:#44536B;font-size:12px;}
+.ske-status-section{
+  padding:15px;
+  margin-bottom:17px;
+  border:1.5px solid var(--status-border);
+  border-radius:23px;
+  background:linear-gradient(180deg,var(--status-bg) 0,#FFFFFF 78px);
+  box-shadow:0 16px 29px rgba(38,61,103,.14),inset 0 3px 0 var(--status-color),inset 0 1px 0 rgba(255,255,255,.94),inset 0 -2px 5px rgba(82,104,138,.07);
+}
+.ske-status-section-head{gap:12px;padding-bottom:12px;}
+.ske-status-icon-tile{
+  width:48px;
+  height:48px;
+  flex-basis:48px;
+  border:1px solid var(--status-border);
+  border-radius:17px;
+  background:linear-gradient(145deg,#FFFFFF,var(--status-bg));
+  font-size:25px;
+  box-shadow:0 9px 16px color-mix(in srgb,var(--status-color) 20%,transparent),inset 0 2px 1px rgba(255,255,255,.9),inset 0 -3px 5px color-mix(in srgb,var(--status-color) 10%,transparent);
+}
+.ske-status-heading-title{font-size:15px;text-shadow:0 2px 8px color-mix(in srgb,var(--status-color) 14%,transparent);}
+.ske-status-heading-sub{font-size:10px;color:#8793A6;}
+.ske-status-count-pill{
+  min-width:58px;
+  height:34px;
+  border:1px solid var(--status-border);
+  background:linear-gradient(145deg,#FFFFFF,var(--status-bg));
+  font-size:13px;
+  box-shadow:0 7px 13px color-mix(in srgb,var(--status-color) 16%,transparent),inset 0 1px 0 #fff;
+}
+.ske-status-body{gap:10px;padding-top:12px;}
+.ske-status-list{gap:8px;}
+.ske-status-person{
+  gap:10px;
+  padding:10px 10px 10px 13px;
+  border:1px solid var(--status-border);
+  border-radius:15px;
+  background:linear-gradient(100deg,var(--status-bg) 0,#FFFFFF 42%,#F9FBFE 100%);
+  box-shadow:0 7px 14px rgba(38,61,103,.09),inset 0 1px 0 #fff,inset 0 -2px 4px rgba(84,106,139,.06);
+}
+.ske-status-person::before{width:5px;box-shadow:2px 0 7px color-mix(in srgb,var(--status-color) 22%,transparent);}
+.ske-status-avatar{box-shadow:0 6px 11px color-mix(in srgb,var(--status-color) 18%,transparent),inset 0 1px 0 #fff!important;}
+.ske-status-person-location{border-radius:9px;box-shadow:inset 0 1px 3px rgba(31,76,61,.08),0 1px 0 #fff;}
+
+#admin>.bottom-nav{
+  margin:0 12px max(9px,env(safe-area-inset-bottom,0px));
+  padding:7px 6px;
+  border:1px solid rgba(255,255,255,.96);
+  border-radius:22px;
+  background:linear-gradient(145deg,rgba(255,255,255,.98),rgba(239,244,251,.97));
+  box-shadow:0 12px 28px rgba(32,52,88,.18),inset 0 1px 0 #fff,inset 0 -2px 4px rgba(88,111,148,.09);
+}
+#admin>.bottom-nav .nav-btn{
+  min-height:55px;
+  margin:0 2px;
+  padding:5px 2px;
+  border:1px solid transparent;
+  border-radius:16px;
+  transition:transform .16s ease,background .16s ease,box-shadow .16s ease;
+}
+#admin>.bottom-nav .nav-btn .nav-icon{
+  width:34px;
+  height:34px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:12px;
+  font-size:21px;
+}
+#admin>.bottom-nav .nav-btn.active{
+  border-color:#D7E5F5;
+  background:linear-gradient(145deg,#FFFFFF,#EAF2FB);
+  box-shadow:0 7px 13px rgba(37,72,122,.13),inset 0 1px 0 #fff,inset 0 -2px 4px rgba(77,105,145,.08);
+}
+#admin>.bottom-nav .nav-btn.active .nav-icon{background:linear-gradient(145deg,#F7FBFF,#DCEEFF);box-shadow:0 6px 12px rgba(30,144,214,.15),inset 0 1px 0 #fff;}
+#admin>.bottom-nav .nav-btn:active{transform:translateY(2px) scale(.98);}
+#admin .nav-bottom-badge{top:2px;right:7px;box-shadow:0 5px 10px rgba(239,68,68,.27),inset 0 1px 0 rgba(255,255,255,.45);}
+
+#admin button:focus-visible,#admin input:focus-visible{outline:3px solid rgba(33,150,211,.30);outline-offset:2px;}
+@media (hover:hover) and (pointer:fine){
+  .ske-summary-metric:hover{transform:translateY(-3px);box-shadow:0 19px 34px rgba(38,61,103,.17),inset 0 1px 0 #fff;}
+  .ske-status-nav-btn:hover{transform:translateY(-3px);box-shadow:0 17px 28px rgba(38,61,103,.16),inset 0 1px 0 #fff;filter:saturate(1.04);}
+  .ske-status-count-pill:hover{transform:translateY(-1px);}
+}
+@media (max-width:560px){
+  #admin .topbar{height:60px;margin:7px 8px 0;padding:0 10px;border-radius:17px;}
+  #admin .topbar-logo{width:38px!important;height:38px!important;}
+  #admin .topbar-back{width:36px;height:36px;}
+  #admin .list-area{padding:13px 10px calc(18px + env(safe-area-inset-bottom,0px));}
+  .ske-summary-date{min-height:54px;margin-bottom:11px;border-radius:18px;padding:10px 12px;}
+  .ske-summary-date-main{font-size:15px;}
+  .ske-summary-metrics{gap:9px;margin-bottom:12px;}
+  .ske-summary-metric{min-height:100px;grid-template-columns:48px minmax(0,1fr);gap:7px;padding:13px 9px;border-radius:18px;}
+  .ske-summary-metric-icon{width:46px;height:46px;border-radius:15px;font-size:23px;}
+  .ske-summary-metric-value{font-size:31px;}
+  .ske-summary-metric-label{font-size:10.5px;margin-top:6px;white-space:normal;}
+  .ske-summary-search{padding:9px;margin-bottom:12px;border-radius:18px;}
+  .ske-summary-search input{min-height:47px;padding:10px 12px;border-radius:13px;font-size:12.5px;}
+  .ske-status-nav{gap:7px;margin-bottom:12px;}
+  .ske-status-nav-btn{min-height:88px;gap:5px;padding:10px 3px 8px;border-radius:16px;}
+  .ske-status-nav-icon{width:39px;height:39px;border-radius:13px;font-size:20px;}
+  .ske-status-nav-name{font-size:9px;}
+  .ske-status-nav-count{top:6px;right:6px;min-width:22px;height:22px;padding:0 5px;font-size:9px;}
+  .ske-status-section{padding:12px 10px;margin-bottom:13px;border-radius:18px;}
+  .ske-status-section-head{gap:9px;padding-bottom:9px;}
+  .ske-status-icon-tile{width:40px;height:40px;flex-basis:40px;border-radius:13px;font-size:21px;}
+  .ske-status-heading-title{font-size:13px;}
+  .ske-status-heading-sub{font-size:9px;}
+  .ske-status-count-pill{min-width:50px;height:30px;padding:0 8px;font-size:11.5px;}
+  .ske-status-person{grid-template-columns:33px minmax(0,1fr) auto;gap:7px;padding:8px 7px 8px 10px;border-radius:12px;}
+  #admin>.bottom-nav{margin:0 6px max(6px,env(safe-area-inset-bottom,0px));padding:5px 3px;border-radius:18px;}
+  #admin>.bottom-nav .nav-btn{min-height:49px;margin:0 1px;border-radius:12px;font-size:9px;}
+  #admin>.bottom-nav .nav-btn .nav-icon{width:29px;height:29px;border-radius:10px;font-size:19px;}
+}
+@media (prefers-reduced-motion:reduce){
+  .ske-summary-metric,.ske-status-nav-btn,#admin .topbar-back,#admin>.bottom-nav .nav-btn{transition:none;}
+}
+
 </style>
 </head>
 
@@ -2961,7 +3300,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.30P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.31P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -2969,7 +3308,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.30P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.31P</div>
       </div>
     </div>
 
@@ -3087,7 +3426,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.30P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.31P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3343,7 +3682,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.30P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.31P</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -3979,7 +4318,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.30P';
+const SKE_APP_VERSION='v3.2.31P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -7807,12 +8146,18 @@ function buildSummaryHTML(){
   </div>
   <div class="ske-summary-metrics">
     <div class="ske-summary-metric">
-      <div class="ske-summary-metric-value">${total}</div>
-      <div class="ske-summary-metric-label">${skeIcon('truck')} รถทั้งหมด</div>
+      <div class="ske-summary-metric-icon">${skeIcon('truck')}</div>
+      <div class="ske-summary-metric-copy">
+        <div class="ske-summary-metric-value">${total}</div>
+        <div class="ske-summary-metric-label">รถทั้งหมด</div>
+      </div>
     </div>
     <div class="ske-summary-metric ${stale>0?'warn':'ok'}">
-      <div class="ske-summary-metric-value">${stale}</div>
-      <div class="ske-summary-metric-label">${stale>0?skeIcon('alert')+' ยังไม่อัพเดท':skeIcon('check')+' อัพเดทครบ'}</div>
+      <div class="ske-summary-metric-icon">${stale>0?skeIcon('alert'):skeIcon('check')}</div>
+      <div class="ske-summary-metric-copy">
+        <div class="ske-summary-metric-value">${stale}</div>
+        <div class="ske-summary-metric-label">${stale>0?'ยังไม่อัพเดท':'อัพเดทครบ'}</div>
+      </div>
     </div>
   </div>
   <div class="ske-summary-search">
@@ -7835,12 +8180,12 @@ function buildSummaryHTML(){
   const stale24List=employees.filter(e=>isDrivingPosition(e.position)&&!isLeaveActiveToday(e)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS));
   if(stale24List.length){
     stale24List.sort((a,b)=>{const av=a.updatedAt?new Date(a.updatedAt).getTime():0,bv=b.updatedAt?new Date(b.updatedAt).getTime():0;return av-bv;});
-    html+=`<div style="background:#FEF2F2;border:2px solid #F87171;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
+    html+=`<div class="ske-stale-panel" style="background:#FEF2F2;border:2px solid #F87171;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
       <div style="color:#B91C1C;font-weight:800;font-size:13.5px;margin-bottom:8px;">${skeIcon('alert')} ไม่อัพเดทสถานะเกิน ${STALE_ALL_HOURS} ชม. — ทุกสถานะ (${stale24List.length} คน)</div>
       <div style="display:flex;flex-direction:column;gap:6px;">`;
     stale24List.forEach(e=>{
       const s=getS(e.status);const never=!e.updatedAt;
-      html+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid #FECACA;">
+      html+=`<div class="ske-stale-row" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#fff;border-radius:8px;border:1px solid #FECACA;">
         <div class="avatar" style="width:30px;height:30px;font-size:13px;">${esc(e.name.charAt(0))}${leaveIcon(e)}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</div>
@@ -7860,12 +8205,12 @@ function buildSummaryHTML(){
   const staleAll=dedupedEmployees.filter(e=>isDrivingPosition(e.position)&&ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS));
   if(staleAll.length){
     staleAll.sort((a,b)=>{const av=a.updatedAt?new Date(a.updatedAt).getTime():0,bv=b.updatedAt?new Date(b.updatedAt).getTime():0;return av-bv;});
-    html+=`<div style="background:#FEF2F2;border:1.5px solid #F87171;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
+    html+=`<div class="ske-urgent-panel" style="background:#FEF2F2;border:1.5px solid #F87171;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
       <div style="color:#DC2626;font-weight:700;font-size:13px;margin-bottom:8px;">${skeIcon('alert')} ต้องติดตามด่วน — ไม่อัพเดทเกิน ${ALERT_HOURS} ชม. (${staleAll.length} คน)</div>
       <div style="display:flex;flex-direction:column;gap:4px;">
         ${staleAll.map(e=>{
           const s=getS(e.status);const never=!e.updatedAt;
-          return `<div style="display:flex;align-items:center;gap:8px;padding:4px 2px;">
+          return `<div class="ske-urgent-row" style="display:flex;align-items:center;gap:8px;padding:4px 2px;">
             <span style="font-size:12px;flex-shrink:0;">${skeIcon(s.ic)}</span>
             <span style="font-size:12.5px;font-weight:700;color:#1a1a2e;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name)}</span>
             <span style="font-size:10.5px;color:#DC2626;font-weight:700;white-space:nowrap;">${esc(s.label)} · ${_elapsedLabel(e.updatedAt)}</span>
