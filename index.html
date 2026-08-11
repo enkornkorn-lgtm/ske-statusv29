@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.31P');
+  console.log('[SKE TRUCK] app version: v3.2.32P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -2927,7 +2927,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   .ske-status-person-time{font-size:9px;}
 }
 
-/* ══ Admin dashboard soft-3D theme V3.2.31P ══ */
+/* ══ Admin dashboard legacy soft-3D base layer ══ */
 #admin{
   --ske-3d-ink:#17233B;
   --ske-3d-muted:#71809A;
@@ -3266,6 +3266,355 @@ select.inp option{background:#fff;color:#1a1a2e;}
   .ske-summary-metric,.ske-status-nav-btn,#admin .topbar-back,#admin>.bottom-nav .nav-btn{transition:none;}
 }
 
+/* ══ Admin dashboard premium mobile-fintech theme V3.2.32P ══ */
+#admin{
+  --ske-blue:#0868F2;
+  --ske-blue-dark:#0557D9;
+  --ske-text:#111D36;
+  --ske-muted:#7D8AA5;
+  background:linear-gradient(180deg,#FFFFFF 0%,#F8FAFE 58%,#F4F7FC 100%);
+}
+#admin .topbar{
+  height:76px;
+  margin:0;
+  padding:10px 18px;
+  border:0;
+  border-radius:0;
+  background:rgba(255,255,255,.97);
+  box-shadow:0 1px 0 #EDF1F7;
+  overflow:visible;
+}
+#admin .topbar::after{display:none;}
+#admin .topbar-logo{
+  width:82px!important;
+  height:42px!important;
+  border:0!important;
+  border-radius:0!important;
+  overflow:visible!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+#admin .topbar-logo img{object-fit:contain!important;}
+#admin .topbar-title{font-size:18px;font-weight:950;color:var(--ske-text);letter-spacing:-.2px;}
+#admin .ske-version-tag{display:none;}
+#admin .topbar-back{
+  width:40px;
+  height:40px;
+  border:1px solid #EBF0F7;
+  border-radius:14px;
+  background:#FFFFFF;
+  color:#68758E;
+  box-shadow:0 7px 18px rgba(29,55,96,.08);
+}
+#admin .badge-admin,#admin .badge-viewer{
+  padding:5px 9px;
+  border:0;
+  background:#EEF5FF;
+  color:#0868F2;
+  box-shadow:none;
+}
+#admin .list-area{padding:18px 16px calc(24px + env(safe-area-inset-bottom,0px));background:transparent;}
+#adminSummaryContent{max-width:1080px;}
+
+.ske-fleet-hero{
+  position:relative;
+  overflow:hidden;
+  margin-bottom:22px;
+  padding:22px 26px 18px;
+  border-radius:30px;
+  background:
+    linear-gradient(132deg,rgba(255,255,255,.11),transparent 38%),
+    linear-gradient(135deg,#2B8AFF 0%,#0870F4 48%,#0758D9 100%);
+  box-shadow:0 20px 38px rgba(8,104,242,.24);
+  color:#fff;
+}
+.ske-fleet-hero::before,.ske-fleet-hero::after{
+  content:"";
+  position:absolute;
+  border-radius:50%;
+  pointer-events:none;
+}
+.ske-fleet-hero::before{width:330px;height:330px;right:-120px;top:-190px;background:rgba(255,255,255,.07);}
+.ske-fleet-hero::after{width:250px;height:250px;left:-115px;bottom:-190px;background:rgba(255,255,255,.09);}
+.ske-fleet-hero .ske-summary-date{
+  position:relative;
+  z-index:1;
+  min-height:0;
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  justify-content:flex-start;
+  gap:9px;
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  text-align:left;
+}
+.ske-fleet-hero .ske-summary-date::before,.ske-fleet-hero .ske-summary-date::after{display:none;}
+.ske-fleet-hero .ske-summary-date-sub{margin:0;color:rgba(255,255,255,.88);font-size:13px;font-weight:700;}
+.ske-fleet-hero .ske-summary-metrics{
+  position:relative;
+  z-index:1;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:0;
+  margin:12px 0 0;
+}
+.ske-fleet-hero .ske-summary-metric{
+  position:relative;
+  min-height:150px;
+  display:grid;
+  grid-template-columns:76px minmax(0,1fr);
+  align-items:center;
+  gap:18px;
+  padding:22px 36px;
+  overflow:visible;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+}
+.ske-fleet-hero .ske-summary-metric::after{display:none;}
+.ske-fleet-hero .ske-summary-metric+.ske-summary-metric::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:18%;
+  bottom:18%;
+  width:1px;
+  background:rgba(255,255,255,.28);
+}
+.ske-fleet-hero .ske-summary-metric-icon,
+.ske-fleet-hero .ske-summary-metric.warn .ske-summary-metric-icon,
+.ske-fleet-hero .ske-summary-metric.ok .ske-summary-metric-icon{
+  width:72px;
+  height:72px;
+  border:1px solid rgba(255,255,255,.20);
+  border-radius:22px;
+  background:linear-gradient(145deg,rgba(255,255,255,.24),rgba(255,255,255,.10));
+  color:#fff;
+  font-size:35px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 10px 24px rgba(0,50,150,.17);
+}
+.ske-fleet-hero .ske-summary-metric-value,
+.ske-fleet-hero .ske-summary-metric.warn .ske-summary-metric-value,
+.ske-fleet-hero .ske-summary-metric.ok .ske-summary-metric-value{
+  color:#fff;
+  font-size:56px;
+  line-height:.95;
+  text-shadow:0 4px 13px rgba(0,45,145,.20);
+}
+.ske-fleet-hero .ske-summary-metric-label{margin-top:10px;color:#fff;font-size:17px;font-weight:900;}
+
+.ske-primary-actions{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:16px;
+  margin:0 0 24px;
+}
+.ske-primary-action{
+  min-width:0;
+  min-height:148px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:13px;
+  padding:18px 8px;
+  border:1px solid #EEF2F8;
+  border-radius:24px;
+  background:#fff;
+  color:var(--status-color);
+  box-shadow:0 13px 28px rgba(28,52,91,.09);
+  transition:transform .16s ease,box-shadow .16s ease;
+}
+.ske-primary-action-icon{
+  width:64px;
+  height:64px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:20px;
+  background:linear-gradient(145deg,#FFFFFF,var(--status-bg));
+  color:var(--status-color);
+  font-size:33px;
+  box-shadow:0 10px 18px rgba(32,61,102,.13),inset 0 1px 0 #fff;
+}
+.ske-primary-action-name{font-size:14px;font-weight:950;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.ske-primary-action:active{transform:translateY(2px) scale(.985);box-shadow:0 6px 14px rgba(28,52,91,.09);}
+
+.ske-summary-search{
+  margin:0 0 20px;
+  padding:7px;
+  border:1px solid #EEF2F8;
+  border-radius:19px;
+  background:#fff;
+  box-shadow:0 8px 22px rgba(28,52,91,.07);
+}
+.ske-summary-search input{
+  min-height:46px;
+  padding:10px 14px;
+  border:0;
+  border-radius:14px;
+  background:#F6F8FC;
+  box-shadow:none;
+  font-size:13px;
+}
+.ske-summary-search input:focus{background:#fff;box-shadow:0 0 0 3px rgba(8,104,242,.13);}
+
+.ske-status-nav-label,.ske-status-board-title{margin:5px 4px 13px;color:var(--ske-text);font-size:15px;font-weight:950;}
+.ske-status-nav-hint,.ske-status-board-title span:last-child{color:#97A3B9;font-size:11px;font-weight:750;}
+.ske-status-nav{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:0 0 20px;padding:0;}
+.ske-status-nav-btn{
+  min-height:118px;
+  display:grid;
+  grid-template-columns:50px minmax(0,1fr) auto;
+  grid-template-rows:auto auto;
+  align-items:center;
+  gap:8px 10px;
+  padding:15px;
+  overflow:visible;
+  border:1px solid #EEF2F8;
+  border-radius:22px;
+  background:#fff;
+  color:var(--status-color);
+  box-shadow:0 12px 26px rgba(28,52,91,.08);
+}
+.ske-status-nav-btn::before{display:none;}
+.ske-status-nav-icon{
+  grid-column:1;
+  grid-row:1;
+  width:48px;
+  height:48px;
+  border:0;
+  border-radius:16px;
+  background:var(--status-bg);
+  font-size:24px;
+  box-shadow:none;
+}
+.ske-status-nav-count{
+  position:static;
+  grid-column:3;
+  grid-row:1;
+  min-width:0;
+  height:auto;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:var(--status-color);
+  font-size:18px;
+  box-shadow:none;
+}
+.ske-status-nav-name{
+  grid-column:1/-1;
+  grid-row:2;
+  min-height:0;
+  display:block;
+  color:var(--status-color);
+  font-size:12px;
+  line-height:1.35;
+  text-align:left;
+}
+.ske-stale-panel,.ske-urgent-panel{
+  padding:15px 17px!important;
+  border:1px solid #FFC9C9!important;
+  border-radius:22px!important;
+  background:#FFF8F8!important;
+  box-shadow:0 10px 24px rgba(197,48,55,.07),inset 0 1px 0 #fff;
+}
+.ske-stale-row{border:0!important;border-radius:14px!important;box-shadow:0 5px 12px rgba(104,38,43,.06)!important;}
+.ske-urgent-row{background:transparent;}
+
+.ske-status-board-title{margin-top:24px;}
+.ske-status-section{
+  margin-bottom:18px;
+  padding:16px;
+  border:0;
+  border-radius:24px;
+  background:#fff;
+  box-shadow:0 14px 30px rgba(28,52,91,.09);
+}
+.ske-status-section-head{padding-bottom:13px;border-bottom:1px solid #EEF2F7;}
+.ske-status-icon-tile{
+  width:50px;
+  height:50px;
+  flex-basis:50px;
+  border:0;
+  border-radius:17px;
+  background:var(--status-bg);
+  box-shadow:none;
+}
+.ske-status-heading-title{font-size:15px;}
+.ske-status-heading-sub{font-size:10px;color:#96A0B2;}
+.ske-status-count-pill{
+  min-width:58px;
+  height:34px;
+  border:0;
+  background:var(--status-bg);
+  box-shadow:none;
+}
+.ske-status-person{
+  padding:11px 11px 11px 14px;
+  border:0;
+  border-radius:16px;
+  background:#FAFBFE;
+  box-shadow:0 5px 14px rgba(28,52,91,.06);
+}
+.ske-status-person::before{width:4px;box-shadow:none;}
+.ske-status-avatar{box-shadow:0 5px 12px rgba(28,52,91,.10)!important;}
+.ske-status-person-location{border:0;border-radius:10px;box-shadow:none;}
+
+#admin>.bottom-nav{
+  margin:0 14px max(12px,env(safe-area-inset-bottom,0px));
+  padding:8px 7px;
+  border:1px solid #EDF1F7;
+  border-radius:25px;
+  background:rgba(255,255,255,.98);
+  box-shadow:0 14px 34px rgba(24,47,86,.15);
+}
+#admin>.bottom-nav .nav-btn{min-height:58px;border:0;border-radius:17px;color:#7C879E;}
+#admin>.bottom-nav .nav-btn.active{border:0;background:#F1F6FF;color:var(--ske-blue);box-shadow:none;}
+#admin>.bottom-nav .nav-btn.active .nav-icon{background:#E8F1FF;color:var(--ske-blue);box-shadow:none;}
+#admin .nav-bottom-badge{right:10px;background:#EF4444;color:#fff;}
+
+@media (hover:hover) and (pointer:fine){
+  .ske-primary-action:hover,.ske-status-nav-btn:hover{transform:translateY(-3px);box-shadow:0 17px 32px rgba(28,52,91,.11);}
+}
+@media (max-width:600px){
+  #admin .topbar{height:66px;padding:8px 10px;gap:6px;}
+  #admin .topbar-logo{width:62px!important;height:34px!important;}
+  #admin .topbar-title{font-size:14px;white-space:nowrap;}
+  #admin .topbar-back{width:34px;height:34px;border-radius:11px;}
+  #admin #adminTopBadge{display:none;}
+  #admin .list-area{padding:12px 10px calc(16px + env(safe-area-inset-bottom,0px));}
+  .ske-fleet-hero{margin-bottom:16px;padding:16px 14px 12px;border-radius:24px;}
+  .ske-fleet-hero .ske-summary-date-sub{font-size:11.5px;}
+  .ske-fleet-hero .ske-summary-metric{min-height:112px;grid-template-columns:52px minmax(0,1fr);gap:9px;padding:17px 12px;}
+  .ske-fleet-hero .ske-summary-metric-icon,.ske-fleet-hero .ske-summary-metric.warn .ske-summary-metric-icon,.ske-fleet-hero .ske-summary-metric.ok .ske-summary-metric-icon{width:50px;height:50px;border-radius:16px;font-size:25px;}
+  .ske-fleet-hero .ske-summary-metric-value,.ske-fleet-hero .ske-summary-metric.warn .ske-summary-metric-value,.ske-fleet-hero .ske-summary-metric.ok .ske-summary-metric-value{font-size:41px;}
+  .ske-fleet-hero .ske-summary-metric-label{margin-top:7px;font-size:12px;}
+  .ske-primary-actions{gap:8px;margin-bottom:17px;}
+  .ske-primary-action{min-height:108px;gap:9px;padding:12px 4px;border-radius:18px;}
+  .ske-primary-action-icon{width:48px;height:48px;border-radius:15px;font-size:25px;}
+  .ske-primary-action-name{font-size:10.5px;}
+  .ske-summary-search{margin-bottom:16px;}
+  .ske-status-nav-label,.ske-status-board-title{font-size:13px;margin-bottom:10px;}
+  .ske-status-nav{gap:8px;margin-bottom:15px;}
+  .ske-status-nav-btn{min-height:98px;grid-template-columns:40px minmax(0,1fr) auto;gap:6px;padding:11px 9px;border-radius:17px;}
+  .ske-status-nav-icon{width:39px;height:39px;border-radius:13px;font-size:20px;}
+  .ske-status-nav-count{font-size:15px;}
+  .ske-status-nav-name{font-size:10px;}
+  .ske-stale-panel,.ske-urgent-panel{padding:12px!important;border-radius:18px!important;}
+  .ske-status-section{padding:12px 10px;border-radius:19px;}
+  .ske-status-icon-tile{width:41px;height:41px;flex-basis:41px;border-radius:14px;}
+  .ske-status-person{padding:9px 7px 9px 10px;border-radius:13px;}
+  #admin>.bottom-nav{margin:0 6px max(6px,env(safe-area-inset-bottom,0px));padding:5px 3px;border-radius:19px;}
+  #admin>.bottom-nav .nav-btn{min-height:50px;border-radius:13px;font-size:8.5px;}
+}
+
 </style>
 </head>
 
@@ -3300,7 +3649,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.31P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.32P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -3308,7 +3657,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.31P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.32P</div>
       </div>
     </div>
 
@@ -3426,7 +3775,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.31P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.32P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -3682,7 +4031,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงผู้ดูแล</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.31P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.32P</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4318,7 +4667,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.31P';
+const SKE_APP_VERSION='v3.2.32P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5312,7 +5661,7 @@ function applyAdminRoleUI(){
   const isViewer=adminRole==='viewer';
   if(adminEl)adminEl.classList.toggle('role-viewer',isViewer);
   const title=document.getElementById('adminPanelTitle');
-  if(title)title.textContent=isViewer?'แผนผังงาน':'แผงผู้ดูแล';
+  if(title)title.textContent=isViewer?'แผนผังงาน':'แผงควบคุม SKE';
   const badge=document.getElementById('adminTopBadge');
   if(badge){badge.textContent=isViewer?'แอดมิน':'ADMIN';badge.className=isViewer?'badge-viewer':'badge-admin';}
   document.getElementById('adminViewerLogout')?.classList.toggle('hidden',!isViewer);
@@ -8138,33 +8487,45 @@ function buildSummaryHTML(){
   // แจ้งเตือนเฉพาะสถานะที่กำลังทำงานอยู่ที่ช่อง (4 สถานะ) เกิน ALERT_HOURS ชม.
   const total=vehicles.filter(v=>v.active!==false).length;
   const stale=dedupedEmployees.filter(e=>!isLeaveActiveToday(e)&&ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS)).length;
+  const primaryActionIds=['unload_bay','loading','traveling','standby'];
+  const primaryActionLabels={unload_bay:'ถึงแล้ว',loading:'ขึ้นงาน',traveling:'เดินทาง',standby:'สแตนบาย'};
+  const primaryActions=primaryActionIds.map(id=>STATUSES.find(st=>st.id===id)).filter(Boolean);
 
   let html=`
-  <div class="ske-summary-date">
-    <div class="ske-summary-date-main">${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,' / ')}</div>
-    <div class="ske-summary-date-sub">${new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
+  <div class="ske-fleet-hero">
+    <div class="ske-summary-date">
+      <span aria-hidden="true">📅</span>
+      <div class="ske-summary-date-sub">วันนี้ ${new Date().toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'})}</div>
+    </div>
+    <div class="ske-summary-metrics">
+      <div class="ske-summary-metric">
+        <div class="ske-summary-metric-icon">${skeIcon('truck')}</div>
+        <div class="ske-summary-metric-copy">
+          <div class="ske-summary-metric-value">${total}</div>
+          <div class="ske-summary-metric-label">รถทั้งหมด</div>
+        </div>
+      </div>
+      <div class="ske-summary-metric ${stale>0?'warn':'ok'}">
+        <div class="ske-summary-metric-icon">${stale>0?skeIcon('alert'):skeIcon('check')}</div>
+        <div class="ske-summary-metric-copy">
+          <div class="ske-summary-metric-value">${stale}</div>
+          <div class="ske-summary-metric-label">${stale>0?'ยังไม่อัปเดต':'อัปเดตครบ'}</div>
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="ske-summary-metrics">
-    <div class="ske-summary-metric">
-      <div class="ske-summary-metric-icon">${skeIcon('truck')}</div>
-      <div class="ske-summary-metric-copy">
-        <div class="ske-summary-metric-value">${total}</div>
-        <div class="ske-summary-metric-label">รถทั้งหมด</div>
-      </div>
-    </div>
-    <div class="ske-summary-metric ${stale>0?'warn':'ok'}">
-      <div class="ske-summary-metric-icon">${stale>0?skeIcon('alert'):skeIcon('check')}</div>
-      <div class="ske-summary-metric-copy">
-        <div class="ske-summary-metric-value">${stale}</div>
-        <div class="ske-summary-metric-label">${stale>0?'ยังไม่อัพเดท':'อัพเดทครบ'}</div>
-      </div>
-    </div>
+  <div class="ske-primary-actions" aria-label="ปุ่มลัดสถานะหลัก">
+    ${primaryActions.map(st=>`
+      <button type="button" class="ske-primary-action" style="--status-color:${st.color};--status-bg:${st.bg};--status-border:${st.border};" onclick="jumpToStatus('${st.id}')" aria-label="ไปยังสถานะ ${esc(st.label)}">
+        <span class="ske-primary-action-icon">${skeIcon(st.ic)}</span>
+        <span class="ske-primary-action-name">${esc(primaryActionLabels[st.id]||st.label)}</span>
+      </button>`).join('')}
   </div>
   <div class="ske-summary-search">
     <input id="adminQuickSearch" type="text" placeholder="🔍 ค้นหาชื่อ / ทะเบียนรถ แล้วกดรายการเพื่อเลื่อนไปหา" oninput="renderAdminQuickSearch()">
     <div id="adminQuickSearchResults" style="display:none;margin-top:8px;flex-direction:column;gap:6px;"></div>
   </div>
-  <div class="ske-status-nav-label"><span>สถานะรถแบบเรียลไทม์</span><span class="ske-status-nav-hint">แตะตัวเลขเพื่อเลื่อนไปหา</span></div>
+  <div class="ske-status-nav-label"><span>สถานะรถ</span><span class="ske-status-nav-hint">ดูทั้งหมด ›</span></div>
   <div class="ske-status-nav" aria-label="ปุ่มลัดสรุปสถานะรถ">
     ${STATUSES.filter(st=>(counts[st.id]||0)>0).map(st=>`
       <button type="button" class="ske-status-nav-btn" style="--status-color:${st.color};--status-bg:${st.bg};--status-border:${st.border};" onclick="jumpToStatus('${st.id}')" aria-label="ไปยังสถานะ ${esc(st.label)} ${counts[st.id]} คัน">
@@ -8221,7 +8582,7 @@ function buildSummaryHTML(){
   }
 
   // สถานะแต่ละประเภท
-  html+=`<div class="ske-status-board-title"><span>สรุปสถานะรถ</span><span>ข้อมูลอัปเดตแบบเรียลไทม์</span></div>`;
+  html+=`<div class="ske-status-board-title"><span>สถานะล่าสุด</span><span>แบ่งตามโซนสถานะ</span></div>`;
   STATUSES.forEach(st=>{
     const cnt=counts[st.id]||0;
     if(cnt===0)return;
