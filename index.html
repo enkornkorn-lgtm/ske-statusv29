@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.32P');
+  console.log('[SKE TRUCK] app version: v3.2.33P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -3266,7 +3266,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   .ske-summary-metric,.ske-status-nav-btn,#admin .topbar-back,#admin>.bottom-nav .nav-btn{transition:none;}
 }
 
-/* ══ Admin dashboard premium mobile-fintech theme V3.2.32P ══ */
+/* ══ Admin dashboard premium mobile-fintech theme base ══ */
 #admin{
   --ske-blue:#0868F2;
   --ske-blue-dark:#0557D9;
@@ -3615,6 +3615,145 @@ select.inp option{background:#fff;color:#1a1a2e;}
   #admin>.bottom-nav .nav-btn{min-height:50px;border-radius:13px;font-size:8.5px;}
 }
 
+/* ══ 3D icon depth + semantic color frames V3.2.33P ══ */
+.ske-primary-action{
+  border:1.5px solid var(--status-border);
+  background:linear-gradient(155deg,#FFFFFF 20%,var(--status-bg) 155%);
+  box-shadow:0 14px 28px rgba(28,52,91,.10),inset 0 1px 0 #fff,inset 0 -3px 7px rgba(38,61,101,.05);
+}
+.ske-primary-action-icon{
+  position:relative;
+  isolation:isolate;
+  overflow:visible;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+  transform-style:preserve-3d;
+}
+.ske-primary-action-icon::before{
+  content:"";
+  position:absolute;
+  inset:3px;
+  z-index:0;
+  border:1.5px solid var(--status-border);
+  border-radius:21px;
+  background:linear-gradient(145deg,#FFFFFF 5%,var(--status-bg) 90%);
+  box-shadow:0 11px 16px rgba(27,52,91,.16),inset 0 3px 2px rgba(255,255,255,.95),inset 0 -5px 9px rgba(38,61,101,.09);
+  transform:perspective(120px) rotateX(5deg) translateY(-2px);
+}
+.ske-primary-action-icon::after{
+  content:"";
+  position:absolute;
+  left:13%;
+  right:13%;
+  bottom:-4px;
+  height:12px;
+  z-index:-1;
+  border-radius:50%;
+  background:var(--status-color);
+  opacity:.20;
+  filter:blur(5px);
+}
+.ske-primary-action-icon svg{
+  position:relative;
+  z-index:2;
+  width:38px!important;
+  height:38px!important;
+  stroke-width:2.45;
+  transform:translateY(-4px) scale(1.04);
+  filter:drop-shadow(0 7px 4px rgba(15,23,42,.22)) drop-shadow(0 1px 0 rgba(255,255,255,.95));
+}
+.ske-primary-action:active .ske-primary-action-icon svg{transform:translateY(-1px) scale(.98);filter:drop-shadow(0 3px 2px rgba(15,23,42,.20));}
+
+.ske-status-nav-btn{
+  border:1.5px solid var(--status-border);
+  background:linear-gradient(155deg,#FFFFFF 28%,var(--status-bg) 170%);
+  box-shadow:0 12px 25px rgba(28,52,91,.09),inset 0 1px 0 #fff,inset 0 -3px 7px rgba(38,61,101,.04);
+}
+.ske-status-nav-icon{
+  border:1.5px solid var(--status-border);
+  background:linear-gradient(145deg,#FFFFFF,var(--status-bg));
+  box-shadow:0 8px 14px rgba(28,52,91,.13),inset 0 2px 1px #fff,inset 0 -3px 6px rgba(38,61,101,.07);
+  transform:translateY(-2px);
+}
+.ske-status-nav-icon svg{
+  width:26px!important;
+  height:26px!important;
+  stroke-width:2.35;
+  filter:drop-shadow(0 4px 2px rgba(15,23,42,.16)) drop-shadow(0 1px 0 #fff);
+}
+.ske-status-nav-count{
+  min-width:28px;
+  min-height:28px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid var(--status-border);
+  border-radius:999px;
+  background:var(--status-bg);
+  box-shadow:0 5px 10px rgba(28,52,91,.10),inset 0 1px 0 #fff;
+}
+
+.ske-status-section{
+  overflow:hidden;
+  border:1.5px solid var(--status-border);
+  background:linear-gradient(180deg,var(--status-bg) 0,#FFFFFF 82px);
+  box-shadow:0 15px 30px rgba(28,52,91,.10),inset 0 1px 0 #fff;
+}
+.ske-status-section::after{
+  content:"";
+  position:absolute;
+  top:0;
+  left:20px;
+  right:20px;
+  height:4px;
+  border-radius:0 0 999px 999px;
+  background:var(--status-color);
+  opacity:.88;
+}
+.ske-status-icon-tile{
+  border:1.5px solid var(--status-border);
+  background:linear-gradient(145deg,#FFFFFF,var(--status-bg));
+  box-shadow:0 8px 14px rgba(28,52,91,.13),inset 0 2px 1px #fff,inset 0 -3px 6px rgba(38,61,101,.07);
+  transform:translateY(-1px);
+}
+.ske-status-icon-tile svg{
+  width:28px!important;
+  height:28px!important;
+  stroke-width:2.35;
+  filter:drop-shadow(0 4px 2px rgba(15,23,42,.16)) drop-shadow(0 1px 0 #fff);
+}
+.ske-status-count-pill{
+  border:1px solid var(--status-border);
+  background:linear-gradient(145deg,#FFFFFF,var(--status-bg));
+  box-shadow:0 6px 12px rgba(28,52,91,.09),inset 0 1px 0 #fff;
+}
+.ske-status-person{
+  border:1px solid var(--status-border);
+  background:linear-gradient(100deg,var(--status-bg) -30%,#FFFFFF 38%,#FAFBFE 100%);
+  box-shadow:0 6px 14px rgba(28,52,91,.07),inset 0 1px 0 #fff;
+}
+.ske-fleet-hero .ske-summary-metric-icon svg{
+  width:40px!important;
+  height:40px!important;
+  stroke-width:2.4;
+  filter:drop-shadow(0 6px 3px rgba(0,37,120,.30)) drop-shadow(0 1px 0 rgba(255,255,255,.85));
+}
+@media (hover:hover) and (pointer:fine){
+  .ske-primary-action:hover .ske-primary-action-icon svg{transform:translateY(-7px) scale(1.08);}
+  .ske-primary-action:hover,.ske-status-nav-btn:hover{border-color:var(--status-color);}
+}
+@media (max-width:600px){
+  .ske-primary-action-icon::before{inset:2px;border-radius:15px;}
+  .ske-primary-action-icon::after{bottom:-2px;height:9px;}
+  .ske-primary-action-icon svg{width:29px!important;height:29px!important;transform:translateY(-3px) scale(1.03);}
+  .ske-status-nav-icon svg{width:21px!important;height:21px!important;}
+  .ske-status-nav-count{min-width:23px;min-height:23px;font-size:12px;}
+  .ske-status-section::after{left:14px;right:14px;height:3px;}
+  .ske-status-icon-tile svg{width:23px!important;height:23px!important;}
+  .ske-fleet-hero .ske-summary-metric-icon svg{width:29px!important;height:29px!important;}
+}
+
 </style>
 </head>
 
@@ -3649,7 +3788,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.32P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.33P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -3657,7 +3796,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.32P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.33P</div>
       </div>
     </div>
 
@@ -3775,7 +3914,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.32P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.33P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4031,7 +4170,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.32P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.33P</div></div>
     <button class="topbar-back" id="adminRefreshBtn" onclick="refreshAdmin()" title="รีเฟรชหน้าจอ" style="font-size:18px;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4667,7 +4806,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.32P';
+const SKE_APP_VERSION='v3.2.33P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
