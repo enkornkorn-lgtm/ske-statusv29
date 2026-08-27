@@ -43,7 +43,7 @@
 <meta name="apple-mobile-web-app-title" content="SKE TRUCK">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#FFFFFF">
-<link rel="manifest" href="manifest.json?v=dev-v3234-refresh-summary-color">
+<link rel="manifest" href="manifest.json?v=dev-v3235-compact-summary">
 <title>SKE TRUCK</title>
 <!-- Firebase SDK -->
 <script type="module">
@@ -480,7 +480,7 @@
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') return;
       // ใช้ Service Worker หลักตัวเดียวร่วมกันทั้ง PWA cache และ FCM
-      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3234-refresh-summary-color', { updateViaCache: 'none' });
+      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3235-compact-summary', { updateViaCache: 'none' });
       if (!_messaging) _messaging = getMessaging(app);
       const token = await getToken(_messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
       if (!token) return;
@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.34P');
+  console.log('[SKE TRUCK] app version: v3.2.35P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -3618,7 +3618,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   #admin>.bottom-nav .nav-btn{min-height:50px;border-radius:13px;font-size:8.5px;}
 }
 
-/* ══ 3D icon depth + semantic color frames V3.2.34P ══ */
+/* ══ 3D icon depth + semantic color frames V3.2.35P ══ */
 .ske-primary-action{
   border:1.5px solid var(--status-border);
   background:linear-gradient(155deg,#FFFFFF 20%,var(--status-bg) 155%);
@@ -3757,6 +3757,138 @@ select.inp option{background:#fff;color:#1a1a2e;}
   .ske-fleet-hero .ske-summary-metric-icon svg{width:29px!important;height:29px!important;}
 }
 
+/* ══ Compact fleet summary V3.2.35P — อ่านง่ายและแยกสีชัด ══ */
+.ske-fleet-hero{
+  margin-bottom:18px;
+  padding:16px 18px 18px;
+  border:1px solid #DFE9F5;
+  border-radius:24px;
+  background:linear-gradient(145deg,#FFFFFF 0%,#F4F8FD 100%);
+  box-shadow:0 12px 28px rgba(32,59,99,.10);
+  color:#172033;
+}
+.ske-fleet-hero::before{
+  width:190px;
+  height:190px;
+  right:-92px;
+  top:-122px;
+  background:rgba(14,165,233,.06);
+}
+.ske-fleet-hero::after{
+  width:150px;
+  height:150px;
+  left:-85px;
+  bottom:-108px;
+  background:rgba(16,185,129,.05);
+}
+.ske-fleet-hero .ske-summary-date{gap:8px;}
+.ske-fleet-hero .ske-summary-date>span{
+  display:grid;
+  place-items:center;
+  width:28px;
+  height:28px;
+  border-radius:9px;
+  background:#EAF4FF;
+  color:#0878D1;
+  font-size:15px;
+}
+.ske-fleet-hero .ske-summary-date-sub{
+  color:#526178;
+  font-size:12px;
+  font-weight:800;
+}
+.ske-fleet-hero .ske-summary-metrics{
+  gap:11px;
+  margin-top:12px;
+}
+.ske-fleet-hero .ske-summary-metric{
+  min-height:108px;
+  grid-template-columns:52px minmax(0,1fr);
+  gap:12px;
+  padding:14px 17px;
+  border-width:1.5px;
+  border-radius:20px;
+  box-shadow:none;
+}
+.ske-fleet-hero .ske-summary-metric.total{
+  border-color:#8DD4FA;
+  background:linear-gradient(145deg,#F3FAFF 0%,#DDF2FF 100%);
+}
+.ske-fleet-hero .ske-summary-metric.ok{
+  border-color:#8DDFB9;
+  background:linear-gradient(145deg,#F2FCF7 0%,#DDF7E9 100%);
+}
+.ske-fleet-hero .ske-summary-metric.warn{
+  border-color:#FDBA9A;
+  background:linear-gradient(145deg,#FFF8F3 0%,#FFECDF 100%);
+}
+.ske-fleet-hero .ske-summary-metric-icon,
+.ske-fleet-hero .ske-summary-metric.total .ske-summary-metric-icon,
+.ske-fleet-hero .ske-summary-metric.ok .ske-summary-metric-icon,
+.ske-fleet-hero .ske-summary-metric.warn .ske-summary-metric-icon{
+  width:50px;
+  height:50px;
+  border-radius:16px;
+  box-shadow:0 7px 15px rgba(30,64,110,.10),inset 0 1px 0 rgba(255,255,255,.95);
+}
+.ske-fleet-hero .ske-summary-metric.total .ske-summary-metric-icon{
+  border-color:#9CD9FA;
+  background:#FFFFFF;
+  color:#0788D1;
+}
+.ske-fleet-hero .ske-summary-metric.ok .ske-summary-metric-icon{
+  border-color:#9DE2C1;
+  background:#FFFFFF;
+  color:#059669;
+}
+.ske-fleet-hero .ske-summary-metric.warn .ske-summary-metric-icon{
+  border-color:#FDBA9A;
+  background:#FFFFFF;
+  color:#EA580C;
+}
+.ske-fleet-hero .ske-summary-metric-icon svg{
+  width:29px!important;
+  height:29px!important;
+  filter:none;
+}
+.ske-fleet-hero .ske-summary-metric-value,
+.ske-fleet-hero .ske-summary-metric.total .ske-summary-metric-value,
+.ske-fleet-hero .ske-summary-metric.ok .ske-summary-metric-value,
+.ske-fleet-hero .ske-summary-metric.warn .ske-summary-metric-value{
+  font-size:39px;
+  line-height:1;
+  text-shadow:none;
+}
+.ske-fleet-hero .ske-summary-metric.total .ske-summary-metric-value{color:#087FC2;}
+.ske-fleet-hero .ske-summary-metric.ok .ske-summary-metric-value{color:#078B61;}
+.ske-fleet-hero .ske-summary-metric.warn .ske-summary-metric-value{color:#D9510B;}
+.ske-fleet-hero .ske-summary-metric-label{
+  margin-top:6px;
+  color:#526178;
+  font-size:12px;
+  font-weight:800;
+}
+.ske-fleet-hero .ske-summary-metric.total .ske-summary-metric-label{color:#0A6FA8;}
+.ske-fleet-hero .ske-summary-metric.ok .ske-summary-metric-label{color:#077552;}
+.ske-fleet-hero .ske-summary-metric.warn .ske-summary-metric-label{color:#B9440C;}
+@media (max-width:600px){
+  .ske-fleet-hero{margin-bottom:15px;padding:13px 12px 12px;border-radius:20px;}
+  .ske-fleet-hero .ske-summary-date>span{width:25px;height:25px;border-radius:8px;font-size:13px;}
+  .ske-fleet-hero .ske-summary-date-sub{font-size:11px;}
+  .ske-fleet-hero .ske-summary-metrics{gap:8px;margin-top:10px;}
+  .ske-fleet-hero .ske-summary-metric{min-height:88px;grid-template-columns:40px minmax(0,1fr);gap:7px;padding:10px 8px;border-radius:16px;}
+  .ske-fleet-hero .ske-summary-metric-icon,
+  .ske-fleet-hero .ske-summary-metric.total .ske-summary-metric-icon,
+  .ske-fleet-hero .ske-summary-metric.ok .ske-summary-metric-icon,
+  .ske-fleet-hero .ske-summary-metric.warn .ske-summary-metric-icon{width:40px;height:40px;border-radius:13px;font-size:21px;}
+  .ske-fleet-hero .ske-summary-metric-icon svg{width:23px!important;height:23px!important;}
+  .ske-fleet-hero .ske-summary-metric-value,
+  .ske-fleet-hero .ske-summary-metric.total .ske-summary-metric-value,
+  .ske-fleet-hero .ske-summary-metric.ok .ske-summary-metric-value,
+  .ske-fleet-hero .ske-summary-metric.warn .ske-summary-metric-value{font-size:31px;}
+  .ske-fleet-hero .ske-summary-metric-label{margin-top:4px;font-size:10.5px;white-space:nowrap;}
+}
+
 </style>
 </head>
 
@@ -3791,7 +3923,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.34P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.35P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -3799,7 +3931,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.34P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.35P</div>
       </div>
     </div>
 
@@ -3917,7 +4049,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.34P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.35P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4173,7 +4305,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.34P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.35P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4809,7 +4941,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.34P';
+const SKE_APP_VERSION='v3.2.35P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5505,7 +5637,7 @@ let _swReg = null;
 if ('serviceWorker' in navigator &&
     (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=dev-v3234-refresh-summary-color', { updateViaCache: 'none' }).then(reg => {
+    navigator.serviceWorker.register('sw.js?v=dev-v3235-compact-summary', { updateViaCache: 'none' }).then(reg => {
       _swReg = reg;
       // บังคับตรวจไฟล์ worker จากเครือข่าย ไม่ใช้สำเนาเก่าจาก HTTP cache
       reg.update().catch(() => {});
