@@ -43,7 +43,7 @@
 <meta name="apple-mobile-web-app-title" content="SKE TRUCK">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#FFFFFF">
-<link rel="manifest" href="manifest.json?v=dev-v3238-gotjob-indigo">
+<link rel="manifest" href="manifest.json?v=dev-v3239-route-history">
 <title>SKE TRUCK</title>
 <!-- Firebase SDK -->
 <script type="module">
@@ -480,7 +480,7 @@
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') return;
       // ใช้ Service Worker หลักตัวเดียวร่วมกันทั้ง PWA cache และ FCM
-      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3238-gotjob-indigo', { updateViaCache: 'none' });
+      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3239-route-history', { updateViaCache: 'none' });
       if (!_messaging) _messaging = getMessaging(app);
       const token = await getToken(_messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
       if (!token) return;
@@ -657,7 +657,7 @@
         changed = true;
       }
     };
-    ['employees','repairs','fluidLogs','cashRequests','leaveLogs','runLogs','monthlyDocs','feedbacks'].forEach(removeEmployeeOps);
+    ['employees','repairs','fluidLogs','cashRequests','leaveLogs','runLogs','routeTracks','monthlyDocs','feedbacks'].forEach(removeEmployeeOps);
     const jp = ob.jobPlan;
     if (jp) {
       if (Array.isArray(jp.payload)) {
@@ -711,7 +711,7 @@
   // ติดตามว่าแต่ละชุดข้อมูล sync ครั้งแรกเสร็จหรือยัง — ใช้กันบั๊ก "ข้อมูลที่ลบไปแล้วฟื้นคืนชีพ"
   // (เดิม: พอลบรายการจนหมด ข้อมูลเป็น null → listener เข้าใจผิดว่า Firebase ว่าง แล้วอัพโหลดข้อมูลเก่าในเครื่องกลับขึ้นไป)
   // หลักการใหม่: อัพโหลดข้อมูลเครื่องขึ้น Firebase ได้ "เฉพาะครั้งแรกสุด" เท่านั้น หลังจากนั้น null = ว่างจริง ให้เคารพค่าว่าง
-  const _firstSync = { employees:false, vehicles:false, repairs:false, fluidLogs:false, cashRequests:false, leaveLogs:false, runLogs:false, monthlyDocs:false, jobPlan:false, jobRouteTemplates:false, feedbacks:false };
+  const _firstSync = { employees:false, vehicles:false, repairs:false, fluidLogs:false, cashRequests:false, leaveLogs:false, runLogs:false, routeTracks:false, monthlyDocs:false, jobPlan:false, jobRouteTemplates:false, feedbacks:false };
 
   // ══ ระบบกันบันทึกหาย (Offline-safe save queue / outbox) ═══════════════════════
   // ปัญหาเดิม: ถ้าเน็ตหลุด/อ่อนตอนกำลังบันทึก (เปลี่ยนสถานะ, อัปโหลดรูป, แจ้งซ่อม, เบิกเงิน, ลา ฯลฯ)
@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.38P');
+  console.log('[SKE TRUCK] app version: v3.2.39P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -771,7 +771,7 @@
   const _recordWriteBusy = Object.create(null);
   const _recordCacheKeys = {
     employees:'ske_emp', vehicles:'ske_vehicles', repairs:'ske_repairs', fluidLogs:'ske_fluid',
-    cashRequests:'ske_cash', leaveLogs:'ske_leaveLogs', runLogs:'ske_runlogs',
+    cashRequests:'ske_cash', leaveLogs:'ske_leaveLogs', runLogs:'ske_runlogs', routeTracks:'ske_route_tracks',
     monthlyDocs:'ske_monthly_docs', jobPlan:'ske_jobplan',
     jobRouteTemplates:'ske_jobtemplates', feedbacks:'ske_feedbacks'
   };
@@ -1009,6 +1009,7 @@
       else if (key === 'cashRequests' && window.fbSaveCashRequests) p = window.fbSaveCashRequests(entry.payload);
       else if (key === 'leaveLogs' && window.fbSaveLeaveLogs) p = window.fbSaveLeaveLogs(entry.payload);
       else if (key === 'runLogs' && window.fbSaveRunLogs) p = window.fbSaveRunLogs(entry.payload);
+      else if (key === 'routeTracks' && window.fbSaveRouteTracks) p = window.fbSaveRouteTracks(entry.payload);
       else if (key === 'monthlyDocs' && window.fbSaveMonthlyDocs) p = window.fbSaveMonthlyDocs(entry.payload);
       else if (key === 'jobPlan' && window.fbSaveJobPlan) p = window.fbSaveJobPlan(entry.payload);
       else if (key === 'jobRouteTemplates' && window.fbSaveJobRouteTemplates) p = window.fbSaveJobRouteTemplates(entry.payload);
@@ -1282,7 +1283,7 @@
     if (!id) throw new Error('invalid employee id');
     const deletedAt = new Date().toISOString();
     const revocationKey = _employeeRevocationKey(id);
-    const paths = ['employees','repairs','fluidLogs','cashRequests','leaveLogs','runLogs','monthlyDocs','feedbacks','jobPlan'];
+    const paths = ['employees','repairs','fluidLogs','cashRequests','leaveLogs','runLogs','routeTracks','monthlyDocs','feedbacks','jobPlan'];
     // ให้ transaction ที่เริ่มจากเครื่องนี้จบก่อน แล้วค่อยทำ cascade delete เป็นคำสั่งสุดท้าย
     // กันงานค้างในแท็บเดียวกันวิ่งแซงกลับไปสร้างข้อมูลของบัญชีที่เพิ่งลบ
     const activeWrites = paths.map(path => _recordWriteChains[path]).filter(Boolean);
@@ -1452,6 +1453,16 @@
       .catch(e => console.error('fbSaveRunLogs error', e));
   };
   window.fbDeleteRunLog = runId => _deleteRecord('runLogs', 'runLogs', runId);
+
+  // เส้นทางจริงของเที่ยวงาน — แยกจากตำแหน่งล่าสุดของพนักงานเพื่อไม่ให้ข้อมูลเก่าถูกเขียนทับ
+  window.fbSaveRouteTracks = function(list) {
+    return _saveRecordList('routeTracks', 'routeTracks', list, row => row && !_isEmployeeDeleted(row.empId))
+      .catch(e => { console.error('fbSaveRouteTracks error', e); throw e; });
+  };
+  window.fbUpdateRouteTrackFields = function(trackId, patch) {
+    return _patchRecord('routeTracks', 'routeTracks', trackId, patch);
+  };
+  window.fbDeleteRouteTrack = trackId => _deleteRecord('routeTracks', 'routeTracks', trackId);
 
   // ดึงข้อมูลล่าสุดจาก Firebase ทันที (สำหรับปุ่มรีเฟรชของผู้ดูแล)
   window.fbForceRefresh = function(cb) {
@@ -1702,6 +1713,24 @@
       setTimeout(() => { if (typeof backfillMissedRunLogs === 'function') backfillMissedRunLogs(); }, 2500);
     }
     _firstSync.runLogs = true;
+  });
+
+  // ฟัง realtime — ประวัติเส้นทางตั้งแต่ "ออกเดินทาง" ถึง "ถึงแล้วรอลงงาน"
+  onValue(ref(db, 'routeTracks'), (snapshot) => {
+    const data = normalizeList(snapshot.val());
+    if (_obHasFresh('routeTracks')) { _firstSync.routeTracks = true; return; }
+    _setRecordShadow('routeTracks', data || []);
+    if (data) {
+      routeTracks = data;
+      localStorage.setItem('ske_route_tracks', JSON.stringify(routeTracks));
+    } else if (!_firstSync.routeTracks && routeTracks.length > 0) {
+      window.fbSaveRouteTracks(routeTracks).catch(() => {});
+    }
+    if (!_firstSync.routeTracks) {
+      // ข้อมูลรุ่นเก่าไม่มีพิกัดรายสถานะ จึงนำเข้าเฉพาะตำแหน่งล่าสุดที่มีอยู่จริงและติดป้ายว่าเป็นข้อมูลบางส่วน
+      setTimeout(() => { if (typeof backfillRouteTracksFromExistingData === 'function') backfillRouteTracksFromExistingData(); }, 3200);
+    }
+    _firstSync.routeTracks = true;
   });
 
   // ── เฝ้าระวังสถานะการเชื่อมต่อ — ดึงข้อมูลล่าสุดทันทีทุกครั้งที่กลับมาออนไลน์ ──
@@ -3923,7 +3952,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.38P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.39P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -3931,7 +3960,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.38P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.39P</div>
       </div>
     </div>
 
@@ -4049,7 +4078,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.38P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.39P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4305,7 +4334,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.38P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.39P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4941,7 +4970,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.38P';
+const SKE_APP_VERSION='v3.2.39P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5173,6 +5202,8 @@ let cashRequests=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_cash')||
 let leaveLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_leaveLogs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 // ประวัติเที่ยววิ่งงาน — บันทึกถาวรทุกครั้งที่มีเที่ยวใหม่ (ไม่ขึ้นกับสถานะปัจจุบันของพนักงานอีกต่อไป)
 let runLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_runlogs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
+// ประวัติเส้นทาง GPS จริง — เริ่มเมื่อ "ออกเดินทาง" และจบเมื่อ "ถึงแล้วรอลงงาน"
+let routeTracks=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_route_tracks')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let monthlyDocs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_monthly_docs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let jobPlanRows=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_jobplan')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let jobRouteTemplates=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_jobtemplates')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
@@ -5229,6 +5260,163 @@ function _skeGpsDistanceMeters(a,b){
   return 6371000*2*Math.atan2(Math.sqrt(h),Math.sqrt(Math.max(0,1-h)));
 }
 
+// ── เส้นทางจริงจากสถานะ "ออกเดินทาง" → "ถึงแล้วรอลงงาน" ────────────────
+// ใช้พิกัดที่โทรศัพท์ส่งมาจริงเท่านั้น ไม่สร้างพิกัดย้อนหลังจากชื่อจังหวัด
+// เก็บจุดห่างกันอย่างน้อย 5 นาทีหรือ 5 กม. เพื่อลดปริมาณข้อมูล แต่ยังตรวจพบการออกนอกเส้นทางไกลได้
+const SKE_ROUTE_POINT_MIN_MS=5*60*1000;
+const SKE_ROUTE_POINT_MIN_MOVE_M=5000;
+const SKE_ROUTE_MAX_POINTS=250;
+
+function _skeRoutePointFromLocation(location){
+  const lat=Number(location&&location.lat),lng=Number(location&&location.lng);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
+  return {
+    lat:Number(lat.toFixed(6)),lng:Number(lng.toFixed(6)),
+    accuracy:Number.isFinite(Number(location.accuracy))?Math.max(0,Math.round(Number(location.accuracy))):null,
+    capturedAt:location.capturedAt||new Date().toISOString()
+  };
+}
+function _skeRouteCodeText(value){return String(value||'').trim().replace(/\s+/g,' ');}
+function _skeRouteContext(emp,note){
+  let row=null;
+  try{row=typeof getCurrentEmployeeJobRow==='function'?getCurrentEmployeeJobRow(emp):null;}catch(_){row=null;}
+  const firstNoteLine=String(note||emp?.note||'').split(/\r?\n/).map(x=>x.trim()).find(Boolean)||'';
+  const routeCode=_skeRouteCodeText(row?.route||firstNoteLine||'ไม่ระบุรหัสเส้นทาง');
+  return {jobPlanId:row?.id||emp?.currentJobPlanId||'',routeCode,routeKey:routeCode.toUpperCase()};
+}
+function _skeActiveRouteTrack(empId){
+  return (routeTracks||[])
+    .filter(t=>t&&String(t.empId||'')===String(empId||'')&&(t.state==='active'||t.state==='active-partial'))
+    .sort((a,b)=>new Date(b.startedAt||b.createdAt||0)-new Date(a.startedAt||a.createdAt||0))[0]||null;
+}
+function _skeRouteTrackId(empId,at){
+  return 'rt_'+String(empId||'unknown').replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+new Date(at||Date.now()).getTime()+'_'+Math.random().toString(36).slice(2,7);
+}
+function _skePersistRouteTracks(){
+  const promise=saveRouteTracks();
+  if(promise&&typeof promise.catch==='function')promise.catch(error=>console.warn('[SKE route] รอส่งประวัติเส้นทางเมื่อออนไลน์',error));
+}
+function _skeStartRouteTrack(emp,location,note,source='employee-status'){
+  if(!emp||!emp.id)return null;
+  const existing=_skeActiveRouteTrack(emp.id);
+  if(existing)return existing;
+  const now=new Date().toISOString();
+  const point=_skeRoutePointFromLocation(location);
+  const context=_skeRouteContext(emp,note);
+  const capturedMs=point?new Date(point.capturedAt||0).getTime():0;
+  const fresh=Boolean(point&&Number.isFinite(capturedMs)&&Math.abs(Date.now()-capturedMs)<=10*60*1000);
+  const track={
+    id:_skeRouteTrackId(emp.id,now),empId:emp.id,name:emp.name||'',plate:emp.plate||'',
+    jobPlanId:context.jobPlanId,routeCode:context.routeCode,routeKey:context.routeKey,
+    state:point?'active':'active-partial',startedAt:now,createdAt:now,updatedAt:now,
+    startLocation:point||null,points:point?[point]:[],distanceMeters:0,
+    missingStart:!point,approximateStart:!fresh,source,
+    avoidTolls:false,routePreference:'allow-tolls'
+  };
+  routeTracks=[track,...(routeTracks||[])];
+  _skePersistRouteTracks();
+  return track;
+}
+function _skeAppendActiveRoutePoint(empId,location){
+  const point=_skeRoutePointFromLocation(location);
+  const active=_skeActiveRouteTrack(empId);
+  if(!point||!active)return false;
+  const points=Array.isArray(active.points)?active.points.slice():[];
+  const last=points[points.length-1]||active.startLocation||null;
+  const elapsed=last?new Date(point.capturedAt||0).getTime()-new Date(last.capturedAt||0).getTime():Infinity;
+  const moved=last?_skeGpsDistanceMeters(last,point):Infinity;
+  if(last&&elapsed<SKE_ROUTE_POINT_MIN_MS&&moved<SKE_ROUTE_POINT_MIN_MOVE_M)return false;
+  points.push(point);
+  while(points.length>SKE_ROUTE_MAX_POINTS)points.splice(1,1); // รักษาจุดเริ่มและจุดล่าสุดไว้เสมอ
+  const patch={
+    points,updatedAt:new Date().toISOString(),
+    distanceMeters:Math.round(Number(active.distanceMeters||0)+(Number.isFinite(moved)?moved:0))
+  };
+  if(!active.startLocation){
+    patch.startLocation=point;
+    patch.missingStart=true;
+    patch.approximateStart=true;
+  }
+  routeTracks=(routeTracks||[]).map(t=>t&&t.id===active.id?{...t,...patch}:t);
+  _skePersistRouteTracks();
+  return true;
+}
+function _skeFinishRouteTrack(emp,location,note,source='employee-status'){
+  if(!emp||!emp.id)return null;
+  const now=new Date().toISOString();
+  const point=_skeRoutePointFromLocation(location);
+  const context=_skeRouteContext(emp,note);
+  let active=_skeActiveRouteTrack(emp.id);
+  if(!active){
+    const partial={
+      id:_skeRouteTrackId(emp.id,now),empId:emp.id,name:emp.name||'',plate:emp.plate||'',
+      jobPlanId:context.jobPlanId,routeCode:context.routeCode,routeKey:context.routeKey,
+      state:'completed-partial',startedAt:null,endedAt:now,createdAt:now,updatedAt:now,
+      startLocation:null,endLocation:point||null,points:point?[point]:[],distanceMeters:0,
+      missingStart:true,missingEnd:!point,approximateStart:true,approximateEnd:!point,
+      source,avoidTolls:false,routePreference:'allow-tolls',baselineEligible:false
+    };
+    routeTracks=[partial,...(routeTracks||[])];
+    _skePersistRouteTracks();
+    return partial;
+  }
+  let points=Array.isArray(active.points)?active.points.slice():[];
+  const last=points[points.length-1]||active.startLocation||null;
+  const moved=point&&last?_skeGpsDistanceMeters(last,point):0;
+  if(point&&(!last||_skeGpsDistanceMeters(last,point)>30))points.push(point);
+  while(points.length>SKE_ROUTE_MAX_POINTS)points.splice(1,1);
+  const capturedMs=point?new Date(point.capturedAt||0).getTime():0;
+  const endFresh=Boolean(point&&Number.isFinite(capturedMs)&&Math.abs(Date.now()-capturedMs)<=10*60*1000);
+  const routeKey=active.routeKey||context.routeKey;
+  const hasReference=(routeTracks||[]).some(t=>t&&t.id!==active.id&&t.routeKey===routeKey&&t.referenceState==='provisional'&&t.baselineEligible);
+  const baselineEligible=Boolean(active.startLocation&&point&&!active.approximateStart&&endFresh&&points.length>=2);
+  const patch={
+    state:baselineEligible?'completed':'completed-partial',endedAt:now,updatedAt:now,
+    endLocation:point||null,points,
+    distanceMeters:Math.round(Number(active.distanceMeters||0)+(Number.isFinite(moved)?moved:0)),
+    missingEnd:!point,approximateEnd:!endFresh,baselineEligible,
+    routeCode:active.routeCode||context.routeCode,routeKey,jobPlanId:active.jobPlanId||context.jobPlanId,
+    referenceState:baselineEligible&&!hasReference?'provisional':(active.referenceState||'candidate'),
+    source
+  };
+  routeTracks=(routeTracks||[]).map(t=>t&&t.id===active.id?{...t,...patch}:t);
+  _skePersistRouteTracks();
+  return {...active,...patch};
+}
+function recordRouteStatusTransition(prev,newStatus,location,note,source='employee-status'){
+  if(!prev||!newStatus)return;
+  const emp={...prev,note:note!==undefined?note:prev.note};
+  if(newStatus==='traveling'&&prev.status!=='traveling')_skeStartRouteTrack(emp,location,note,source);
+  if(newStatus==='unload_bay'&&prev.status!=='unload_bay')_skeFinishRouteTrack(emp,location,note,source);
+}
+function backfillRouteTracksFromExistingData(){
+  let added=false;
+  (employees||[]).forEach(emp=>{
+    if(!emp||!emp.id||!['traveling','unload_bay'].includes(emp.status))return;
+    const point=_skeRoutePointFromLocation(emp.phoneLocation);
+    if(!point)return;
+    const stamp=String(point.capturedAt||emp.updatedAt||'').replace(/\D/g,'').slice(0,14)||'unknown';
+    const id='rt_legacy_'+String(emp.id).replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+emp.status+'_'+stamp;
+    if((routeTracks||[]).some(t=>t&&t.id===id))return;
+    const context=_skeRouteContext(emp,emp.note);
+    const isTraveling=emp.status==='traveling';
+    routeTracks.push({
+      id,empId:emp.id,name:emp.name||'',plate:emp.plate||'',jobPlanId:context.jobPlanId,
+      routeCode:context.routeCode,routeKey:context.routeKey,
+      state:isTraveling?'active-partial':'completed-partial',
+      startedAt:isTraveling?(emp.updatedAt||point.capturedAt):null,
+      endedAt:isTraveling?null:(emp.updatedAt||point.capturedAt),
+      createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
+      startLocation:null,endLocation:isTraveling?null:point,points:[point],distanceMeters:0,
+      missingStart:true,missingEnd:isTraveling,approximateStart:true,approximateEnd:true,
+      importedFromLatestLocation:true,baselineEligible:false,source:'legacy-current-location',
+      avoidTolls:false,routePreference:'allow-tolls'
+    });
+    added=true;
+  });
+  if(added)_skePersistRouteTracks();
+}
+
 function _skeCarryPhoneLocationPlace(nextLocation,previousLocation){
   if(!nextLocation||!previousLocation||!previousLocation.province)return nextLocation;
   const resolvedLat=Number(previousLocation.resolvedLat);
@@ -5274,6 +5462,10 @@ async function _skeSendPhoneLocation(position,force=false){
   _skePhoneGpsLastSentAt=now;
   _skePhoneGpsLastSentCoords={lat:phoneLocation.lat,lng:phoneLocation.lng};
   _skeApplyPhoneLocationLocal(empId,phoneLocation);
+  const activeEmployee=(employees||[]).find(e=>e&&e.id===empId)||currentUser;
+  if(activeEmployee&&activeEmployee.status==='traveling'){
+    _skeAppendActiveRoutePoint(empId,phoneLocation);
+  }
   try{
     await fbPatchEmployee(empId,{phoneLocation});
     if(_skePhonePlaceNeedsResolve(phoneLocation)){
@@ -5385,6 +5577,7 @@ function purgeDeletedEmployeeLocalData(empId){
   cashRequests=(cashRequests||[]).filter(r=>r&&String(r.empId||'')!==id);
   leaveLogs=(leaveLogs||[]).filter(r=>r&&String(r.empId||'')!==id);
   runLogs=(runLogs||[]).filter(r=>r&&String(r.empId||'')!==id);
+  routeTracks=(routeTracks||[]).filter(r=>r&&String(r.empId||'')!==id);
   monthlyDocs=(monthlyDocs||[]).filter(r=>r&&String(r.empId||'')!==id);
   companyFeedbacks=(companyFeedbacks||[]).filter(r=>r&&String(r.empId||'')!==id);
   jobPlanRows=(jobPlanRows||[]).map(row=>row&&String(row.empId||'')===id
@@ -5397,6 +5590,7 @@ function purgeDeletedEmployeeLocalData(empId){
   localStorage.setItem('ske_cash',JSON.stringify(cashRequests));
   localStorage.setItem('ske_leaveLogs',JSON.stringify(leaveLogs));
   localStorage.setItem('ske_runlogs',JSON.stringify(runLogs));
+  _cacheSet('ske_route_tracks',routeTracks);
   _cacheSet('ske_monthly_docs',monthlyDocs);
   _cacheSet('ske_feedbacks',companyFeedbacks);
   _cacheSet('ske_jobplan',jobPlanRows);
@@ -5511,6 +5705,11 @@ function saveMonthlyDocs(){
 function saveRunLogs(){
   localStorage.setItem('ske_runlogs',JSON.stringify(runLogs));
   if(window.fbSaveRunLogs) window.fbSaveRunLogs(runLogs);
+}
+function saveRouteTracks(){
+  _cacheSet('ske_route_tracks',routeTracks||[]);
+  if(window.fbSaveRouteTracks)return window.fbSaveRouteTracks(routeTracks||[]);
+  return Promise.resolve();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -5637,7 +5836,7 @@ let _swReg = null;
 if ('serviceWorker' in navigator &&
     (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=dev-v3238-gotjob-indigo', { updateViaCache: 'none' }).then(reg => {
+    navigator.serviceWorker.register('sw.js?v=dev-v3239-route-history', { updateViaCache: 'none' }).then(reg => {
       _swReg = reg;
       // บังคับตรวจไฟล์ worker จากเครือข่าย ไม่ใช้สำเนาเก่าจาก HTTP cache
       reg.update().catch(() => {});
@@ -9612,6 +9811,7 @@ async function doSave(){
     }
   }
   recordRunLogIfNeeded(prev,finalStatus,note,empId,prev?.plate||currentUser.plate,prev?.name||currentUser.name);
+  recordRouteStatusTransition(prev,finalStatus,phoneLocation,note,'employee-status');
   const reapplySavedPatch=()=>{
     employees=(employees||[]).map(e=>e&&e.id===empId?{...e,...patch}:e);
     if(currentUser?.id===empId)currentUser={...currentUser,...patch};
@@ -11705,6 +11905,7 @@ function doSaveAEdit(id){
     }
     if(newPin.length===4&&/^\d{4}$/.test(newPin))updated.pin=newPin;
     recordRunLogIfNeeded(prev,status,note,id,plate,name);
+    recordRouteStatusTransition(prev,status,prev.phoneLocation,note,'admin-status');
     return updated;
   });
   if(currentUser?.id===id){
