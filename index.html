@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.41P');
+  console.log('[SKE TRUCK] app version: v3.2.42P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -3974,7 +3974,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.41P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.42P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -3982,7 +3982,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.41P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.42P</div>
       </div>
     </div>
 
@@ -4100,7 +4100,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.41P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.42P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4356,7 +4356,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.41P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.42P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4992,7 +4992,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.41P';
+const SKE_APP_VERSION='v3.2.42P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5355,22 +5355,64 @@ const SKE_ROUTE_POINT_MIN_MOVE_M=5000;
 const SKE_ROUTE_MAX_POINTS=250;
 
 function _skeRoutePointFromLocation(location){
+  if(!location||typeof location!=='object')return null;
   const lat=Number(location&&location.lat),lng=Number(location&&location.lng);
   if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
-  return {
+  const point={
     lat:Number(lat.toFixed(6)),lng:Number(lng.toFixed(6)),
     accuracy:Number.isFinite(Number(location.accuracy))?Math.max(0,Math.round(Number(location.accuracy))):null,
     capturedAt:location.capturedAt||new Date().toISOString()
   };
+  ['province','locality','address','resolvedAt'].forEach(key=>{if(location&&location[key])point[key]=String(location[key]);});
+  return point;
 }
 function _skeRouteCodeText(value){return String(value||'').trim().replace(/\s+/g,' ');}
+function _skeRouteProvinceText(value){return _skeRouteCodeText(value).replace(/^จังหวัด\s*/,'');}
+function _skeRouteStatusFields(prev,status,location,province,now=new Date().toISOString()){
+  const selectedProvince=_skeRouteProvinceText(province);
+  if(status==='loading'){
+    const liveOrigin=_skeRoutePointFromLocation(location);
+    const savedPhoneOrigin=_skeRoutePointFromLocation(prev?.phoneLocation);
+    const lockedOrigin=prev?.status==='loading'?_skeRoutePointFromLocation(prev?.routeOriginLocation):null;
+    const origin=lockedOrigin||liveOrigin||savedPhoneOrigin||null;
+    const savedPhoneIsSamePlace=Boolean(!liveOrigin||(savedPhoneOrigin&&_skeGpsDistanceMeters(liveOrigin,savedPhoneOrigin)<=250));
+    const originProvince=_skeRouteProvinceText(
+      lockedOrigin?.province
+      ||(lockedOrigin?_skeReadPhonePlaceCache(lockedOrigin)?.province:'')
+      ||liveOrigin?.province
+      ||(origin?_skeReadPhonePlaceCache(origin)?.province:'')
+      ||(savedPhoneIsSamePlace?savedPhoneOrigin?.province:'')
+      ||(lockedOrigin?prev?.routeOriginProvince:'')
+    );
+    return {
+      routeOriginLocation:origin?{...origin,...(originProvince?{province:originProvince}:{})}:null,
+      routeOriginProvince:originProvince,routeDestinationProvince:'',
+      routeOriginCapturedAt:origin?.capturedAt||now
+    };
+  }
+  if(status==='traveling'){
+    const origin=prev?.routeOriginLocation||_skeRoutePointFromLocation(prev?.phoneLocation)||null;
+    const previousPhone=_skeRoutePointFromLocation(prev?.phoneLocation);
+    const previousPhoneIsOrigin=Boolean(origin&&previousPhone&&_skeGpsDistanceMeters(origin,previousPhone)<=250);
+    const originProvince=_skeRouteProvinceText(prev?.routeOriginProvince||origin?.province||(origin?_skeReadPhonePlaceCache(origin)?.province:'')||(previousPhoneIsOrigin?previousPhone?.province:''));
+    return {
+      routeOriginLocation:origin?{...origin,...(originProvince?{province:originProvince}:{})}:null,
+      routeOriginProvince:originProvince,
+      routeDestinationProvince:selectedProvince,routeOriginCapturedAt:prev?.routeOriginCapturedAt||origin?.capturedAt||now
+    };
+  }
+  return{};
+}
 function _skeRouteContext(emp,note){
   let row=null;
   try{row=typeof getCurrentEmployeeJobRow==='function'?getCurrentEmployeeJobRow(emp):null;}catch(_){row=null;}
-  const firstNoteLine=String(note||emp?.note||'').split(/\r?\n/).map(x=>x.trim()).find(Boolean)||'';
-  const routeCode=_skeRouteCodeText(row?.route||firstNoteLine||'ไม่ระบุรหัสเส้นทาง');
-  return {jobPlanId:row?.id||emp?.currentJobPlanId||'',routeCode,routeKey:routeCode.toUpperCase()};
+  const originProvince=_skeRouteProvinceText(emp?.routeOriginProvince||emp?.routeOriginLocation?.province||'');
+  const destinationProvince=_skeRouteProvinceText(emp?.routeDestinationProvince||(emp?.status==='traveling'?emp?.province:'')||'');
+  const routeCode=originProvince&&destinationProvince?`${originProvince} → ${destinationProvince}`:'ยังระบุคู่จังหวัดไม่ครบ';
+  const routeKey=originProvince&&destinationProvince?`PROVINCE:${originProvince.toUpperCase()}>${destinationProvince.toUpperCase()}`:'';
+  return {jobPlanId:row?.id||emp?.currentJobPlanId||'',routeCode,routeKey,originProvince,destinationProvince};
 }
+function _skeIsProvinceRouteKey(value){return String(value||'').toUpperCase().startsWith('PROVINCE:');}
 function _skeActiveRouteTrack(empId){
   return (routeTracks||[])
     .filter(t=>t&&String(t.empId||'')===String(empId||'')&&(t.state==='active'||t.state==='active-partial'))
@@ -5388,16 +5430,22 @@ function _skeStartRouteTrack(emp,location,note,source='employee-status'){
   const existing=_skeActiveRouteTrack(emp.id);
   if(existing)return existing;
   const now=new Date().toISOString();
-  const point=_skeRoutePointFromLocation(location);
+  const livePoint=_skeRoutePointFromLocation(location);
+  const originPoint=_skeRoutePointFromLocation(emp.routeOriginLocation)||livePoint;
+  const points=originPoint?[originPoint]:[];
+  let initialDistance=0;
+  if(livePoint&&originPoint&&_skeGpsDistanceMeters(originPoint,livePoint)>30){
+    initialDistance=_skeGpsDistanceMeters(originPoint,livePoint);
+    points.push(livePoint);
+  }
   const context=_skeRouteContext(emp,note);
-  const capturedMs=point?new Date(point.capturedAt||0).getTime():0;
-  const fresh=Boolean(point&&Number.isFinite(capturedMs)&&Math.abs(Date.now()-capturedMs)<=10*60*1000);
   const track={
     id:_skeRouteTrackId(emp.id,now),empId:emp.id,name:emp.name||'',plate:emp.plate||'',
     jobPlanId:context.jobPlanId,routeCode:context.routeCode,routeKey:context.routeKey,
-    state:point?'active':'active-partial',startedAt:now,createdAt:now,updatedAt:now,
-    startLocation:point||null,points:point?[point]:[],distanceMeters:0,
-    missingStart:!point,approximateStart:!fresh,source,
+    originProvince:context.originProvince,destinationProvince:context.destinationProvince,
+    state:originPoint?'active':'active-partial',startedAt:now,createdAt:now,updatedAt:now,
+    startLocation:originPoint||null,points,distanceMeters:Math.round(initialDistance),
+    missingStart:!originPoint,approximateStart:!originPoint,source,
     avoidTolls:false,routePreference:'allow-tolls'
   };
   routeTracks=[track,...(routeTracks||[])];
@@ -5438,6 +5486,7 @@ function _skeFinishRouteTrack(emp,location,note,source='employee-status'){
     const partial={
       id:_skeRouteTrackId(emp.id,now),empId:emp.id,name:emp.name||'',plate:emp.plate||'',
       jobPlanId:context.jobPlanId,routeCode:context.routeCode,routeKey:context.routeKey,
+      originProvince:context.originProvince,destinationProvince:context.destinationProvince,
       state:'completed-partial',startedAt:null,endedAt:now,createdAt:now,updatedAt:now,
       startLocation:null,endLocation:point||null,points:point?[point]:[],distanceMeters:0,
       missingStart:true,missingEnd:!point,approximateStart:true,approximateEnd:!point,
@@ -5455,14 +5504,15 @@ function _skeFinishRouteTrack(emp,location,note,source='employee-status'){
   const capturedMs=point?new Date(point.capturedAt||0).getTime():0;
   const endFresh=Boolean(point&&Number.isFinite(capturedMs)&&Math.abs(Date.now()-capturedMs)<=10*60*1000);
   const routeKey=active.routeKey||context.routeKey;
-  const hasReference=(routeTracks||[]).some(t=>t&&t.id!==active.id&&t.routeKey===routeKey&&t.referenceState==='provisional'&&t.baselineEligible);
-  const baselineEligible=Boolean(active.startLocation&&point&&!active.approximateStart&&endFresh&&points.length>=2);
+  const hasReference=(routeTracks||[]).some(t=>t&&t.id!==active.id&&t.routeKey===routeKey&&['provisional','approved'].includes(t.referenceState)&&t.baselineEligible);
+  const baselineEligible=Boolean(routeKey&&active.startLocation&&point&&!active.approximateStart&&endFresh&&points.length>=2);
   const patch={
     state:baselineEligible?'completed':'completed-partial',endedAt:now,updatedAt:now,
     endLocation:point||null,points,
     distanceMeters:Math.round(Number(active.distanceMeters||0)+(Number.isFinite(moved)?moved:0)),
     missingEnd:!point,approximateEnd:!endFresh,baselineEligible,
     routeCode:active.routeCode||context.routeCode,routeKey,jobPlanId:active.jobPlanId||context.jobPlanId,
+    originProvince:active.originProvince||context.originProvince,destinationProvince:active.destinationProvince||context.destinationProvince,
     referenceState:baselineEligible&&!hasReference?'provisional':(active.referenceState||'candidate'),
     source
   };
@@ -5470,9 +5520,10 @@ function _skeFinishRouteTrack(emp,location,note,source='employee-status'){
   _skePersistRouteTracks();
   return {...active,...patch};
 }
-function recordRouteStatusTransition(prev,newStatus,location,note,source='employee-status'){
+function recordRouteStatusTransition(prev,newStatus,location,note,source='employee-status',nextProvince){
   if(!prev||!newStatus)return;
-  const emp={...prev,note:note!==undefined?note:prev.note};
+  const routeFields=_skeRouteStatusFields(prev,newStatus,location,nextProvince);
+  const emp={...prev,...routeFields,status:newStatus,province:nextProvince!==undefined?nextProvince:prev.province,note:note!==undefined?note:prev.note};
   if(prev.status==='traveling'&&newStatus!=='traveling')_skeCloseOpenRouteDeviationEvent(prev.id,location,'status-changed');
   if(newStatus==='traveling'&&prev.status!=='traveling')_skeStartRouteTrack(emp,location,note,source);
   if(newStatus==='unload_bay'&&prev.status!=='unload_bay')_skeFinishRouteTrack(emp,location,note,source);
@@ -5491,9 +5542,7 @@ function _skeRouteReferenceForEmployee(emp){
   if(!routeKey)return null;
   const eligible=(routeTracks||[]).filter(t=>t&&t.routeKey===routeKey&&t.baselineEligible&&Array.isArray(t.points)&&t.points.length>=2&&t.state==='completed');
   const sorter=(a,b)=>new Date(b.approvedAt||b.endedAt||b.updatedAt||0)-new Date(a.approvedAt||a.endedAt||a.updatedAt||0);
-  return eligible.filter(t=>t.referenceState==='approved').sort(sorter)[0]
-    ||eligible.filter(t=>t.referenceState==='provisional').sort(sorter)[0]
-    ||null;
+  return eligible.filter(t=>t.referenceState==='approved').sort(sorter)[0]||null;
 }
 
 function _skeDistancePointToSegmentMeters(point,start,end){
@@ -5526,15 +5575,17 @@ function _skeEvaluateRouteDeviation(emp,location,nowMs=Date.now()){
   const distanceMeters=Math.round(_skeDistanceToRouteMeters(point,reference.points));
   const previous=emp.routeDeviation;
   let state='on-route',outsideSince=null;
-  if(distanceMeters>SKE_ROUTE_CORRIDOR_M){
+  const corridorMeters=Number(reference.corridorMeters)||SKE_ROUTE_CORRIDOR_M;
+  const confirmMs=Number(reference.confirmMs)||SKE_ROUTE_CONFIRM_MS;
+  if(distanceMeters>corridorMeters){
     const canContinue=previous&&previous.referenceId===reference.id&&['checking','off-route'].includes(previous.state)&&previous.outsideSince;
     outsideSince=canContinue?previous.outsideSince:new Date(nowMs).toISOString();
-    state=nowMs-new Date(outsideSince).getTime()>=SKE_ROUTE_CONFIRM_MS?'off-route':'checking';
+    state=nowMs-new Date(outsideSince).getTime()>=confirmMs?'off-route':'checking';
   }
   return {
     state,referenceId:reference.id,referenceState:reference.referenceState||'provisional',
     routeCode:reference.routeCode||routeCode,distanceMeters:Number.isFinite(distanceMeters)?distanceMeters:null,
-    outsideSince,evaluatedAt:new Date(nowMs).toISOString(),point
+    outsideSince,corridorMeters,confirmMs,evaluatedAt:new Date(nowMs).toISOString(),point
   };
 }
 
@@ -5609,7 +5660,7 @@ function _skeRouteStateCopy(state){
     checking:{title:'กำลังตรวจสอบ',icon:'◐',detail:'ห่างเส้นทางเกิน 3 กม. แต่ยังไม่ครบ 5 นาที'},
     'off-route':{title:'ออกนอกเส้นทาง',icon:'!',detail:'ห่างเส้นทางเกิน 3 กม. ต่อเนื่องอย่างน้อย 5 นาที'},
     'gps-missing':{title:'ขาดสัญญาณ GPS',icon:'×',detail:'ไม่ได้รับตำแหน่งใหม่เกิน 10 นาที'},
-    'no-reference':{title:'ยังไม่มีเส้นอ้างอิง',icon:'?',detail:'ต้องวิ่งเที่ยวแรกให้จบและให้ผู้ดูแลรับรอง'}
+    'no-reference':{title:'ยังไม่มีเส้นอ้างอิง',icon:'?',detail:'คู่จังหวัดนี้ต้องวิ่งเที่ยวแรกให้จบและให้ผู้ดูแลรับรอง'}
   };
   return map[state]||map['no-reference'];
 }
@@ -5657,24 +5708,24 @@ function renderRouteMonitoringPanel(){
   const issueRows=snap.rows.filter(r=>r.monitor&&r.monitor.state!=='on-route');
   const candidates=[];
   const seen=new Set();
-  (routeTracks||[]).filter(t=>t&&t.baselineEligible&&t.state==='completed'&&t.referenceState!=='approved'&&Array.isArray(t.points)&&t.points.length>=2)
+  (routeTracks||[]).filter(t=>t&&_skeIsProvinceRouteKey(t.routeKey)&&t.baselineEligible&&t.state==='completed'&&t.referenceState!=='approved'&&Array.isArray(t.points)&&t.points.length>=2)
     .sort((a,b)=>new Date(b.endedAt||b.updatedAt||0)-new Date(a.endedAt||a.updatedAt||0)).forEach(t=>{if(!seen.has(t.routeKey)){seen.add(t.routeKey);candidates.push(t);}});
-  const approvedCount=(routeTracks||[]).filter(t=>t&&t.referenceState==='approved').length;
+  const approvedCount=(routeTracks||[]).filter(t=>t&&_skeIsProvinceRouteKey(t.routeKey)&&t.referenceState==='approved').length;
   return `<section id="skeRouteAlertsSection" class="ske-route-panel">
     <div class="ske-route-panel-head"><span class="ske-route-panel-head-icon">${skeIcon('pin')}</span><div><div class="ske-route-panel-title">เฝ้าระวังเส้นทางแบบเรียลไทม์</div><div class="ske-route-panel-sub">แจ้งเตือนเมื่อห่างเส้นอ้างอิงเกิน 3 กม. ต่อเนื่อง 5 นาที · ไม่บังคับเลี่ยงทางด่วน</div></div></div>
     <div class="ske-route-chip-row">
       <div class="ske-route-chip on-route"><b>${c['on-route']}</b><span>อยู่ในเส้น</span></div><div class="ske-route-chip checking"><b>${c.checking}</b><span>กำลังตรวจ</span></div><div class="ske-route-chip off-route"><b>${c['off-route']}</b><span>ออกนอกเส้น</span></div><div class="ske-route-chip gps-missing"><b>${c['gps-missing']}</b><span>GPS ขาดหาย</span></div>
     </div>
     <div class="ske-route-alert-list">${issueRows.length?issueRows.map(({emp,monitor})=>{const copy=_skeRouteStateCopy(monitor.state);const distance=monitor.distanceMeters!=null?` · ห่าง ${_skeRouteDistanceLabel(monitor.distanceMeters)}`:'';const canMap=Boolean(_skeRouteReferenceForEmployee(emp));return `<div class="ske-route-alert ${monitor.state}"><div class="ske-route-alert-main"><div class="ske-route-alert-name">${esc(copy.title)} · ${esc(emp.name||'-')}</div><div class="ske-route-alert-meta">${esc(emp.plate||'-')} · ${esc(monitor.routeCode||'ไม่ระบุเส้นทาง')}${esc(distance)}<br>${esc(copy.detail)}</div></div>${canMap?`<button class="ske-route-map-btn" data-route-emp="${esc(emp.id)}" onclick="openRouteComparison(this.dataset.routeEmp)">เปรียบเทียบ</button>`:''}</div>`;}).join(''):'<div style="padding:9px 2px;color:#047857;font-size:10.5px;font-weight:800;">✓ ยังไม่พบรถที่ต้องติดตามเส้นทาง</div>'}</div>
-    <div class="ske-route-reference-title">เส้นเที่ยวแรกรอรับรอง ${candidates.length?`(${candidates.length})`:`· รับรองแล้ว ${approvedCount} เส้น`}</div>
-    <div class="ske-route-reference-list">${candidates.length?candidates.map(t=>`<div class="ske-route-reference"><div class="ske-route-reference-main"><div class="ske-route-reference-code">${esc(t.routeCode||t.routeKey||'-')}</div><div class="ske-route-reference-meta">${esc(t.name||'-')} · ${t.points.length} จุด · ${_skeRouteDistanceLabel(t.distanceMeters||0)} · ${statusTimeShort(t.endedAt)}</div></div><button class="ske-route-map-btn" data-route-track="${esc(t.id)}" onclick="openRouteTrackPreview(this.dataset.routeTrack)">ดู</button>${adminRole==='viewer'?'':`<button class="ske-route-approve-btn" data-route-track="${esc(t.id)}" onclick="approveRouteReference(this.dataset.routeTrack)">รับรอง</button>`}</div>`).join(''):'<div style="font-size:9.5px;color:#94A3B8;">เมื่อรถวิ่งจาก “ออกเดินทาง” ถึง “ถึงแล้วรอลงงาน” ครบเที่ยว ระบบจะนำเส้นนั้นมาให้ผู้ดูแลตรวจก่อนใช้จริง</div>'}</div>
+    <div class="ske-route-reference-title">เส้นอ้างอิงคู่จังหวัดรอรับรอง ${candidates.length?`(${candidates.length})`:`· รับรองแล้ว ${approvedCount} เส้น`}</div>
+    <div class="ske-route-reference-list">${candidates.length?candidates.map(t=>`<div class="ske-route-reference"><div class="ske-route-reference-main"><div class="ske-route-reference-code">${esc(t.routeCode||t.routeKey||'-')}</div><div class="ske-route-reference-meta">${esc(t.name||'-')} · ${t.points.length} จุด · ${_skeRouteDistanceLabel(t.distanceMeters||0)} · ${statusTimeShort(t.endedAt)}</div></div><button class="ske-route-map-btn" data-route-track="${esc(t.id)}" onclick="openRouteTrackPreview(this.dataset.routeTrack)">ดู</button>${adminRole==='viewer'?'':`<button class="ske-route-approve-btn" data-route-track="${esc(t.id)}" onclick="approveRouteReference(this.dataset.routeTrack)">รับรอง</button>`}</div>`).join(''):'<div style="font-size:9.5px;color:#94A3B8;">เที่ยวแรกของแต่ละคู่จังหวัดจะบันทึกจาก GPS จริง เมื่อถึงปลายทางแล้วระบบจะนำมาให้ผู้ดูแลตรวจและรับรองก่อนใช้กับเที่ยวถัดไป</div>'}</div>
   </section>`;
 }
 
 async function approveRouteReference(trackId){
   if(adminRole==='viewer'){alert('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้นที่รับรองเส้นทางได้');return;}
   const selected=(routeTracks||[]).find(t=>t&&t.id===trackId);
-  if(!selected||!selected.baselineEligible){alert('เส้นทางนี้ยังมีข้อมูล GPS ไม่ครบ');return;}
+  if(!selected||!_skeIsProvinceRouteKey(selected.routeKey)||!selected.baselineEligible){alert('เส้นทางนี้ยังมีข้อมูล GPS หรือคู่จังหวัดไม่ครบ');return;}
   if(!confirm(`รับรองเส้น “${selected.routeCode||selected.routeKey}” เป็นเส้นอ้างอิงใช่หรือไม่?`))return;
   const now=new Date().toISOString();
   routeTracks=(routeTracks||[]).map(t=>!t||t.routeKey!==selected.routeKey?t:{...t,referenceState:t.id===selected.id?'approved':'candidate',approvedAt:t.id===selected.id?now:null,approvedBy:t.id===selected.id?'admin':null,updatedAt:now});
@@ -5695,6 +5746,7 @@ function _skeRouteMapSvg(points,current){
 }
 
 function _skeGoogleRouteUrl(track){
+  if(track?.googleMapsUrl)return track.googleMapsUrl;
   const points=(track?.points||[]).filter(p=>Number.isFinite(Number(p?.lat))&&Number.isFinite(Number(p?.lng)));
   if(points.length<2)return'#';
   const format=p=>`${Number(p.lat).toFixed(6)},${Number(p.lng).toFixed(6)}`;
@@ -5764,14 +5816,18 @@ function _skeCarryPhoneLocationPlace(nextLocation,previousLocation){
   };
 }
 
-function _skeApplyPhoneLocationLocal(empId,phoneLocation,routeDeviation){
-  const includeRouteDeviation=arguments.length>=3;
-  employees=(employees||[]).map(e=>e&&e.id===empId?{...e,phoneLocation,...(includeRouteDeviation?{routeDeviation}: {})}:e);
-  if(currentUser&&currentUser.id===empId){
-    currentUser={...currentUser,phoneLocation,...(includeRouteDeviation?{routeDeviation}: {})};
+function _skeApplyEmployeeFieldsLocal(empId,fields){
+  if(!fields||typeof fields!=='object'||!Object.keys(fields).length)return;
+  employees=(employees||[]).map(e=>e&&String(e.id)===String(empId)?{...e,...fields}:e);
+  if(currentUser&&String(currentUser.id)===String(empId)){
+    currentUser={...currentUser,...fields};
     saveU();
   }
   _cacheSet('ske_emp',employees);
+}
+function _skeApplyPhoneLocationLocal(empId,phoneLocation,routeDeviation,extraFields={}){
+  const includeRouteDeviation=arguments.length>=3;
+  _skeApplyEmployeeFieldsLocal(empId,{phoneLocation,...extraFields,...(includeRouteDeviation?{routeDeviation}: {})});
 }
 
 async function _skeSendPhoneLocation(position,force=false,allowBackground=false){
@@ -5792,14 +5848,16 @@ async function _skeSendPhoneLocation(position,force=false,allowBackground=false)
   _skePhoneGpsLastSentCoords={lat:phoneLocation.lat,lng:phoneLocation.lng};
   const previousEmployee=(employees||[]).find(e=>e&&e.id===empId)||currentUser;
   const routeDeviation=previousEmployee&&previousEmployee.status==='traveling'?_skeEvaluateRouteDeviation(previousEmployee,phoneLocation,now):null;
-  _skeApplyPhoneLocationLocal(empId,phoneLocation,routeDeviation);
+  const captureMissingOrigin=previousEmployee&&previousEmployee.status==='loading'&&!previousEmployee.routeOriginLocation;
+  const routeOriginFields=captureMissingOrigin?_skeRouteStatusFields(previousEmployee,'loading',phoneLocation,''):{};
+  _skeApplyPhoneLocationLocal(empId,phoneLocation,routeDeviation,routeOriginFields);
   const activeEmployee=(employees||[]).find(e=>e&&e.id===empId)||currentUser;
   if(activeEmployee&&activeEmployee.status==='traveling'){
     _skeAppendActiveRoutePoint(empId,phoneLocation);
     _skeUpdateRouteDeviationEvent(empId,routeDeviation,phoneLocation);
   }
   try{
-    await fbPatchEmployee(empId,{phoneLocation,routeDeviation});
+    await fbPatchEmployee(empId,{phoneLocation,routeDeviation,...routeOriginFields});
     if(_skePhonePlaceNeedsResolve(phoneLocation)){
       queueEmployeePhonePlaceLookup(empId,phoneLocation);
     }
@@ -9923,21 +9981,45 @@ async function _skeResolvePhonePlaceTask(task){
     const place=await _skeFetchPhonePlace(task,task.allowNetwork===true);
     const emp=(employees||[]).find(e=>e&&String(e.id)===task.empId);
     const current=getEmployeePhoneLocation(emp);
-    if(place&&current&&_skeGpsDistanceMeters(current,task)<=250){
-      const phoneLocation={
-        ...current,
-        ...place,
-        resolvedAt:new Date().toISOString(),
-        resolvedLat:current.lat,
-        resolvedLng:current.lng
-      };
-      resolved=true;
+    if(place){
+      const resolvedAt=new Date().toISOString();
+      const employeePatch={};
+      if(current&&_skeGpsDistanceMeters(current,task)<=250){
+        employeePatch.phoneLocation={
+          ...current,
+          ...place,
+          resolvedAt,
+          resolvedLat:current.lat,
+          resolvedLng:current.lng
+        };
+      }
+      // แม้รถจะออกจากจุดขึ้นงานไปแล้ว ผลแปลงจังหวัดของพิกัดต้นทางยังต้องเขียนกลับได้
+      // จึงเทียบกับพิกัดต้นทางที่ล็อกไว้แยกจากตำแหน่งโทรศัพท์ล่าสุด
+      const origin=_skeRoutePointFromLocation(emp?.routeOriginLocation);
+      if(origin&&_skeGpsDistanceMeters(origin,task)<=250){
+        const routeOriginProvince=_skeRouteProvinceText(place.province||origin.province||emp?.routeOriginProvince);
+        employeePatch.routeOriginLocation={...origin,...place,...(routeOriginProvince?{province:routeOriginProvince}:{}),resolvedAt,resolvedLat:origin.lat,resolvedLng:origin.lng};
+        employeePatch.routeOriginProvince=routeOriginProvince;
+        const active=_skeActiveRouteTrack(emp?.id);
+        const destinationProvince=_skeRouteProvinceText(active?.destinationProvince||emp?.routeDestinationProvince);
+        if(active&&routeOriginProvince&&destinationProvince){
+          const routeCode=`${routeOriginProvince} → ${destinationProvince}`;
+          const routeKey=`PROVINCE:${routeOriginProvince.toUpperCase()}>${destinationProvince.toUpperCase()}`;
+          routeTracks=(routeTracks||[]).map(t=>t&&t.id===active.id?{...t,originProvince:routeOriginProvince,destinationProvince,routeCode,routeKey,updatedAt:resolvedAt}:t);
+          _skePersistRouteTracks();
+        }
+      }
+      if(Object.keys(employeePatch).length){
+        resolved=true;
+        _skeApplyEmployeeFieldsLocal(task.empId,employeePatch);
+        await fbPatchEmployee(task.empId,employeePatch);
+      }
+    }
+    if(resolved){
       _skePhonePlaceUiState.delete(task.empId);
       _skePhonePlaceRetryAfter.delete(task.empId);
       clearTimeout(_skePhonePlaceRetryTimers.get(task.empId));
       _skePhonePlaceRetryTimers.delete(task.empId);
-      _skeApplyPhoneLocationLocal(task.empId,phoneLocation);
-      await fbPatchEmployee(task.empId,{phoneLocation});
     }
   }catch(error){
     console.warn('[SKE GPS] แปลงพิกัดเป็นชื่อจังหวัดไม่สำเร็จ',error);
@@ -10230,6 +10312,8 @@ async function doSave(){
   // หากไม่มีงาน queued จะบันทึกสถานะปลายทางเป็น "สแตนบายว่างงาน"
   const promotedJob=isFinishAction?await finishCurrentJobAndPromoteNext(prev):null;
   const finalStatus=isFinishAction?'done':_selStatus;
+  // ต้นทางล็อกตอนกด "กำลังขึ้นงาน" ส่วนปลายทางล็อกจากจังหวัดที่เลือกตอน "ออกเดินทาง"
+  const routeStatusFields=_skeRouteStatusFields(prev,finalStatus,phoneLocation,prov,now);
   const patch=promotedJob?{
     status:'got_job',
     province:'',
@@ -10242,6 +10326,7 @@ async function doSave(){
     previousProvince:prov,
     previousNote:note,
     previousStandbyAt:null,
+    ...routeStatusFields,
     ...(phoneLocation?{phoneLocation}:{})
   }:{
     status:finalStatus,
@@ -10249,6 +10334,7 @@ async function doSave(){
     note,
     updatedAt:now,
     standbyAt:finalStatus==='standby'?standbyAt:null,
+    ...routeStatusFields,
     ...(phoneLocation?{phoneLocation}:{}),
     ...clearJobLinkWhenLeavingGotJob(finalStatus)
   };
@@ -10260,7 +10346,7 @@ async function doSave(){
     }
   }
   recordRunLogIfNeeded(prev,finalStatus,note,empId,prev?.plate||currentUser.plate,prev?.name||currentUser.name);
-  recordRouteStatusTransition(prev,finalStatus,phoneLocation,note,'employee-status');
+  recordRouteStatusTransition(prev,finalStatus,phoneLocation,note,'employee-status',prov);
   patch.routeDeviation=patch.status==='traveling'&&phoneLocation
     ?_skeEvaluateRouteDeviation({...prev,...patch},phoneLocation,Date.now())
     :null;
@@ -12345,8 +12431,10 @@ function doSaveAEdit(id){
     if(e.id!==id)return e;
     const prev=e;
     const standbyAt=(status==='standby'&&prev.status!=='standby')?now:(status==='standby'?prev.standbyAt||now:null);
+    const routeStatusFields=_skeRouteStatusFields(prev,status,prev.phoneLocation,prov,now);
     const updated={
       ...e,name,position,plate,phone,lineId,note,status,province:prov,updatedAt:now,standbyAt,
+      ...routeStatusFields,
       routeDeviation:status==='traveling'&&prev.status==='traveling'?(prev.routeDeviation||null):null,
       ...clearJobLinkWhenLeavingGotJob(status)
     };
@@ -12359,7 +12447,7 @@ function doSaveAEdit(id){
     }
     if(newPin.length===4&&/^\d{4}$/.test(newPin))updated.pin=newPin;
     recordRunLogIfNeeded(prev,status,note,id,plate,name);
-    recordRouteStatusTransition(prev,status,prev.phoneLocation,note,'admin-status');
+    recordRouteStatusTransition(prev,status,prev.phoneLocation,note,'admin-status',prov);
     return updated;
   });
   if(currentUser?.id===id){
