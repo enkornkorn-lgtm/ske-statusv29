@@ -43,7 +43,7 @@
 <meta name="apple-mobile-web-app-title" content="SKE TRUCK">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#FFFFFF">
-<link rel="manifest" href="manifest.json?v=dev-v3246-route-deviation-history">
+<link rel="manifest" href="manifest.json?v=dev-v3248-alternative-route-learning">
 <title>SKE TRUCK</title>
 <!-- Firebase SDK -->
 <script type="module">
@@ -480,7 +480,7 @@
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') return;
       // ใช้ Service Worker หลักตัวเดียวร่วมกันทั้ง PWA cache และ FCM
-      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3246-route-deviation-history', { updateViaCache: 'none' });
+      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3248-alternative-route-learning', { updateViaCache: 'none' });
       if (!_messaging) _messaging = getMessaging(app);
       const token = await getToken(_messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
       if (!token) return;
@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.46P');
+  console.log('[SKE TRUCK] app version: v3.2.48P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -3936,12 +3936,13 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-route-chip-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0}.ske-route-chip{padding:8px 5px;border-radius:12px;text-align:center;border:1px solid}.ske-route-chip b{display:block;font-size:18px;line-height:1}.ske-route-chip span{display:block;font-size:9px;margin-top:4px;font-weight:800}.ske-route-chip.on-route{background:#ECFDF5;border-color:#86EFAC;color:#047857}.ske-route-chip.checking{background:#FFF7ED;border-color:#FDBA74;color:#C2410C}.ske-route-chip.off-route{background:#FEF2F2;border-color:#FCA5A5;color:#B91C1C}.ske-route-chip.gps-missing,.ske-route-chip.no-reference{background:#F8FAFC;border-color:#CBD5E1;color:#475569}
 .ske-route-alert-list,.ske-route-reference-list,.ske-route-history-list{display:flex;flex-direction:column;gap:8px}.ske-route-alert{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid;border-radius:13px;background:#FAFBFE}.ske-route-alert.on-route{border-color:#A7F3D0}.ske-route-alert.checking{border-color:#FDBA74;background:#FFFBEB}.ske-route-alert.off-route{border-color:#FCA5A5;background:#FEF2F2}.ske-route-alert.gps-missing,.ske-route-alert.no-reference{border-color:#CBD5E1;background:#F8FAFC}.ske-route-alert-main{flex:1;min-width:0}.ske-route-alert-name{font-size:11.5px;font-weight:900;color:#1E293B}.ske-route-alert-meta{font-size:9.5px;color:#64748B;margin-top:2px;line-height:1.4}.ske-route-map-btn,.ske-route-approve-btn{border:0;border-radius:10px;padding:7px 9px;background:#EAF2FF;color:#075DCE;font-size:9.5px;font-weight:900;white-space:nowrap;cursor:pointer}.ske-route-approve-btn{background:#DCFCE7;color:#047857}
 .ske-route-reference-title{font-size:11px;font-weight:950;color:#334155;margin:14px 0 7px}.ske-route-reference{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px dashed #AFC5E8;border-radius:13px;background:#F8FBFF}.ske-route-reference-main{flex:1;min-width:0}.ske-route-reference-code{font-size:11px;font-weight:900;color:#1E3A5F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ske-route-reference-meta{font-size:9px;color:#718096;margin-top:2px}
-.ske-route-history{margin-top:13px;border:1px solid #DCE5F2;border-radius:14px;background:#FBFDFF;overflow:hidden}.ske-route-history>summary{display:flex;align-items:center;gap:8px;list-style:none;cursor:pointer;padding:11px 12px;color:#1E3A5F;font-size:11px;font-weight:950}.ske-route-history>summary::-webkit-details-marker,.ske-route-history-day>summary::-webkit-details-marker{display:none}.ske-route-history>summary:after{content:'▾';margin-left:auto;color:#64748B}.ske-route-history[open]>summary:after{transform:rotate(180deg)}.ske-route-history-toolbar{display:flex;align-items:center;gap:8px;padding:0 10px 9px}.ske-route-history-toolbar label{font-size:9.5px;font-weight:900;color:#475569;white-space:nowrap}.ske-route-history-toolbar select{flex:1;min-width:0;border:1px solid #CBD5E1;border-radius:10px;padding:7px 9px;background:#fff;color:#1E293B;font-size:10px;font-weight:800}.ske-route-history-days{display:flex;flex-direction:column;gap:8px;padding:0 10px 10px}.ske-route-history-day{border:1px solid #DCE5F2;border-radius:12px;background:#F8FAFC;overflow:hidden}.ske-route-history-day>summary{display:flex;align-items:center;gap:7px;list-style:none;cursor:pointer;padding:9px 10px;color:#334155;font-size:10.5px;font-weight:950}.ske-route-history-day>summary:before{content:'▸';color:#64748B}.ske-route-history-day[open]>summary:before{transform:rotate(90deg)}.ske-route-history-day>summary b{margin-left:auto;border-radius:999px;padding:2px 7px;background:#EAF2FF;color:#075DCE;font-size:9px}.ske-route-history-list{padding:0 8px 8px}.ske-route-history-row{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid #E2E8F0;border-radius:12px;background:#fff}.ske-route-history-main{flex:1;min-width:0}.ske-route-history-code{font-size:10.5px;font-weight:900;color:#172033;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ske-route-history-meta{font-size:9px;color:#64748B;line-height:1.45;margin-top:2px}.ske-route-history-state{display:inline-flex;border-radius:999px;padding:2px 6px;background:#ECFDF5;color:#047857;font-size:8px;font-weight:900}.ske-route-history-state.partial{background:#FFF7ED;color:#C2410C}
+.ske-route-catalog{margin-top:13px;border:1px solid #C4B5FD;border-radius:14px;background:#FCFAFF;overflow:hidden}.ske-route-catalog>summary{display:flex;align-items:center;gap:8px;list-style:none;cursor:pointer;padding:11px 12px;color:#5B21B6;font-size:11px;font-weight:950}.ske-route-catalog>summary::-webkit-details-marker{display:none}.ske-route-catalog>summary:after{content:'▾';margin-left:auto;color:#7C3AED}.ske-route-catalog[open]>summary:after{transform:rotate(180deg)}.ske-route-catalog-count{border-radius:999px;padding:3px 8px;background:#EDE9FE;color:#6D28D9;font-size:9px;font-weight:950}.ske-route-catalog-note{padding:0 12px 9px;color:#64748B;font-size:9px;line-height:1.45}.ske-route-catalog-list{display:flex;flex-direction:column;gap:8px;padding:0 10px 10px}.ske-route-catalog-row{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid #DDD6FE;border-radius:12px;background:#fff}.ske-route-catalog-main{flex:1;min-width:0}.ske-route-catalog-code{font-size:10.5px;font-weight:950;color:#312E81;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ske-route-catalog-kind{display:inline-flex;vertical-align:1px;margin-left:3px;border-radius:999px;padding:2px 6px;background:#EDE9FE;color:#6D28D9;font-size:7.5px;font-weight:950}.ske-route-catalog-meta{font-size:9px;color:#64748B;line-height:1.45;margin-top:2px}.ske-route-catalog-state{display:inline-flex;border-radius:999px;padding:2px 6px;background:#FFF7ED;color:#C2410C;font-size:8px;font-weight:950}.ske-route-catalog-state.approved{background:#ECFDF5;color:#047857}.ske-route-catalog-state.incomplete{background:#F1F5F9;color:#64748B}
+.ske-route-history{margin-top:13px;border:1px solid #DCE5F2;border-radius:14px;background:#FBFDFF;overflow:hidden}.ske-route-history>summary{display:flex;align-items:center;gap:8px;list-style:none;cursor:pointer;padding:11px 12px;color:#1E3A5F;font-size:11px;font-weight:950}.ske-route-history>summary::-webkit-details-marker,.ske-route-history-month>summary::-webkit-details-marker,.ske-route-history-day>summary::-webkit-details-marker{display:none}.ske-route-history>summary:after{content:'▾';margin-left:auto;color:#64748B}.ske-route-history[open]>summary:after{transform:rotate(180deg)}.ske-route-history-toolbar{display:flex;align-items:center;gap:8px;padding:0 10px 9px}.ske-route-history-toolbar label{font-size:9.5px;font-weight:900;color:#475569;white-space:nowrap}.ske-route-history-toolbar select{flex:1;min-width:0;border:1px solid #CBD5E1;border-radius:10px;padding:7px 9px;background:#fff;color:#1E293B;font-size:10px;font-weight:800}.ske-route-history-months,.ske-route-history-days{display:flex;flex-direction:column;gap:8px}.ske-route-history-months{padding:0 10px 10px}.ske-route-history-days{padding:0 8px 8px}.ske-route-history-month{border:1px solid #BFDBFE;border-radius:12px;background:#F8FBFF;overflow:hidden}.ske-route-history-month>summary{display:flex;align-items:center;gap:7px;list-style:none;cursor:pointer;padding:10px;color:#1E3A5F;font-size:10.5px;font-weight:950}.ske-route-history-month>summary:before{content:'▸';color:#2563EB}.ske-route-history-month[open]>summary:before{transform:rotate(90deg)}.ske-route-history-month>summary b{margin-left:auto;border-radius:999px;padding:2px 7px;background:#DBEAFE;color:#1D4ED8;font-size:9px}.ske-route-history-day{border:1px solid #DCE5F2;border-radius:12px;background:#F8FAFC;overflow:hidden}.ske-route-history-day>summary{display:flex;align-items:center;gap:7px;list-style:none;cursor:pointer;padding:9px 10px;color:#334155;font-size:10.5px;font-weight:950}.ske-route-history-day>summary:before{content:'▸';color:#64748B}.ske-route-history-day[open]>summary:before{transform:rotate(90deg)}.ske-route-history-day>summary b{margin-left:auto;border-radius:999px;padding:2px 7px;background:#EAF2FF;color:#075DCE;font-size:9px}.ske-route-history-list{padding:0 8px 8px}.ske-route-history-row{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid #E2E8F0;border-radius:12px;background:#fff}.ske-route-history-main{flex:1;min-width:0}.ske-route-history-code{font-size:10.5px;font-weight:900;color:#172033;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ske-route-history-meta{font-size:9px;color:#64748B;line-height:1.45;margin-top:2px}.ske-route-history-state{display:inline-flex;border-radius:999px;padding:2px 6px;background:#ECFDF5;color:#047857;font-size:8px;font-weight:900}.ske-route-history-state.partial{background:#FFF7ED;color:#C2410C}
 .ske-route-deviation-badge{display:inline-flex;align-items:center;gap:4px;margin-top:4px;border-radius:999px;padding:3px 7px;background:#FEF2F2;border:1px solid #FCA5A5;color:#B91C1C;font-size:8.5px;font-weight:950}.ske-route-deviation-badge.safe{background:#ECFDF5;border-color:#86EFAC;color:#047857}.ske-route-deviation-badge.unknown{background:#F8FAFC;border-color:#CBD5E1;color:#64748B}.ske-route-deviation-history{margin:0 14px 12px;border:1px solid #FCA5A5;border-radius:14px;background:#FFF7F7;overflow:hidden}.ske-route-deviation-history.safe{border-color:#86EFAC;background:#F0FDF4}.ske-route-deviation-history.unknown{border-color:#CBD5E1;background:#F8FAFC}.ske-route-deviation-history-head{padding:9px 11px;font-size:10.5px;font-weight:950;color:#B91C1C}.ske-route-deviation-history.safe .ske-route-deviation-history-head{color:#047857}.ske-route-deviation-history.unknown .ske-route-deviation-history-head{color:#64748B}.ske-route-deviation-event{display:flex;align-items:flex-start;gap:8px;margin:0 8px 8px;padding:8px 9px;border-radius:10px;background:#fff;border:1px solid #FECACA}.ske-route-deviation-event-index{display:flex;align-items:center;justify-content:center;width:21px;height:21px;flex:0 0 21px;border-radius:50%;background:#DC2626;color:#fff;font-size:9px;font-weight:950}.ske-route-deviation-event-main{font-size:9px;color:#7F1D1D;line-height:1.45}.ske-route-deviation-event-main b{font-size:9.5px}
 .ske-route-person-state{display:flex;align-items:center;flex-wrap:wrap;gap:4px 7px;margin-top:4px;padding:5px 7px;border-radius:9px;font-size:9.5px;font-weight:850;line-height:1.35}.ske-route-person-state.on-route{background:#ECFDF5;color:#047857}.ske-route-person-state.checking{background:#FFF7ED;color:#C2410C}.ske-route-person-state.off-route{background:#FEF2F2;color:#B91C1C}.ske-route-person-state.gps-missing,.ske-route-person-state.no-reference{background:#F1F5F9;color:#475569}.ske-route-person-state button{border:0;padding:0;background:transparent;color:inherit;text-decoration:underline;font:inherit;font-weight:950;cursor:pointer}
 .ske-route-modal{position:fixed;inset:0;z-index:130000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.70);backdrop-filter:blur(3px)}.ske-route-modal-card{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 26px 80px rgba(0,0,0,.35)}.ske-route-modal-head{display:flex;align-items:flex-start;gap:10px;padding:16px 17px;border-bottom:1px solid #E2E8F0}.ske-route-modal-title{flex:1;font-size:15px;font-weight:950;color:#172033}.ske-route-modal-sub{font-size:10px;color:#64748B;margin-top:3px}.ske-route-modal-close{width:34px;height:34px;border:0;border-radius:11px;background:#F1F5F9;color:#475569;font-size:18px;cursor:pointer}.ske-route-map-canvas{position:relative;margin:14px;border-radius:16px;overflow:hidden;background:linear-gradient(145deg,#F8FAFC,#EAF2FF);border:1px solid #D7E2F0}.ske-route-map-canvas svg{display:block;width:100%;height:auto}.ske-route-map-tiles{position:relative;width:100%;aspect-ratio:68/36;background:#E8EEF5;overflow:hidden}.ske-route-map-tiles img{position:absolute;max-width:none}.ske-route-map-tiles svg{position:absolute;inset:0;width:100%;height:100%;z-index:3}.ske-route-osm-credit{position:absolute;right:4px;bottom:3px;z-index:4;padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.88);font-size:7px;color:#334155;text-decoration:none}.ske-route-map-legend{display:flex;flex-wrap:wrap;gap:8px;padding:0 15px 12px;font-size:10px;color:#475569}.ske-route-map-legend span{display:flex;align-items:center;gap:5px}.ske-route-legend-line{width:22px;height:4px;border-radius:4px;background:#2563EB}.ske-route-legend-dot{width:10px;height:10px;border-radius:50%;background:#DC2626}.ske-route-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 15px}.ske-route-modal-actions button{border:0;padding:10px;border-radius:12px;text-align:center;font-size:10.5px;font-weight:900;background:#EAF2FF;color:#075DCE;cursor:pointer}.ske-route-modal-actions button.current{background:#FEF2F2;color:#B91C1C}
 .status-jump-flash#skeRouteAlertsSection{animation:ske-route-flash 1.5s ease}@keyframes ske-route-flash{0%,100%{box-shadow:0 10px 26px rgba(28,52,91,.07)}35%{box-shadow:0 0 0 5px rgba(239,68,68,.20),0 12px 30px rgba(239,68,68,.16)}}
-@media(max-width:600px){.ske-route-panel{padding:12px 10px;border-radius:17px}.ske-route-chip-row{grid-template-columns:repeat(2,minmax(0,1fr))}.ske-route-alert{align-items:flex-start}.ske-route-modal-actions{grid-template-columns:1fr}.ske-route-summary{padding:11px 12px}.ske-route-summary-icon{width:38px;height:38px;flex-basis:38px}.ske-route-summary-count{font-size:19px}.ske-route-summary-actions{grid-template-columns:1fr}.ske-route-history-shortcut{min-width:0}}
+@media(max-width:600px){.ske-route-panel{padding:12px 10px;border-radius:17px}.ske-route-chip-row{grid-template-columns:repeat(2,minmax(0,1fr))}.ske-route-alert{align-items:flex-start}.ske-route-modal-actions{grid-template-columns:1fr}.ske-route-summary{padding:11px 12px}.ske-route-summary-icon{width:38px;height:38px;flex-basis:38px}.ske-route-summary-count{font-size:19px}.ske-route-summary-actions{grid-template-columns:1fr}.ske-route-history-shortcut{min-width:0}.ske-route-catalog-row{align-items:flex-start;flex-wrap:wrap}.ske-route-catalog-main{flex-basis:100%}.ske-route-history-row{align-items:flex-start}.ske-route-history-row .ske-route-map-btn{align-self:center}}
 
 </style>
 </head>
@@ -3977,7 +3978,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.46P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.48P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -3985,7 +3986,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.46P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.48P</div>
       </div>
     </div>
 
@@ -4103,7 +4104,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.46P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.48P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4359,7 +4360,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.46P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.48P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4995,7 +4996,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.46P';
+const SKE_APP_VERSION='v3.2.48P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5442,7 +5443,8 @@ function _skeStartRouteTrack(emp,location,note,source='employee-status'){
     points.push(livePoint);
   }
   const context=_skeRouteContext(emp,note);
-  const monitoredReference=_skeRouteReferenceForEmployee(emp);
+  const monitoredReferences=_skeRouteReferencesForEmployee(emp);
+  const monitoredReference=monitoredReferences[0]||null;
   const track={
     id:_skeRouteTrackId(emp.id,now),empId:emp.id,name:emp.name||'',plate:emp.plate||'',
     jobPlanId:context.jobPlanId,routeCode:context.routeCode,routeKey:context.routeKey,
@@ -5451,6 +5453,7 @@ function _skeStartRouteTrack(emp,location,note,source='employee-status'){
     startLocation:originPoint||null,points,distanceMeters:Math.round(initialDistance),
     missingStart:!originPoint,approximateStart:!originPoint,source,
     monitoringEligible:Boolean(monitoredReference),monitoredReferenceId:monitoredReference?.id||'',
+    monitoredReferenceIds:monitoredReferences.map(reference=>reference.id),
     monitoringStartedAt:monitoredReference?now:null,
     avoidTolls:false,routePreference:'allow-tolls'
   };
@@ -5539,16 +5542,26 @@ function recordRouteStatusTransition(prev,newStatus,location,note,source='employ
 const SKE_ROUTE_CORRIDOR_M=3000;
 const SKE_ROUTE_CONFIRM_MS=5*60*1000;
 const SKE_ROUTE_GPS_STALE_MS=10*60*1000;
+const SKE_ROUTE_ALTERNATIVE_MIN_TRIPS=3;
+const SKE_ROUTE_CLUSTER_TOLERANCE_M=5000;
+const SKE_ROUTE_CLUSTER_SIMILARITY=.85;
 
-function _skeRouteReferenceForEmployee(emp){
-  if(!emp)return null;
+function _skeRouteReferencesForEmployee(emp){
+  if(!emp)return[];
   const active=_skeActiveRouteTrack(emp.id);
   const context=_skeRouteContext(emp,emp.note);
   const routeKey=String(active?.routeKey||context.routeKey||'').toUpperCase();
-  if(!routeKey)return null;
-  const eligible=(routeTracks||[]).filter(t=>t&&t.routeKey===routeKey&&t.baselineEligible&&Array.isArray(t.points)&&t.points.length>=2&&t.state==='completed');
+  if(!routeKey)return[];
+  const eligible=(routeTracks||[]).filter(t=>t&&String(t.routeKey||'').toUpperCase()===routeKey&&t.baselineEligible&&Array.isArray(t.points)&&t.points.length>=2&&t.state==='completed');
   const sorter=(a,b)=>new Date(b.approvedAt||b.endedAt||b.updatedAt||0)-new Date(a.approvedAt||a.endedAt||a.updatedAt||0);
-  return eligible.filter(t=>t.referenceState==='approved').sort(sorter)[0]||null;
+  return eligible.filter(t=>t.referenceState==='approved').sort(sorter);
+}
+function _skeRouteReferenceForEmployee(emp){
+  const references=_skeRouteReferencesForEmployee(emp);
+  if(!references.length)return null;
+  const point=_skeRoutePointFromLocation(emp?.phoneLocation);
+  if(!point||references.length===1)return references[0];
+  return references.map(reference=>({reference,distance:_skeDistanceToRouteMeters(point,reference.points)})).sort((a,b)=>a.distance-b.distance)[0].reference;
 }
 
 function _skeDistancePointToSegmentMeters(point,start,end){
@@ -5576,20 +5589,23 @@ function _skeEvaluateRouteDeviation(emp,location,nowMs=Date.now()){
   const active=_skeActiveRouteTrack(emp.id);
   const routeCode=active?.routeCode||context.routeCode;
   if(!point)return {state:'gps-missing',routeCode,evaluatedAt:new Date(nowMs).toISOString()};
-  const reference=_skeRouteReferenceForEmployee(emp);
-  if(!reference)return {state:'no-reference',routeCode,evaluatedAt:new Date(nowMs).toISOString(),point};
-  const distanceMeters=Math.round(_skeDistanceToRouteMeters(point,reference.points));
+  const references=_skeRouteReferencesForEmployee(emp);
+  if(!references.length)return {state:'no-reference',routeCode,evaluatedAt:new Date(nowMs).toISOString(),point};
+  const nearest=references.map(reference=>({reference,distanceMeters:Math.round(_skeDistanceToRouteMeters(point,reference.points))})).sort((a,b)=>a.distanceMeters-b.distanceMeters)[0];
+  const reference=nearest.reference,distanceMeters=nearest.distanceMeters;
   const previous=emp.routeDeviation;
   let state='on-route',outsideSince=null;
   const corridorMeters=Number(reference.corridorMeters)||SKE_ROUTE_CORRIDOR_M;
   const confirmMs=Number(reference.confirmMs)||SKE_ROUTE_CONFIRM_MS;
   if(distanceMeters>corridorMeters){
-    const canContinue=previous&&previous.referenceId===reference.id&&['checking','off-route'].includes(previous.state)&&previous.outsideSince;
+    const routeKey=String(reference.routeKey||active?.routeKey||context.routeKey||'').toUpperCase();
+    const canContinue=previous&&String(previous.routeKey||'').toUpperCase()===routeKey&&['checking','off-route'].includes(previous.state)&&previous.outsideSince;
     outsideSince=canContinue?previous.outsideSince:new Date(nowMs).toISOString();
     state=nowMs-new Date(outsideSince).getTime()>=confirmMs?'off-route':'checking';
   }
   return {
     state,referenceId:reference.id,referenceState:reference.referenceState||'provisional',
+    referenceCount:references.length,routeKey:String(reference.routeKey||active?.routeKey||context.routeKey||'').toUpperCase(),
     routeCode:reference.routeCode||routeCode,distanceMeters:Number.isFinite(distanceMeters)?distanceMeters:null,
     outsideSince,corridorMeters,confirmMs,evaluatedAt:new Date(nowMs).toISOString(),point
   };
@@ -5603,7 +5619,9 @@ function _skeUpdateRouteDeviationEvent(empId,deviation,location){
   const now=deviation.evaluatedAt||new Date().toISOString();
   let changed=false;
   const hasReference=Boolean(deviation.referenceId);
-  if(hasReference&&(!active.monitoringEligible||active.monitoredReferenceId!==deviation.referenceId))changed=true;
+  const monitoredReferenceIds=Array.isArray(active.monitoredReferenceIds)?active.monitoredReferenceIds.slice():(active.monitoredReferenceId?[active.monitoredReferenceId]:[]);
+  if(hasReference&&!monitoredReferenceIds.includes(deviation.referenceId)){monitoredReferenceIds.push(deviation.referenceId);changed=true;}
+  if(hasReference&&!active.monitoringEligible)changed=true;
   if(deviation.state==='off-route'){
     if(openIndex<0){
       events.push({
@@ -5627,7 +5645,7 @@ function _skeUpdateRouteDeviationEvent(empId,deviation,location){
     changed=true;
   }
   if(changed){
-    routeTracks=(routeTracks||[]).map(t=>t&&t.id===active.id?{...t,deviationEvents:events,updatedAt:now,monitoringEligible:Boolean(t.monitoringEligible||hasReference),monitoredReferenceId:deviation.referenceId||t.monitoredReferenceId||'',monitoringStartedAt:t.monitoringStartedAt||(hasReference?now:null),monitoringCorridorMeters:Number(deviation.corridorMeters||t.monitoringCorridorMeters||SKE_ROUTE_CORRIDOR_M),monitoringConfirmMs:Number(deviation.confirmMs||t.monitoringConfirmMs||SKE_ROUTE_CONFIRM_MS)}:t);
+    routeTracks=(routeTracks||[]).map(t=>t&&t.id===active.id?{...t,deviationEvents:events,updatedAt:now,monitoringEligible:Boolean(t.monitoringEligible||hasReference),monitoredReferenceId:t.monitoredReferenceId||deviation.referenceId||'',monitoredReferenceIds,monitoringStartedAt:t.monitoringStartedAt||(hasReference?now:null),monitoringCorridorMeters:Number(deviation.corridorMeters||t.monitoringCorridorMeters||SKE_ROUTE_CORRIDOR_M),monitoringConfirmMs:Number(deviation.confirmMs||t.monitoringConfirmMs||SKE_ROUTE_CONFIRM_MS)}:t);
     _skePersistRouteTracks();
   }
   return changed;
@@ -5706,8 +5724,9 @@ function jumpToRouteAlerts(){
 function _skeCanAdminViewRoutes(){
   return Boolean(adminMode&&(adminRole==='super'||adminRole==='viewer'));
 }
-function _skeRevealAdminRouteHistory(){
-  const target=document.querySelector('#skeRouteAlertsSection .ske-route-history');
+function _skeRevealAdminRouteHistory(focus='catalog'){
+  const selector=focus==='daily'?'.ske-route-history':'.ske-route-catalog';
+  const target=document.querySelector(`#skeRouteAlertsSection ${selector}`);
   if(!target){alert('ยังไม่มีข้อมูลประวัติการเดินทาง');return;}
   target.open=true;
   target.scrollIntoView({behavior:'smooth',block:'start'});
@@ -5724,15 +5743,100 @@ function renderRouteSummaryButton(){
   const snap=_skeRouteMonitorSnapshot();
   const c=snap.counts;
   const safe=snap.attention===0;
-  const historyCount=_skeRouteHistoryTracks().length;
+  const uniqueRouteCount=_skeUniqueRouteCatalog().length;
   const title=c['off-route']>0?`ออกนอกเส้นทาง ${c['off-route']} คัน`:(c.checking>0?`กำลังตรวจสอบ ${c.checking} คัน`:(c['gps-missing']>0?`GPS ขาดหาย ${c['gps-missing']} คัน`:'ยังไม่พบออกนอกเส้นทาง'));
-  return `<div class="ske-route-summary-actions"><button type="button" class="ske-route-summary ${safe?'safe':''}" onclick="jumpToRouteAlerts()"><span class="ske-route-summary-icon">${safe?skeIcon('check'):skeIcon('alert')}</span><span class="ske-route-summary-copy"><span class="ske-route-summary-title">${title}</span><span class="ske-route-summary-sub">แอดมินและผู้ดูแลแตะดูรายละเอียดได้</span></span><span class="ske-route-summary-count">${snap.attention}</span></button><button type="button" class="ske-route-history-shortcut" onclick="openAdminRouteHistory()">${skeIcon('history')} ประวัติ <b>${historyCount}</b> เที่ยว</button></div>`;
+  return `<div class="ske-route-summary-actions"><button type="button" class="ske-route-summary ${safe?'safe':''}" onclick="jumpToRouteAlerts()"><span class="ske-route-summary-icon">${safe?skeIcon('check'):skeIcon('alert')}</span><span class="ske-route-summary-copy"><span class="ske-route-summary-title">${title}</span><span class="ske-route-summary-sub">แอดมินและผู้ดูแลแตะดูรายละเอียดได้</span></span><span class="ske-route-summary-count">${snap.attention}</span></button><button type="button" class="ske-route-history-shortcut" onclick="openAdminRouteHistory()">${skeIcon('history')} เส้นทาง <b>${uniqueRouteCount}</b> เส้น</button></div>`;
 }
 
 function _skeRouteHistoryTracks(){
   return (routeTracks||[])
     .filter(t=>t&&t.endedAt&&['completed','completed-partial'].includes(t.state)&&Array.isArray(t.points)&&t.points.length>=2)
     .sort((a,b)=>new Date(b.endedAt||b.updatedAt||0)-new Date(a.endedAt||a.updatedAt||0));
+}
+function _skeSampleRoutePoints(points,maxPoints=24){
+  const valid=(points||[]).filter(point=>Number.isFinite(Number(point?.lat))&&Number.isFinite(Number(point?.lng)));
+  if(valid.length<=maxPoints)return valid;
+  return Array.from({length:maxPoints},(_,index)=>valid[Math.round(index*(valid.length-1)/(maxPoints-1))]);
+}
+function _skeRoutePathSimilarity(trackA,trackB,toleranceMeters=SKE_ROUTE_CLUSTER_TOLERANCE_M){
+  const pointsA=_skeSampleRoutePoints(trackA?.points),pointsB=_skeSampleRoutePoints(trackB?.points);
+  if(pointsA.length<2||pointsB.length<2)return 0;
+  const coverage=(samples,reference)=>samples.filter(point=>_skeDistanceToRouteMeters(point,reference)<=toleranceMeters).length/samples.length;
+  return Math.min(coverage(pointsA,pointsB),coverage(pointsB,pointsA));
+}
+function _skeClusterRoutePaths(tracks){
+  const ordered=(tracks||[]).filter(track=>track&&Array.isArray(track.points)&&track.points.length>=2).slice().sort((a,b)=>{
+    const approvedDiff=Number(b.referenceState==='approved')-Number(a.referenceState==='approved');
+    if(approvedDiff)return approvedDiff;
+    return new Date(a.endedAt||a.updatedAt||0)-new Date(b.endedAt||b.updatedAt||0);
+  });
+  const clusters=[];
+  ordered.forEach(track=>{
+    let best=null,bestScore=0;
+    clusters.forEach(cluster=>{
+      const score=_skeRoutePathSimilarity(track,cluster.referenceTrack);
+      if(score>bestScore){best=cluster;bestScore=score;}
+    });
+    if(!best||bestScore<SKE_ROUTE_CLUSTER_SIMILARITY){
+      clusters.push({referenceTrack:track,tracks:[track]});
+      return;
+    }
+    best.tracks.push(track);
+    if(track.referenceState==='approved'&&best.referenceTrack.referenceState!=='approved')best.referenceTrack=track;
+  });
+  return clusters;
+}
+function _skeRouteCatalogSnapshot(){
+  const pairGroups=new Map();
+  _skeRouteHistoryTracks().forEach(track=>{
+    const routeKey=String(track.routeKey||'').trim().toUpperCase();
+    if(!_skeIsProvinceRouteKey(routeKey))return;
+    if(!pairGroups.has(routeKey))pairGroups.set(routeKey,[]);
+    pairGroups.get(routeKey).push(track);
+  });
+  const visiblePaths=[];
+  let learningCount=0;
+  pairGroups.forEach((tracks,routeKey)=>{
+    const clusters=_skeClusterRoutePaths(tracks).map(cluster=>{
+      const sorted=cluster.tracks.slice().sort((a,b)=>new Date(b.endedAt||b.updatedAt||0)-new Date(a.endedAt||a.updatedAt||0));
+      const eligibleTracks=sorted.filter(track=>track.baselineEligible&&track.state==='completed');
+      const approvedTracks=eligibleTracks.filter(track=>track.referenceState==='approved').sort((a,b)=>new Date(a.approvedAt||a.endedAt||0)-new Date(b.approvedAt||b.endedAt||0));
+      const approvedTrack=approvedTracks[0]||null;
+      const referenceTrack=approvedTrack||eligibleTracks.find(track=>track.referenceState==='provisional')||eligibleTracks[0]||sorted[0]||null;
+      return {routeKey,routeCode:referenceTrack?.routeCode||sorted[0]?.routeCode||routeKey,tracks:sorted,eligibleTracks,approvedTrack,referenceTrack,tripCount:sorted.length,learnedTripCount:eligibleTracks.length,driverCount:new Set(eligibleTracks.map(track=>String(track.empId||track.plate||track.name||''))).size,latestAt:sorted[0]?.endedAt||sorted[0]?.updatedAt||null};
+    });
+    const approvedClusters=clusters.filter(cluster=>cluster.approvedTrack).sort((a,b)=>new Date(a.approvedTrack.approvedAt||a.approvedTrack.endedAt||0)-new Date(b.approvedTrack.approvedAt||b.approvedTrack.endedAt||0));
+    const primaryCandidate=!approvedClusters.length?clusters.slice().sort((a,b)=>b.learnedTripCount-a.learnedTripCount||new Date(b.latestAt||0)-new Date(a.latestAt||0))[0]:null;
+    let alternativeNumber=0;
+    clusters.forEach(cluster=>{
+      const isPrimaryApproved=Boolean(cluster.approvedTrack&&approvedClusters[0]===cluster);
+      const isAlternativeApproved=Boolean(cluster.approvedTrack&&!isPrimaryApproved);
+      const isPrimaryCandidate=Boolean(!cluster.approvedTrack&&cluster===primaryCandidate);
+      const requiredTrips=isPrimaryCandidate?1:SKE_ROUTE_ALTERNATIVE_MIN_TRIPS;
+      const ready=cluster.learnedTripCount>=requiredTrips;
+      if(!cluster.approvedTrack&&!isPrimaryCandidate&&!ready){learningCount++;return;}
+      if(isAlternativeApproved)alternativeNumber++;
+      visiblePaths.push({...cluster,isPrimaryApproved,isAlternativeApproved,isPrimaryCandidate,requiredTrips,canReference:Boolean(!cluster.approvedTrack&&ready&&cluster.referenceTrack?.baselineEligible),pathLabel:isPrimaryApproved?'เส้นหลัก':(isAlternativeApproved?`เส้นทางเลือก ${alternativeNumber}`:(isPrimaryCandidate?'เส้นหลักรอรับรอง':'พบเส้นทางเลือกใหม่'))});
+    });
+  });
+  visiblePaths.sort((a,b)=>String(a.routeCode||'').localeCompare(String(b.routeCode||''),'th')||Number(b.isPrimaryApproved)-Number(a.isPrimaryApproved)||new Date(b.latestAt||0)-new Date(a.latestAt||0));
+  return {paths:visiblePaths,learningCount,pairCount:pairGroups.size};
+}
+function _skeUniqueRouteCatalog(){return _skeRouteCatalogSnapshot().paths;}
+function renderUniqueRouteCatalog(){
+  const snapshot=_skeRouteCatalogSnapshot(),catalog=snapshot.paths;
+  const approvedCount=catalog.filter(row=>row.approvedTrack).length;
+  const renderRow=row=>{
+    const selected=row.approvedTrack||row.referenceTrack;
+    const stateClass=row.approvedTrack?'approved':(row.canReference?'':'incomplete');
+    const stateText=row.approvedTrack?`✓ รับรองแล้ว · ${row.pathLabel}`:(row.canReference?`${row.pathLabel} · วิ่งซ้ำครบ ${row.learnedTripCount} เที่ยว`:`กำลังเก็บข้อมูล ${row.learnedTripCount}/${row.requiredTrips} เที่ยว`);
+    const driverText=row.driverCount?` · ${row.driverCount} คน`:'';
+    const mapButton=selected?`<button class="ske-route-map-btn" data-route-track="${esc(selected.id)}" onclick="openRouteTrackPreview(this.dataset.routeTrack)">ดูแผนที่</button>`:'';
+    const approveButton=!row.approvedTrack&&row.canReference&&adminRole!=='viewer'?`<button class="ske-route-approve-btn" data-route-track="${esc(selected.id)}" onclick="approveRouteReference(this.dataset.routeTrack)">${row.isPrimaryCandidate?'ใช้เป็นเส้นหลัก':'รับรองทางเลือก'}</button>`:'';
+    return `<div class="ske-route-catalog-row"><div class="ske-route-catalog-main"><div class="ske-route-catalog-code">${esc(row.routeCode||row.routeKey)} <span class="ske-route-catalog-kind">${esc(row.pathLabel)}</span></div><div class="ske-route-catalog-meta">แนวนี้วิ่ง ${row.tripCount} เที่ยว${driverText} · ล่าสุด ${_skeRouteHistoryDate(row.latestAt)}<br><span class="ske-route-catalog-state ${stateClass}">${stateText}</span></div></div>${mapButton}${approveButton}</div>`;
+  };
+  const learningNote=snapshot.learningCount?` · กำลังสังเกตแนวใหม่อีก ${snapshot.learningCount} แนว (ยังไม่ครบ ${SKE_ROUTE_ALTERNATIVE_MIN_TRIPS} เที่ยวจึงยังไม่นับ)`:'';
+  return `<details class="ske-route-catalog" open><summary>${skeIcon('pin')} เส้นทางไม่ซ้ำกัน <span class="ske-route-catalog-count">${catalog.length} เส้นทาง</span></summary><div class="ske-route-catalog-note">แยกตามแนว GPS จริง แม้เป็นคู่จังหวัดเดียวกัน · แนวใหม่ต้องวิ่งคล้ายกันครบ ${SKE_ROUTE_ALTERNATIVE_MIN_TRIPS} เที่ยวก่อนเสนอให้รับรอง · รถจะผ่านได้ทุกเส้นที่รับรองแล้ว (${approvedCount} เส้นอ้างอิง)${learningNote}</div><div class="ske-route-catalog-list">${catalog.length?catalog.map(renderRow).join(''):'<div style="padding:8px 2px;color:#94A3B8;font-size:9.5px;">ยังไม่มีเส้นทางที่มีข้อมูล GPS เพียงพอ</div>'}</div></details>`;
 }
 let _skeRouteHistoryDateFilter='';
 function _skeRouteHistoryDayKey(value){
@@ -5747,6 +5851,18 @@ function _skeRouteHistoryDayLabel(dayKey){
   const date=new Date(parts[0],parts[1]-1,parts[2]);
   if(Number.isNaN(date.getTime()))return'ไม่ระบุวันที่';
   return date.toLocaleDateString('th-TH',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
+}
+function _skeRouteHistoryMonthKey(value){
+  const date=new Date(value||0);
+  if(Number.isNaN(date.getTime()))return'unknown';
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
+}
+function _skeRouteHistoryMonthLabel(monthKey){
+  if(monthKey==='unknown')return'ไม่ระบุเดือน';
+  const parts=String(monthKey||'').split('-').map(Number);
+  const date=new Date(parts[0],parts[1]-1,1);
+  if(Number.isNaN(date.getTime()))return'ไม่ระบุเดือน';
+  return date.toLocaleDateString('th-TH',{month:'long',year:'numeric'});
 }
 function _skeRouteHistoryDate(value){
   const date=new Date(value||0);
@@ -5787,7 +5903,7 @@ function setRouteHistoryDateFilter(value){
   if(!_skeCanAdminViewRoutes()){alert('เฉพาะผู้ดูแลและแอดมินเท่านั้นที่เลือกดูประวัติได้');return;}
   _skeRouteHistoryDateFilter=String(value||'');
   renderAdmin();
-  setTimeout(_skeRevealAdminRouteHistory,80);
+  setTimeout(()=>_skeRevealAdminRouteHistory('daily'),80);
 }
 function renderRouteHistory(){
   const all=_skeRouteHistoryTracks();
@@ -5795,16 +5911,24 @@ function renderRouteHistory(){
   all.forEach(track=>{const key=_skeRouteHistoryDayKey(track.endedAt);dayCounts.set(key,(dayCounts.get(key)||0)+1);});
   const dayKeys=[...dayCounts.keys()];
   const activeFilter=dayCounts.has(_skeRouteHistoryDateFilter)?_skeRouteHistoryDateFilter:'';
-  const visible=activeFilter?all.filter(track=>_skeRouteHistoryDayKey(track.endedAt)===activeFilter):all.slice(0,100);
-  const groups=new Map();
-  visible.forEach(track=>{const key=_skeRouteHistoryDayKey(track.endedAt);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(track);});
+  const visible=activeFilter?all.filter(track=>_skeRouteHistoryDayKey(track.endedAt)===activeFilter):all;
+  const monthGroups=new Map();
+  visible.forEach(track=>{
+    const monthKey=_skeRouteHistoryMonthKey(track.endedAt),dayKey=_skeRouteHistoryDayKey(track.endedAt);
+    if(!monthGroups.has(monthKey))monthGroups.set(monthKey,new Map());
+    const days=monthGroups.get(monthKey);
+    if(!days.has(dayKey))days.set(dayKey,[]);
+    days.get(dayKey).push(track);
+  });
+  const now=new Date(),currentMonthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const selectedMonthKey=activeFilter?_skeRouteHistoryMonthKey(visible[0]?.endedAt):'';
   const renderRow=t=>`<div class="ske-route-history-row"><div class="ske-route-history-main"><div class="ske-route-history-code">${esc(t.routeCode||t.routeKey||'ไม่ระบุคู่จังหวัด')}</div><div class="ske-route-history-meta">${esc(t.name||'-')} · ${esc(t.plate||'-')} · ${_skeRouteHistoryDate(t.endedAt)}<br>${t.points.length} จุด · ${_skeRouteDistanceLabel(t.distanceMeters||0)} · <span class="ske-route-history-state ${t.state==='completed'?'':'partial'}">${t.state==='completed'?'ข้อมูลครบ':'ข้อมูลบางส่วน'}</span><br>${_skeRouteDeviationBadge(t)}</div></div><button class="ske-route-map-btn" data-route-track="${esc(t.id)}" onclick="openRouteTrackPreview(this.dataset.routeTrack)">ดูแผนที่</button></div>`;
+  const renderDays=(days,monthOpen)=>[...days.entries()].map(([dayKey,tracks],index)=>`<details class="ske-route-history-day" ${monthOpen&&index===0?'open':''}><summary><span>${esc(_skeRouteHistoryDayLabel(dayKey))}</span><b>${tracks.length} เที่ยว</b></summary><div class="ske-route-history-list">${tracks.map(renderRow).join('')}</div></details>`).join('');
   return `<details class="ske-route-history">
-    <summary>${skeIcon('history')} ประวัติการเดินทาง <span style="margin-left:2px;color:#0B6FF4;">${all.length} เที่ยว</span></summary>
+    <summary>${skeIcon('history')} สรุปการเดินทางรายวัน <span style="margin-left:2px;color:#0B6FF4;">${all.length} เที่ยว</span></summary>
     <div class="ske-route-history-toolbar"><label for="skeRouteHistoryDateSelect">เลือกวันที่</label><select id="skeRouteHistoryDateSelect" onchange="setRouteHistoryDateFilter(this.value)" ${all.length?'':'disabled'}><option value="">ทุกวันที่ · แสดงล่าสุด</option>${dayKeys.map(key=>`<option value="${esc(key)}" ${activeFilter===key?'selected':''}>${esc(_skeRouteHistoryDayLabel(key))} (${dayCounts.get(key)} เที่ยว)</option>`).join('')}</select></div>
-    <div class="ske-route-history-days">
-      ${groups.size?[...groups.entries()].map(([dayKey,tracks],index)=>`<details class="ske-route-history-day" ${index===0?'open':''}><summary><span>${esc(_skeRouteHistoryDayLabel(dayKey))}</span><b>${tracks.length} เที่ยว</b></summary><div class="ske-route-history-list">${tracks.map(renderRow).join('')}</div></details>`).join(''):'<div style="padding:10px;color:#94A3B8;font-size:9.5px;">ยังไม่มีเที่ยวที่บันทึก GPS จบแล้ว</div>'}
-      ${!activeFilter&&all.length>visible.length?`<div style="padding:4px 2px;color:#64748B;font-size:9px;text-align:center;">หน้ารวมแสดง 100 เที่ยวล่าสุด · เลือกวันที่ด้านบนเพื่อดูวันเก่าทั้งหมด</div>`:''}
+    <div class="ske-route-history-months">
+      ${monthGroups.size?[...monthGroups.entries()].map(([monthKey,days])=>{const monthOpen=Boolean(activeFilter?monthKey===selectedMonthKey:monthKey===currentMonthKey);const monthTrips=[...days.values()].reduce((sum,tracks)=>sum+tracks.length,0);return `<details class="ske-route-history-month" ${monthOpen?'open':''}><summary><span>${esc(_skeRouteHistoryMonthLabel(monthKey))}</span><b>${monthTrips} เที่ยว</b></summary><div class="ske-route-history-days">${renderDays(days,monthOpen)}</div></details>`;}).join(''):'<div style="padding:10px;color:#94A3B8;font-size:9.5px;">ยังไม่มีเที่ยวที่บันทึก GPS จบแล้ว</div>'}
     </div>
   </details>`;
 }
@@ -5812,19 +5936,13 @@ function renderRouteHistory(){
 function renderRouteMonitoringPanel(){
   const snap=_skeRouteMonitorSnapshot(),c=snap.counts;
   const issueRows=snap.rows.filter(r=>r.monitor&&r.monitor.state!=='on-route');
-  const candidates=[];
-  const seen=new Set();
-  (routeTracks||[]).filter(t=>t&&_skeIsProvinceRouteKey(t.routeKey)&&t.baselineEligible&&t.state==='completed'&&t.referenceState!=='approved'&&Array.isArray(t.points)&&t.points.length>=2)
-    .sort((a,b)=>new Date(b.endedAt||b.updatedAt||0)-new Date(a.endedAt||a.updatedAt||0)).forEach(t=>{if(!seen.has(t.routeKey)){seen.add(t.routeKey);candidates.push(t);}});
-  const approvedCount=(routeTracks||[]).filter(t=>t&&_skeIsProvinceRouteKey(t.routeKey)&&t.referenceState==='approved').length;
   return `<section id="skeRouteAlertsSection" class="ske-route-panel">
     <div class="ske-route-panel-head"><span class="ske-route-panel-head-icon">${skeIcon('pin')}</span><div><div class="ske-route-panel-title">เฝ้าระวังเส้นทางแบบเรียลไทม์</div><div class="ske-route-panel-sub">แจ้งเตือนเมื่อห่างเส้นอ้างอิงเกิน 3 กม. ต่อเนื่อง 5 นาที · ไม่บังคับเลี่ยงทางด่วน</div></div></div>
     <div class="ske-route-chip-row">
       <div class="ske-route-chip on-route"><b>${c['on-route']}</b><span>อยู่ในเส้น</span></div><div class="ske-route-chip checking"><b>${c.checking}</b><span>กำลังตรวจ</span></div><div class="ske-route-chip off-route"><b>${c['off-route']}</b><span>ออกนอกเส้น</span></div><div class="ske-route-chip gps-missing"><b>${c['gps-missing']}</b><span>GPS ขาดหาย</span></div>
     </div>
     <div class="ske-route-alert-list">${issueRows.length?issueRows.map(({emp,monitor})=>{const copy=_skeRouteStateCopy(monitor.state);const distance=monitor.distanceMeters!=null?` · ห่าง ${_skeRouteDistanceLabel(monitor.distanceMeters)}`:'';const canMap=Boolean(_skeRouteReferenceForEmployee(emp));return `<div class="ske-route-alert ${monitor.state}"><div class="ske-route-alert-main"><div class="ske-route-alert-name">${esc(copy.title)} · ${esc(emp.name||'-')}</div><div class="ske-route-alert-meta">${esc(emp.plate||'-')} · ${esc(monitor.routeCode||'ไม่ระบุเส้นทาง')}${esc(distance)}<br>${esc(copy.detail)}</div></div>${canMap?`<button class="ske-route-map-btn" data-route-emp="${esc(emp.id)}" onclick="openRouteComparison(this.dataset.routeEmp)">เปรียบเทียบ</button>`:''}</div>`;}).join(''):'<div style="padding:9px 2px;color:#047857;font-size:10.5px;font-weight:800;">✓ ยังไม่พบรถที่ต้องติดตามเส้นทาง</div>'}</div>
-    <div class="ske-route-reference-title">เส้นอ้างอิงคู่จังหวัดรอรับรอง ${candidates.length?`(${candidates.length})`:`· รับรองแล้ว ${approvedCount} เส้น`}</div>
-    <div class="ske-route-reference-list">${candidates.length?candidates.map(t=>`<div class="ske-route-reference"><div class="ske-route-reference-main"><div class="ske-route-reference-code">${esc(t.routeCode||t.routeKey||'-')}</div><div class="ske-route-reference-meta">${esc(t.name||'-')} · ${t.points.length} จุด · ${_skeRouteDistanceLabel(t.distanceMeters||0)} · ${statusTimeShort(t.endedAt)}</div></div><button class="ske-route-map-btn" data-route-track="${esc(t.id)}" onclick="openRouteTrackPreview(this.dataset.routeTrack)">ดู</button>${adminRole==='viewer'?'':`<button class="ske-route-approve-btn" data-route-track="${esc(t.id)}" onclick="approveRouteReference(this.dataset.routeTrack)">รับรอง</button>`}</div>`).join(''):'<div style="font-size:9.5px;color:#94A3B8;">เที่ยวแรกของแต่ละคู่จังหวัดจะบันทึกจาก GPS จริง เมื่อถึงปลายทางแล้วระบบจะนำมาให้ผู้ดูแลตรวจและรับรองก่อนใช้กับเที่ยวถัดไป</div>'}</div>
+    ${renderUniqueRouteCatalog()}
     ${renderRouteHistory()}
   </section>`;
 }
@@ -5833,10 +5951,16 @@ async function approveRouteReference(trackId){
   if(adminRole==='viewer'){alert('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้นที่รับรองเส้นทางได้');return;}
   const selected=(routeTracks||[]).find(t=>t&&t.id===trackId);
   if(!selected||!_skeIsProvinceRouteKey(selected.routeKey)||!selected.baselineEligible){alert('เส้นทางนี้ยังมีข้อมูล GPS หรือคู่จังหวัดไม่ครบ');return;}
-  if(!confirm(`รับรองเส้น “${selected.routeCode||selected.routeKey}” เป็นเส้นอ้างอิงใช่หรือไม่?`))return;
+  if(selected.referenceState==='approved'){alert('เส้นทางนี้ได้รับการรับรองอยู่แล้ว');return;}
+  const catalogRow=_skeUniqueRouteCatalog().find(row=>row&&row.tracks.some(track=>track.id===selected.id));
+  if(!catalogRow||!catalogRow.canReference){alert(`เส้นทางทางเลือกต้องมีรูปแบบใกล้เคียงกันอย่างน้อย ${SKE_ROUTE_ALTERNATIVE_MIN_TRIPS} เที่ยวก่อนรับรอง`);return;}
+  const hasApprovedForPair=(routeTracks||[]).some(track=>track&&String(track.routeKey||'').toUpperCase()===String(selected.routeKey||'').toUpperCase()&&track.referenceState==='approved');
+  const referenceType=hasApprovedForPair?'alternative':'primary';
+  const confirmText=hasApprovedForPair?`รับรองแนวนี้เป็น “เส้นทางทางเลือก” เพิ่มเติมสำหรับ ${selected.routeCode||selected.routeKey} ใช่หรือไม่?\n\nเส้นหลักเดิมจะยังใช้งานต่อไป`:`รับรองเส้น “${selected.routeCode||selected.routeKey}” เป็นเส้นหลักใช่หรือไม่?`;
+  if(!confirm(confirmText))return;
   const now=new Date().toISOString();
-  routeTracks=(routeTracks||[]).map(t=>!t||t.routeKey!==selected.routeKey?t:{...t,referenceState:t.id===selected.id?'approved':'candidate',approvedAt:t.id===selected.id?now:null,approvedBy:t.id===selected.id?'admin':null,updatedAt:now});
-  try{await saveRouteTracks();renderAdmin();alert('✅ รับรองเส้นอ้างอิงแล้ว');}catch(error){console.error(error);alert('บันทึกเส้นอ้างอิงไม่สำเร็จ กรุณาลองใหม่');}
+  routeTracks=(routeTracks||[]).map(track=>!track||track.id!==selected.id?track:{...track,referenceState:'approved',approvedReferenceType:referenceType,approvedAt:now,approvedBy:'admin',updatedAt:now});
+  try{await saveRouteTracks();renderAdmin();alert(hasApprovedForPair?'✅ เพิ่มเส้นทางทางเลือกแล้ว เส้นหลักเดิมยังคงอยู่':'✅ รับรองเส้นหลักแล้ว');}catch(error){console.error(error);alert('บันทึกเส้นอ้างอิงไม่สำเร็จ กรุณาลองใหม่');}
 }
 
 function _skeRouteMapSvg(points,current){
@@ -6502,7 +6626,7 @@ let _swReg = null;
 if ('serviceWorker' in navigator &&
     (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=dev-v3246-route-deviation-history', { updateViaCache: 'none' }).then(reg => {
+    navigator.serviceWorker.register('sw.js?v=dev-v3248-alternative-route-learning', { updateViaCache: 'none' }).then(reg => {
       _swReg = reg;
       // บังคับตรวจไฟล์ worker จากเครือข่าย ไม่ใช้สำเนาเก่าจาก HTTP cache
       reg.update().catch(() => {});
