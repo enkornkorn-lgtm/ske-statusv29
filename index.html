@@ -43,7 +43,7 @@
 <meta name="apple-mobile-web-app-title" content="SKE TRUCK">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#FFFFFF">
-<link rel="manifest" href="manifest.json?v=dev-v3243-route-history-map">
+<link rel="manifest" href="manifest.json?v=dev-v3244-admin-route-view">
 <title>SKE TRUCK</title>
 <!-- Firebase SDK -->
 <script type="module">
@@ -480,7 +480,7 @@
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') return;
       // ใช้ Service Worker หลักตัวเดียวร่วมกันทั้ง PWA cache และ FCM
-      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3243-route-history-map', { updateViaCache: 'none' });
+      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3244-admin-route-view', { updateViaCache: 'none' });
       if (!_messaging) _messaging = getMessaging(app);
       const token = await getToken(_messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
       if (!token) return;
@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.43P');
+  console.log('[SKE TRUCK] app version: v3.2.44P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -3930,6 +3930,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-route-summary.safe{border-color:#A7F3D0;background:linear-gradient(135deg,#F0FDF4,#ECFDF5);color:#047857;}
 .ske-route-summary-icon{width:42px;height:42px;display:flex;align-items:center;justify-content:center;flex:0 0 42px;border-radius:14px;background:#fff;font-size:22px;box-shadow:0 5px 13px rgba(15,23,42,.08);}
 .ske-route-summary-copy{flex:1;min-width:0}.ske-route-summary-title{font-size:13px;font-weight:950}.ske-route-summary-sub{font-size:10px;opacity:.78;margin-top:2px}.ske-route-summary-count{font-size:22px;font-weight:950;white-space:nowrap}
+.ske-route-summary-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:stretch;margin:10px 0}.ske-route-summary-actions .ske-route-summary{margin:0}.ske-route-history-shortcut{display:flex;align-items:center;justify-content:center;gap:6px;min-width:136px;border:1.5px solid #C4B5FD;border-radius:16px;padding:10px 13px;background:#F5F3FF;color:#6D28D9;font-size:10.5px;font-weight:950;cursor:pointer;box-shadow:0 8px 18px rgba(109,40,217,.08)}.ske-route-history-shortcut b{font-size:15px}
 .ske-route-panel{margin:0 0 18px;padding:15px;border:1px solid #DCE5F2;border-radius:20px;background:#fff;box-shadow:0 10px 26px rgba(28,52,91,.07);scroll-margin-top:84px;}
 .ske-route-panel-head{display:flex;align-items:flex-start;gap:10px;padding-bottom:12px;border-bottom:1px solid #EDF2F7}.ske-route-panel-head-icon{width:42px;height:42px;display:flex;align-items:center;justify-content:center;flex:0 0 42px;border-radius:14px;background:#EEF5FF;color:#0B6FF4;font-size:22px}.ske-route-panel-title{font-size:14px;font-weight:950;color:#172033}.ske-route-panel-sub{font-size:10px;color:#7C879A;margin-top:2px;line-height:1.4}
 .ske-route-chip-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0}.ske-route-chip{padding:8px 5px;border-radius:12px;text-align:center;border:1px solid}.ske-route-chip b{display:block;font-size:18px;line-height:1}.ske-route-chip span{display:block;font-size:9px;margin-top:4px;font-weight:800}.ske-route-chip.on-route{background:#ECFDF5;border-color:#86EFAC;color:#047857}.ske-route-chip.checking{background:#FFF7ED;border-color:#FDBA74;color:#C2410C}.ske-route-chip.off-route{background:#FEF2F2;border-color:#FCA5A5;color:#B91C1C}.ske-route-chip.gps-missing,.ske-route-chip.no-reference{background:#F8FAFC;border-color:#CBD5E1;color:#475569}
@@ -3939,7 +3940,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-route-person-state{display:flex;align-items:center;flex-wrap:wrap;gap:4px 7px;margin-top:4px;padding:5px 7px;border-radius:9px;font-size:9.5px;font-weight:850;line-height:1.35}.ske-route-person-state.on-route{background:#ECFDF5;color:#047857}.ske-route-person-state.checking{background:#FFF7ED;color:#C2410C}.ske-route-person-state.off-route{background:#FEF2F2;color:#B91C1C}.ske-route-person-state.gps-missing,.ske-route-person-state.no-reference{background:#F1F5F9;color:#475569}.ske-route-person-state button{border:0;padding:0;background:transparent;color:inherit;text-decoration:underline;font:inherit;font-weight:950;cursor:pointer}
 .ske-route-modal{position:fixed;inset:0;z-index:130000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.70);backdrop-filter:blur(3px)}.ske-route-modal-card{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 26px 80px rgba(0,0,0,.35)}.ske-route-modal-head{display:flex;align-items:flex-start;gap:10px;padding:16px 17px;border-bottom:1px solid #E2E8F0}.ske-route-modal-title{flex:1;font-size:15px;font-weight:950;color:#172033}.ske-route-modal-sub{font-size:10px;color:#64748B;margin-top:3px}.ske-route-modal-close{width:34px;height:34px;border:0;border-radius:11px;background:#F1F5F9;color:#475569;font-size:18px;cursor:pointer}.ske-route-map-canvas{position:relative;margin:14px;border-radius:16px;overflow:hidden;background:linear-gradient(145deg,#F8FAFC,#EAF2FF);border:1px solid #D7E2F0}.ske-route-map-canvas svg{display:block;width:100%;height:auto}.ske-route-map-tiles{position:relative;width:100%;aspect-ratio:68/36;background:#E8EEF5;overflow:hidden}.ske-route-map-tiles img{position:absolute;max-width:none}.ske-route-map-tiles svg{position:absolute;inset:0;width:100%;height:100%;z-index:3}.ske-route-osm-credit{position:absolute;right:4px;bottom:3px;z-index:4;padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.88);font-size:7px;color:#334155;text-decoration:none}.ske-route-map-legend{display:flex;flex-wrap:wrap;gap:8px;padding:0 15px 12px;font-size:10px;color:#475569}.ske-route-map-legend span{display:flex;align-items:center;gap:5px}.ske-route-legend-line{width:22px;height:4px;border-radius:4px;background:#2563EB}.ske-route-legend-dot{width:10px;height:10px;border-radius:50%;background:#DC2626}.ske-route-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 15px}.ske-route-modal-actions button{border:0;padding:10px;border-radius:12px;text-align:center;font-size:10.5px;font-weight:900;background:#EAF2FF;color:#075DCE;cursor:pointer}.ske-route-modal-actions button.current{background:#FEF2F2;color:#B91C1C}
 .status-jump-flash#skeRouteAlertsSection{animation:ske-route-flash 1.5s ease}@keyframes ske-route-flash{0%,100%{box-shadow:0 10px 26px rgba(28,52,91,.07)}35%{box-shadow:0 0 0 5px rgba(239,68,68,.20),0 12px 30px rgba(239,68,68,.16)}}
-@media(max-width:600px){.ske-route-panel{padding:12px 10px;border-radius:17px}.ske-route-chip-row{grid-template-columns:repeat(2,minmax(0,1fr))}.ske-route-alert{align-items:flex-start}.ske-route-modal-actions{grid-template-columns:1fr}.ske-route-summary{padding:11px 12px}.ske-route-summary-icon{width:38px;height:38px;flex-basis:38px}.ske-route-summary-count{font-size:19px}}
+@media(max-width:600px){.ske-route-panel{padding:12px 10px;border-radius:17px}.ske-route-chip-row{grid-template-columns:repeat(2,minmax(0,1fr))}.ske-route-alert{align-items:flex-start}.ske-route-modal-actions{grid-template-columns:1fr}.ske-route-summary{padding:11px 12px}.ske-route-summary-icon{width:38px;height:38px;flex-basis:38px}.ske-route-summary-count{font-size:19px}.ske-route-summary-actions{grid-template-columns:1fr}.ske-route-history-shortcut{min-width:0}}
 
 </style>
 </head>
@@ -3975,7 +3976,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.43P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.44P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -3983,7 +3984,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.43P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.44P</div>
       </div>
     </div>
 
@@ -4101,7 +4102,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.43P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.44P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4357,7 +4358,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.43P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.44P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4993,7 +4994,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.43P';
+const SKE_APP_VERSION='v3.2.44P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5696,12 +5697,29 @@ function jumpToRouteAlerts(){
   setTimeout(()=>target.classList.remove('status-jump-flash'),1600);
 }
 
+function _skeCanAdminViewRoutes(){
+  return Boolean(adminMode&&(adminRole==='super'||adminRole==='viewer'));
+}
+function openAdminRouteHistory(){
+  if(!_skeCanAdminViewRoutes()){alert('กรุณาเข้าสู่ระบบผู้ดูแลหรือแอดมินก่อนดูประวัติการเดินทาง');return;}
+  switchAdminTab('summary');
+  setTimeout(()=>{
+    const target=document.querySelector('#skeRouteAlertsSection .ske-route-history');
+    if(!target){alert('ยังไม่มีข้อมูลประวัติการเดินทาง');return;}
+    target.open=true;
+    target.scrollIntoView({behavior:'smooth',block:'start'});
+    target.classList.remove('status-jump-flash');void target.offsetWidth;target.classList.add('status-jump-flash');
+    setTimeout(()=>target.classList.remove('status-jump-flash'),1600);
+  },80);
+}
+
 function renderRouteSummaryButton(){
   const snap=_skeRouteMonitorSnapshot();
   const c=snap.counts;
   const safe=snap.attention===0;
+  const historyCount=_skeRouteHistoryTracks().length;
   const title=c['off-route']>0?`ออกนอกเส้นทาง ${c['off-route']} คัน`:(c.checking>0?`กำลังตรวจสอบ ${c.checking} คัน`:(c['gps-missing']>0?`GPS ขาดหาย ${c['gps-missing']} คัน`:'ยังไม่พบออกนอกเส้นทาง'));
-  return `<button type="button" class="ske-route-summary ${safe?'safe':''}" onclick="jumpToRouteAlerts()"><span class="ske-route-summary-icon">${safe?skeIcon('check'):skeIcon('alert')}</span><span class="ske-route-summary-copy"><span class="ske-route-summary-title">${title}</span><span class="ske-route-summary-sub">แตะเพื่อดูรายละเอียดและเส้นอ้างอิง</span></span><span class="ske-route-summary-count">${snap.attention}</span></button>`;
+  return `<div class="ske-route-summary-actions"><button type="button" class="ske-route-summary ${safe?'safe':''}" onclick="jumpToRouteAlerts()"><span class="ske-route-summary-icon">${safe?skeIcon('check'):skeIcon('alert')}</span><span class="ske-route-summary-copy"><span class="ske-route-summary-title">${title}</span><span class="ske-route-summary-sub">แอดมินและผู้ดูแลแตะดูรายละเอียดได้</span></span><span class="ske-route-summary-count">${snap.attention}</span></button><button type="button" class="ske-route-history-shortcut" onclick="openAdminRouteHistory()">${skeIcon('history')} ประวัติ <b>${historyCount}</b> เที่ยว</button></div>`;
 }
 
 function _skeRouteHistoryTracks(){
@@ -5846,8 +5864,8 @@ function _skeOpenRouteModal(track,emp=null){
   modal.innerHTML=`<div class="ske-route-modal-card" role="dialog" aria-modal="true"><div class="ske-route-modal-head"><div><div class="ske-route-modal-title">${esc(track.routeCode||track.routeKey||'เส้นทางที่บันทึก')}</div><div class="ske-route-modal-sub">${emp?`${esc(emp.name||'-')} · ${esc(emp.plate||'-')} · `:`${esc(track.name||'-')} · ${esc(track.plate||'-')} · `}${deviation?.distanceMeters!=null?`ห่างเส้น ${_skeRouteDistanceLabel(deviation.distanceMeters)} · `:''}${tripState}${track.endedAt?` · ${_skeRouteHistoryDate(track.endedAt)}`:''}</div></div><button class="ske-route-modal-close" onclick="closeRouteComparison()">×</button></div><div class="ske-route-map-canvas">${_skeRouteMapTiles(track.points,current)}</div><div class="ske-route-map-legend"><span><i class="ske-route-legend-line"></i>เส้น GPS ที่บันทึกจริง</span>${current?'<span><i class="ske-route-legend-dot"></i>ตำแหน่งรถล่าสุด</span>':''}<span>● เขียว=ต้นทาง · ● ม่วง=ปลายทาง</span></div><div class="ske-route-modal-actions"><button type="button" data-map-url="${esc(directionsUrl)}" onclick="openSkeExternalMap(this.dataset.mapUrl)">เปิดต้นทาง–ปลายทางในแผนที่เว็บ</button>${current?`<button type="button" class="current" data-map-url="${esc(currentUrl)}" onclick="openSkeExternalMap(this.dataset.mapUrl)">เปิดตำแหน่งรถปัจจุบัน</button>`:''}</div></div>`;
   document.body.appendChild(modal);
 }
-function openRouteComparison(empId){const emp=(employees||[]).find(e=>e&&String(e.id)===String(empId));if(!emp){alert('ไม่พบพนักงาน');return;}_skeOpenRouteModal(_skeRouteReferenceForEmployee(emp),emp);}
-function openRouteTrackPreview(trackId){_skeOpenRouteModal((routeTracks||[]).find(t=>t&&t.id===trackId),null);}
+function openRouteComparison(empId){if(!_skeCanAdminViewRoutes()){alert('เฉพาะผู้ดูแลและแอดมินเท่านั้นที่เปิดแผนที่เส้นทางได้');return;}const emp=(employees||[]).find(e=>e&&String(e.id)===String(empId));if(!emp){alert('ไม่พบพนักงาน');return;}_skeOpenRouteModal(_skeRouteReferenceForEmployee(emp),emp);}
+function openRouteTrackPreview(trackId){if(!_skeCanAdminViewRoutes()){alert('เฉพาะผู้ดูแลและแอดมินเท่านั้นที่เปิดประวัติการเดินทางได้');return;}_skeOpenRouteModal((routeTracks||[]).find(t=>t&&t.id===trackId),null);}
 function closeRouteComparison(){document.getElementById('skeRouteCompareModal')?.remove();}
 function backfillRouteTracksFromExistingData(){
   let added=false;
@@ -6416,7 +6434,7 @@ let _swReg = null;
 if ('serviceWorker' in navigator &&
     (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=dev-v3243-route-history-map', { updateViaCache: 'none' }).then(reg => {
+    navigator.serviceWorker.register('sw.js?v=dev-v3244-admin-route-view', { updateViaCache: 'none' }).then(reg => {
       _swReg = reg;
       // บังคับตรวจไฟล์ worker จากเครือข่าย ไม่ใช้สำเนาเก่าจาก HTTP cache
       reg.update().catch(() => {});
