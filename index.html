@@ -43,7 +43,7 @@
 <meta name="apple-mobile-web-app-title" content="SKE TRUCK">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#FFFFFF">
-<link rel="manifest" href="manifest.json?v=dev-v3248-alternative-route-learning">
+<link rel="manifest" href="manifest.json?v=dev-v3249-document-late-penalty">
 <title>SKE TRUCK</title>
 <!-- Firebase SDK -->
 <script type="module">
@@ -480,7 +480,7 @@
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') return;
       // ใช้ Service Worker หลักตัวเดียวร่วมกันทั้ง PWA cache และ FCM
-      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3248-alternative-route-learning', { updateViaCache: 'none' });
+      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3249-document-late-penalty', { updateViaCache: 'none' });
       if (!_messaging) _messaging = getMessaging(app);
       const token = await getToken(_messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
       if (!token) return;
@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.48P');
+  console.log('[SKE TRUCK] app version: v3.2.49P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -3978,7 +3978,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.48P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.49P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -3986,7 +3986,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.48P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.49P</div>
       </div>
     </div>
 
@@ -4104,7 +4104,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.48P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.49P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4360,7 +4360,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.48P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.49P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4996,7 +4996,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.48P';
+const SKE_APP_VERSION='v3.2.49P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -6626,7 +6626,7 @@ let _swReg = null;
 if ('serviceWorker' in navigator &&
     (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=dev-v3248-alternative-route-learning', { updateViaCache: 'none' }).then(reg => {
+    navigator.serviceWorker.register('sw.js?v=dev-v3249-document-late-penalty', { updateViaCache: 'none' }).then(reg => {
       _swReg = reg;
       // บังคับตรวจไฟล์ worker จากเครือข่าย ไม่ใช้สำเนาเก่าจาก HTTP cache
       reg.update().catch(() => {});
@@ -8971,7 +8971,8 @@ function _docMonthTH(monthKey=_docMonthKey()){
   return new Date(y,m-1,1).toLocaleDateString('th-TH',{month:'long',year:'numeric'});
 }
 function _docId(empId,monthKey=_docMonthKey()){return `${empId||'unknown'}_${monthKey}`;}
-function isMonthlyDocWindowOpen(){const d=new Date().getDate();return d>=1&&d<=15;}
+// เปิดรับหลักฐานได้ตลอดเดือน แม้เลยกำหนดแล้ว เพื่อให้พนักงานยังส่งเอกสารย้อนหลังได้
+function isMonthlyDocWindowOpen(){return true;}
 function getMonthlyDocSubmission(empId,monthKey=_docMonthKey()){
   return (monthlyDocs||[]).find(x=>x&&x.id===_docId(empId,monthKey))||null;
 }
@@ -8985,28 +8986,95 @@ function _docStatusPill(status){
   if(status==='pending')return {text:'🕐 รอส่วนกลางตรวจสอบเอกสาร',bg:'#FFFBEB',bd:'#F59E0B',color:'#92400E'};
   return {text:'🚨 ยังไม่ได้ส่งเอกสาร',bg:'#FEF2F2',bd:'#EF4444',color:'#991B1B'};
 }
+function _docFirstSubmittedAt(rec){
+  const at=Number(rec?.firstSubmittedAt||rec?.submittedAt||rec?.at||0);
+  return Number.isFinite(at)&&at>0?at:0;
+}
+function getMonthlyDocPenalty(rec=null,now=new Date()){
+  // ถ้าส่งแล้วให้ยึด "วันส่งครั้งแรก" ตลอด แม้ถูกตีกลับแล้วส่งรูปใหม่ จะไม่ถูกคิดค่าปรับซ้ำหรือขยับขั้น
+  const firstSubmittedAt=_docFirstSubmittedAt(rec);
+  const basis=firstSubmittedAt?new Date(firstSubmittedAt):(now instanceof Date?now:new Date(now));
+  const day=basis.getDate();
+  const amount=day>=16?1000:(day>=11?200:0);
+  const tier=amount===1000?'after_15':(amount===200?'day_11_15':'on_time');
+  return {
+    amount,tier,day,firstSubmittedAt,
+    deductionId:amount?`monthly_doc_penalty_${rec?.id||'missing'}`:'',
+    reason:amount===1000?'ส่งเอกสารหลังวันที่ 15':(amount===200?'ส่งเอกสารเกินวันที่ 10 ถึงวันที่ 15':'ส่งเอกสารภายในกำหนด')
+  };
+}
+function _docPenaltyFields(rec,now=Date.now()){
+  const info=getMonthlyDocPenalty(rec,new Date(now));
+  return {
+    penaltyAmount:info.amount,
+    penaltyTier:info.tier,
+    penaltyReason:info.amount?info.reason:'',
+    penaltyDeductionId:info.deductionId,
+    penaltyAssessedAt:info.amount?(rec?.penaltyAssessedAt||now):null
+  };
+}
+function _docPenaltyNotice(rec,monthTH,compact=false){
+  const p=getMonthlyDocPenalty(rec);
+  if(!p.amount)return'';
+  const sent=p.firstSubmittedAt?`ส่งครั้งแรกเมื่อ ${fmt(p.firstSubmittedAt)}`:'ยังไม่ได้ส่งเอกสาร';
+  const pad=compact?'6px 9px':'9px 11px';
+  return `<div style="margin-top:${compact?'5':'8'}px;padding:${pad};border-radius:10px;background:#FFF1F2;border:1.5px solid #E11D48;color:#9F1239;font-size:${compact?'11':'12.5'}px;line-height:1.55;font-weight:800;">
+    <div style="font-weight:1000;">💸 แจ้งหักค่าปรับเอกสารล่าช้า ${p.amount.toLocaleString('th-TH')} บาท</div>
+    <div>${esc(monthTH)} · ${esc(p.reason)} · ${esc(sent)}</div>
+  </div>`;
+}
+const _monthlyDocPenaltySyncKeys=new Set();
+async function syncMonthlyDocumentPenaltyRecords(targetEmployees=[]){
+  const now=new Date();
+  if(now.getDate()<=10)return;
+  const monthKey=_docMonthKey(now);
+  const targets=(targetEmployees||[]).filter(e=>e&&e.id&&isDrivingPosition(e.position));
+  if(!targets.length)return;
+  const tier=now.getDate()>=16?'after_15':'day_11_15';
+  const syncKey=`${monthKey}:${tier}:${targets.map(e=>e.id).sort().join(',')}`;
+  if(_monthlyDocPenaltySyncKeys.has(syncKey))return;
+  _monthlyDocPenaltySyncKeys.add(syncKey);
+  try{
+    for(const emp of targets){
+      const old=getMonthlyDocSubmission(emp.id,monthKey);
+      const status=old?String(old.status||'pending'):'missing';
+      const base=old||{id:_docId(emp.id,monthKey),empId:emp.id,empName:emp.name||'',plate:emp.plate||'',phone:emp.phone||'',lineId:emp.lineId||'',monthKey,status:'missing',createdAt:Date.now()};
+      const penaltyFields=_docPenaltyFields(base,Date.now());
+      if(!penaltyFields.penaltyAmount)continue;
+      if(old&&Number(old.penaltyAmount||0)===penaltyFields.penaltyAmount&&old.penaltyDeductionId===penaltyFields.penaltyDeductionId)continue;
+      const rec={...base,...penaltyFields,status};
+      if(window.fbUpsertMonthlyDoc)monthlyDocs=await window.fbUpsertMonthlyDoc(rec);
+      else monthlyDocs=(monthlyDocs||[]).filter(x=>x&&x.id!==rec.id).concat([rec]);
+    }
+    if(!window.fbUpsertMonthlyDoc)await saveMonthlyDocs();
+  }catch(err){
+    _monthlyDocPenaltySyncKeys.delete(syncKey);
+    console.error('sync monthly document penalties error',err);
+  }
+}
 function renderMonthlyDocAlert(me){
   if(!me)return'';
   // เตือน/ให้ส่งเอกสารเฉพาะตำแหน่ง "พนักงานขับรถ" เท่านั้น — ตำแหน่งอื่นไม่ต้องส่งเอกสารเข้าส่วนกลาง เลยไม่ต้องเห็นป้ายนี้เลย
   if(!isDrivingPosition(me.position))return'';
+  // บันทึกยอดค่าปรับของพนักงานคนนี้ด้วยรหัสประจำเดือนแบบตายตัว จึงไม่สร้างรายการหักซ้ำเมื่อเปิดแอปหลายครั้ง
+  syncMonthlyDocumentPenaltyRecords([me]);
   const monthKey=_docMonthKey();
   const rec=getMonthlyDocSubmission(me.id,monthKey);
   const monthTH=_docMonthTH(monthKey);
   const status=rec?String(rec.status||'pending'):'missing';
-  // แสดงแจ้งเตือน/ส่งเอกสารเฉพาะวันที่ 1-15 ของทุกเดือนเท่านั้น
-  // วันที่ 16 เป็นต้นไปจะไม่ขึ้นแถบแจ้งเตือนในหน้าพนักงาน
-  if(!isMonthlyDocWindowOpen()) return '';
   const pill=_docStatusPill(status);
+  const penaltyNotice=_docPenaltyNotice(rec,monthTH);
   const img=rec?.photo?`<div style="margin-top:8px;"><img data-ph="${rec.photo}" alt="รูปหลักฐานการส่งเอกสาร" style="max-width:100%;max-height:190px;border-radius:10px;border:1px solid ${pill.bd};object-fit:cover;"></div>`:'';
   if(status==='approved'){
-    // อนุมัติแล้ว — ไม่ต้องเตือน/โชว์การ์ดซ้ำอีก ให้หายไปจากหน้าพนักงานเลย
-    return '';
+    // ส่งตรงเวลาและอนุมัติแล้วจึงซ่อน แต่ถ้าส่งช้าให้คงยอดแจ้งหักเงินไว้ให้พนักงานเห็น
+    return penaltyNotice;
   }
   if(status==='pending'){
     return `<div style="margin-top:10px;padding:10px 12px;border-radius:12px;background:${pill.bg};border:1.5px solid ${pill.bd};color:${pill.color};">
       <div style="font-weight:900;font-size:13px;">${pill.text} (${esc(monthTH)})</div>
       <div style="font-size:12.5px;line-height:1.6;margin-top:4px;">แนบรูปแล้ว รอส่วนกลางกดอนุมัติ หากรูปไม่ชัดสามารถเปลี่ยนรูปใหม่ได้</div>
       <div style="font-size:12px;margin-top:3px;">ส่งเมื่อ: ${fmt(rec.submittedAt||rec.at||Date.now())}</div>
+      ${penaltyNotice}
       ${img}
       <label class="btn btn-gray btn-full" style="margin-top:8px;font-size:12px;display:block;text-align:center;cursor:pointer;">เปลี่ยน/เลือกรูปจากแกลลอรี่<input type="file" accept="image/*" style="display:none;" onchange="handleMonthlyDocPhoto(event)"></label>
     </div>`;
@@ -9016,9 +9084,9 @@ function renderMonthlyDocAlert(me){
     <div style="font-size:26px;line-height:1;">⚠️</div>
     <div class="alert-main">
       <div class="alert-title">แจ้งเตือน: ส่งเอกสารเข้าส่วนกลาง</div>
-      <div class="alert-sub">กรุณาส่งเอกสารภายในวันที่ <b>1-15 ของทุกเดือน</b> และแนบรูปหลักฐานให้ครบถ้วน</div>
+      <div class="alert-sub">กรุณาส่งเอกสารภายในวันที่ <b>10 ของทุกเดือน</b> วันที่ 11-15 ปรับ 200 บาท และตั้งแต่วันที่ 16 ปรับ 1,000 บาท</div>
       ${rejectedMsg}
-      <div style="font-size:11.5px;margin-top:4px;color:${isMonthlyDocWindowOpen()?'#B45309':'#DC2626'};font-weight:900;">${isMonthlyDocWindowOpen()?'อยู่ในช่วงส่งเอกสาร':'เลยกำหนดส่งเอกสารแล้ว'}</div>
+      ${penaltyNotice}
       ${img}
     </div>
     <label class="emp-upload-btn">☁️ อัปโหลดหลักฐาน<input type="file" accept="image/*" style="display:none;" onchange="handleMonthlyDocPhoto(event)"></label>
@@ -9080,11 +9148,6 @@ async function handleMonthlyDocPhoto(ev){
   const input=ev&&ev.target;
   if(denySharedTruckRestrictedAccess()){if(input)input.value='';return;}
   try{
-    if(!isMonthlyDocWindowOpen()){
-      alert('ระบบเปิดให้ส่งเอกสารเฉพาะวันที่ 1-15 ของทุกเดือนเท่านั้น');
-      if(input)input.value='';
-      return;
-    }
     const file=input?.files?.[0];
     if(!file)return;
     if(!file.type||!file.type.startsWith('image/')){alert('กรุณาแนบไฟล์รูปภาพเท่านั้น');return;}
@@ -9107,7 +9170,10 @@ async function handleMonthlyDocPhoto(ev){
     const id=_docId(me.id,monthKey);
     const old=getMonthlyDocSubmission(me.id,monthKey)||{};
     const oldPhoto=old.photo; // รูปรอบก่อน (กรณีส่งซ้ำ/ถูกตีกลับ) — เดี๋ยวลบทิ้งจากคลังหลังบันทึกใหม่สำเร็จ
-    const rec={...old,id,empId:me.id,empName:me.name||'',plate:me.plate||'',phone:me.phone||'',lineId:me.lineId||'',monthKey,photo:photoId,photoSize:photoData.length,submittedAt:Date.now(),status:'pending',reviewedAt:null,reviewedBy:null,rejectReason:''};
+    const submittedAt=Date.now();
+    const firstSubmittedAt=_docFirstSubmittedAt(old)||submittedAt;
+    let rec={...old,id,empId:me.id,empName:me.name||'',plate:me.plate||'',phone:me.phone||'',lineId:me.lineId||'',monthKey,photo:photoId,photoSize:photoData.length,firstSubmittedAt,submittedAt,status:'pending',reviewedAt:null,reviewedBy:null,rejectReason:''};
+    rec={...rec,..._docPenaltyFields(rec,submittedAt)};
 
     if(window.fbUpsertMonthlyDoc){
       monthlyDocs=await window.fbUpsertMonthlyDoc(rec);
@@ -9118,7 +9184,8 @@ async function handleMonthlyDocPhoto(ev){
     if(oldPhoto&&oldPhoto!==photoId&&window.fbDeletePhotos)window.fbDeletePhotos([oldPhoto]);
 
     hideDocUploadPopup();
-    showDocUploadToast('✅ อัปโหลดสำเร็จ รอส่วนกลางตรวจสอบ', true);
+    const penalty=getMonthlyDocPenalty(rec);
+    showDocUploadToast(penalty.amount?`✅ อัปโหลดสำเร็จ · แจ้งหักค่าปรับ ${penalty.amount.toLocaleString('th-TH')} บาท`:'✅ อัปโหลดสำเร็จ รอส่วนกลางตรวจสอบ', true);
     renderDashboard();
     if(document.getElementById('admin')&&!document.getElementById('admin').classList.contains('hidden'))renderAdmin();
   }catch(err){
@@ -10769,11 +10836,14 @@ function getMonthlyDocCounts(monthKey=_docMonthKey()){
   const approved=docs.filter(x=>x.status==='approved').length;
   const rejected=docs.filter(x=>x.status==='rejected').length;
   // ตรวจสอบเอกสารเฉพาะตำแหน่ง "พนักงานขับรถ" เท่านั้น — ตำแหน่งอื่น (รถร่วม/แอดมิน/ฝ่ายบุคคล/ช่างซ่อม) ไม่ต้องส่งเอกสารเข้าส่วนกลาง
-  const missing=employees.filter(e=>isDrivingPosition(e.position)&&!getMonthlyDocSubmission(e.id,monthKey)).length;
-  return {pending,approved,rejected,missing,total:docs.length};
+  const required=employees.filter(e=>isDrivingPosition(e.position));
+  const missing=required.filter(e=>getMonthlyDocStatus(e.id,monthKey)==='missing').length;
+  const penalties=required.map(e=>getMonthlyDocPenalty(getMonthlyDocSubmission(e.id,monthKey))).filter(x=>x.amount>0);
+  return {pending,approved,rejected,missing,total:docs.length,late:penalties.length,penaltyTotal:penalties.reduce((sum,x)=>sum+x.amount,0)};
 }
 function updateAdminDocBadge(){
-  const n=getMonthlyDocCounts().pending;
+  const c=getMonthlyDocCounts();
+  const n=c.pending+(new Date().getDate()>=11?c.missing:0);
   const b=document.getElementById('navDocNavBadge');
   if(!b)return;
   if(n>0){b.textContent=n;b.classList.remove('hidden');}else b.classList.add('hidden');
@@ -10783,6 +10853,8 @@ function renderAdminDocPanel(){
   const listEl=document.getElementById('adminDocList');
   if(!stats||!listEl)return;
   const monthKey=_docMonthKey();
+  // ฝั่งผู้ดูแลช่วยบันทึกรายการค่าปรับที่ยังไม่ส่งของพนักงานทุกคนไว้ส่วนกลาง แม้ยังไม่มีรูปหลักฐาน
+  syncMonthlyDocumentPenaltyRecords(employees||[]);
   const c=getMonthlyDocCounts(monthKey);
   stats.innerHTML=`<div class="section-label">📄 เอกสารส่วนกลาง ${esc(_docMonthTH(monthKey))}</div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;">
@@ -10790,18 +10862,21 @@ function renderAdminDocPanel(){
       <div style="background:#ECFDF5;border:1.5px solid #10B981;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:900;color:#065F46;">${c.approved}</div><div style="font-size:11px;color:#065F46;">อนุมัติแล้ว</div></div>
       <div style="background:#FEF2F2;border:1.5px solid #EF4444;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:900;color:#991B1B;">${c.rejected}</div><div style="font-size:11px;color:#991B1B;">ไม่อนุมัติ</div></div>
       <div style="background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:12px;padding:10px;text-align:center;cursor:pointer;" onclick="document.getElementById('adminDocMissingAnchor')?.scrollIntoView({behavior:'smooth',block:'start'})"><div style="font-size:20px;font-weight:900;color:#475569;">${c.missing}</div><div style="font-size:11px;color:#475569;">ยังไม่ส่ง</div></div>
+      <div style="background:#FFF1F2;border:1.5px solid #E11D48;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:900;color:#9F1239;">${c.late}</div><div style="font-size:11px;color:#9F1239;">มีค่าปรับ</div></div>
+      <div style="background:#FFF7ED;border:1.5px solid #F97316;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:900;color:#9A3412;">฿${c.penaltyTotal.toLocaleString('th-TH')}</div><div style="font-size:11px;color:#9A3412;">ยอดแจ้งหักรวม</div></div>
     </div>`;
-  const docs=[...(monthlyDocs||[]).filter(x=>x&&x.monthKey===monthKey)].sort((a,b)=>{
+  const docs=[...(monthlyDocs||[]).filter(x=>x&&x.monthKey===monthKey&&String(x.status||'pending')!=='missing')].sort((a,b)=>{
     const rank={pending:0,rejected:1,approved:2};
     return (rank[a.status||'pending']??9)-(rank[b.status||'pending']??9) || (b.submittedAt||0)-(a.submittedAt||0);
   });
   // รายชื่อพนักงานที่ "ยังไม่ส่ง" เอกสารเดือนนี้ — เฉพาะตำแหน่ง "พนักงานขับรถ" เท่านั้น ตำแหน่งอื่นไม่ต้องส่งเอกสารเข้าส่วนกลาง
-  const missingEmps=(employees||[]).filter(e=>isDrivingPosition(e.position)&&!getMonthlyDocSubmission(e.id,monthKey)).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'th'));
+  const missingEmps=(employees||[]).filter(e=>isDrivingPosition(e.position)&&getMonthlyDocStatus(e.id,monthKey)==='missing').sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'th'));
   const missingHTML=missingEmps.length?`
     <div id="adminDocMissingAnchor" class="section-label" style="margin-top:18px;color:#475569;">📭 ยังไม่ส่งเอกสาร (${missingEmps.length} คน)</div>
     <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
       ${missingEmps.map(e=>`<div class="card" style="padding:9px 12px;border:1.5px solid #CBD5E1;background:#F8FAFC;">
         <div style="font-size:13px;font-weight:900;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.name||'-')}</div>
+        ${_docPenaltyNotice(null,_docMonthTH(monthKey),true)}
       </div>`).join('')}
     </div>` : '';
   if(!docs.length){listEl.innerHTML='<div class="empty">ยังไม่มีพนักงานส่งเอกสารเดือนนี้</div>'+missingHTML;return;}
@@ -10814,6 +10889,7 @@ function renderAdminDocPanel(){
         <div style="min-width:0;flex:1;">
           <div style="font-size:13px;font-weight:900;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(d.empName||emp.name||'-')}</div>
           <div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🚛 ${esc(d.plate||emp.plate||'-')}</div>
+          ${_docPenaltyNotice(d,_docMonthTH(monthKey),true)}
         </div>
         <span style="font-size:10.5px;font-weight:900;padding:3px 9px;border-radius:999px;background:${st.bg};color:${st.color};border:1px solid ${st.bd};white-space:nowrap;flex-shrink:0;">✅ อนุมัติแล้ว</span>
         ${d.photo?`<button class="btn btn-gray btn-sm" style="flex-shrink:0;padding:5px 8px;font-size:11px;" onclick="openPhotoViewer('${d.photo}')">🖼️</button>`:''}
@@ -10828,6 +10904,7 @@ function renderAdminDocPanel(){
       </div>
       ${d.photo?`<div style="margin-top:9px;"><img data-ph="${d.photo}" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px;border:1px solid #E5E7EB;" onclick="openPhotoViewer('${d.photo}')"></div>`:''}
       ${d.rejectReason?`<div style="font-size:12px;color:#991B1B;margin-top:6px;background:#FEF2F2;border-radius:8px;padding:7px;">เหตุผลไม่อนุมัติ: ${esc(d.rejectReason)}</div>`:''}
+      ${_docPenaltyNotice(d,_docMonthTH(monthKey))}
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button class="btn btn-green" style="flex:1;font-size:12px;" onclick="approveMonthlyDoc('${d.id}')">✅ อนุมัติ</button>
         <button class="btn btn-red" style="flex:1;font-size:12px;" onclick="rejectMonthlyDoc('${d.id}')">❌ ไม่อนุมัติ</button>
@@ -10839,7 +10916,9 @@ async function approveMonthlyDoc(id){
   const r=(monthlyDocs||[]).find(x=>x&&x.id===id);
   if(!r){alert('ไม่พบรายการเอกสาร');return;}
   if(!confirm('ยืนยันอนุมัติเอกสารนี้?'))return;
-  const patch={status:'approved',reviewedAt:Date.now(),reviewedBy:'admin',rejectReason:''};
+  const reviewedAt=Date.now();
+  const penaltyBase={...r,firstSubmittedAt:_docFirstSubmittedAt(r)||reviewedAt};
+  const patch={status:'approved',reviewedAt,reviewedBy:'admin',rejectReason:'',firstSubmittedAt:penaltyBase.firstSubmittedAt,..._docPenaltyFields(penaltyBase,reviewedAt)};
   try{
     if(window.fbUpdateMonthlyDocFields){
       await window.fbUpdateMonthlyDocFields(id,patch).catch(async()=>{
@@ -10859,7 +10938,9 @@ async function rejectMonthlyDoc(id){
   const r=(monthlyDocs||[]).find(x=>x&&x.id===id);
   if(!r){alert('ไม่พบรายการเอกสาร');return;}
   const reason=prompt('ระบุเหตุผลที่ไม่อนุมัติ (เช่น รูปไม่ชัด / เอกสารไม่ครบ)')||'';
-  const patch={status:'rejected',reviewedAt:Date.now(),reviewedBy:'admin',rejectReason:reason};
+  const reviewedAt=Date.now();
+  const penaltyBase={...r,firstSubmittedAt:_docFirstSubmittedAt(r)||reviewedAt};
+  const patch={status:'rejected',reviewedAt,reviewedBy:'admin',rejectReason:reason,firstSubmittedAt:penaltyBase.firstSubmittedAt,..._docPenaltyFields(penaltyBase,reviewedAt)};
   try{
     if(window.fbUpdateMonthlyDocFields){
       await window.fbUpdateMonthlyDocFields(id,patch).catch(async()=>{
