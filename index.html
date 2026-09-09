@@ -43,7 +43,7 @@
 <meta name="apple-mobile-web-app-title" content="SKE TRUCK">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#FFFFFF">
-<link rel="manifest" href="manifest.json?v=dev-v3253-candle-trend-chart">
+<link rel="manifest" href="manifest.json?v=dev-v3254-map-gestures">
 <title>SKE TRUCK</title>
 <!-- Firebase SDK -->
 <script type="module">
@@ -480,7 +480,7 @@
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') return;
       // ใช้ Service Worker หลักตัวเดียวร่วมกันทั้ง PWA cache และ FCM
-      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3253-candle-trend-chart', { updateViaCache: 'none' });
+      const swReg = await navigator.serviceWorker.register('sw.js?v=dev-v3254-map-gestures', { updateViaCache: 'none' });
       if (!_messaging) _messaging = getMessaging(app);
       const token = await getToken(_messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
       if (!token) return;
@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.53P');
+  console.log('[SKE TRUCK] app version: v3.2.54P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -3945,7 +3945,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-route-modal{position:fixed;inset:0;z-index:130000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.70);backdrop-filter:blur(3px)}.ske-route-modal-card{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 26px 80px rgba(0,0,0,.35)}.ske-route-modal-head{display:flex;align-items:flex-start;gap:10px;padding:16px 17px;border-bottom:1px solid #E2E8F0}.ske-route-modal-title{flex:1;font-size:15px;font-weight:950;color:#172033}.ske-route-modal-sub{font-size:10px;color:#64748B;margin-top:3px}.ske-route-modal-close{width:34px;height:34px;border:0;border-radius:11px;background:#F1F5F9;color:#475569;font-size:18px;cursor:pointer}.ske-route-map-canvas{position:relative;margin:14px;border-radius:16px;overflow:hidden;background:linear-gradient(145deg,#F8FAFC,#EAF2FF);border:1px solid #D7E2F0}.ske-route-map-canvas svg{display:block;width:100%;height:auto}.ske-route-map-tiles{position:relative;width:100%;aspect-ratio:68/36;background:#E8EEF5;overflow:hidden}.ske-route-map-tiles img{position:absolute;max-width:none}.ske-route-map-tiles svg{position:absolute;inset:0;width:100%;height:100%;z-index:3}.ske-route-osm-credit{position:absolute;right:4px;bottom:3px;z-index:4;padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.88);font-size:7px;color:#334155;text-decoration:none}.ske-route-map-legend{display:flex;flex-wrap:wrap;gap:8px;padding:0 15px 12px;font-size:10px;color:#475569}.ske-route-map-legend span{display:flex;align-items:center;gap:5px}.ske-route-legend-line{width:22px;height:4px;border-radius:4px;background:#2563EB}.ske-route-legend-dot{width:10px;height:10px;border-radius:50%;background:#DC2626}.ske-route-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 15px}.ske-route-modal-actions button{border:0;padding:10px;border-radius:12px;text-align:center;font-size:10.5px;font-weight:900;background:#EAF2FF;color:#075DCE;cursor:pointer}.ske-route-modal-actions button.current{background:#FEF2F2;color:#B91C1C}
 .status-jump-flash#skeRouteAlertsSection{animation:ske-route-flash 1.5s ease}@keyframes ske-route-flash{0%,100%{box-shadow:0 10px 26px rgba(28,52,91,.07)}35%{box-shadow:0 0 0 5px rgba(239,68,68,.20),0 12px 30px rgba(239,68,68,.16)}}
 
-/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.52P ══ */
+/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.54P ══ */
 .ske-live-insights{display:grid;grid-template-columns:minmax(0,1.18fr) minmax(0,.82fr);gap:14px;margin:0 0 18px}
 .ske-live-card{min-width:0;overflow:hidden;border:1px solid #E3EAF4;border-radius:22px;background:#fff;box-shadow:0 11px 26px rgba(28,52,91,.08)}
 .ske-live-card-head{display:flex;align-items:flex-start;gap:10px;padding:14px 15px 11px;border-bottom:1px solid #EDF2F7}
@@ -4005,7 +4005,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.53P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.54P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4013,7 +4013,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.53P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.54P</div>
       </div>
     </div>
 
@@ -4131,7 +4131,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.53P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.54P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4387,7 +4387,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.53P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.54P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5023,7 +5023,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.53P';
+const SKE_APP_VERSION='v3.2.54P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -6658,7 +6658,7 @@ let _swReg = null;
 if ('serviceWorker' in navigator &&
     (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=dev-v3253-candle-trend-chart', { updateViaCache: 'none' }).then(reg => {
+    navigator.serviceWorker.register('sw.js?v=dev-v3254-map-gestures', { updateViaCache: 'none' }).then(reg => {
       _swReg = reg;
       // บังคับตรวจไฟล์ worker จากเครือข่าย ไม่ใช้สำเนาเก่าจาก HTTP cache
       reg.update().catch(() => {});
@@ -9876,6 +9876,7 @@ let _skeLiveMapView=null, _skeLiveMapRenderedView=null;
 let _skeLiveMapSize={width:720,height:340};
 let _skeLiveMapRecords=[], _skeLiveMapDrag=null, _skeLiveMapFrame=0;
 let _skeLiveMapSuppressClickUntil=0;
+let _skeLiveMapWheelState=null;
 
 function _skeLiveWorldPoint(point,zoom){
   const size=256*Math.pow(2,zoom);
@@ -9886,6 +9887,11 @@ function _skeLiveWorldLocation(point,zoom){
   const size=256*Math.pow(2,zoom);
   const x=((point.x%size)+size)%size,y=Math.max(0,Math.min(size,point.y));
   return{lat:Math.atan(Math.sinh(Math.PI*(1-2*y/size)))*180/Math.PI,lng:x/size*360-180};
+}
+function _skeLiveMapAnchoredView(view,zoom,from,to){
+  const center=_skeLiveWorldPoint(view,view.zoom),factor=Math.pow(2,zoom-view.zoom);
+  const halfW=_skeLiveMapSize.width/2,halfH=_skeLiveMapSize.height/2;
+  return{..._skeLiveWorldLocation({x:(center.x+from.x-halfW)*factor-to.x+halfW,y:(center.y+from.y-halfH)*factor-to.y+halfH},zoom),zoom};
 }
 function _skeLiveMapFit(records,width,height){
   let zoom=2;
@@ -9907,7 +9913,12 @@ function _skeLiveMapMeasure(){
   cancelAnimationFrame(_skeLiveMapFrame);
   _skeLiveMapFrame=requestAnimationFrame(()=>{
     const canvas=document.getElementById('skeLiveFleetMap');
-    if(!canvas||_skeLiveMapDrag)return;
+    if(!canvas)return;
+    if(!canvas.dataset.wheelBound){
+      canvas.addEventListener('wheel',_skeLiveMapWheel,{passive:false});
+      canvas.dataset.wheelBound='true';
+    }
+    if(_skeLiveMapDrag)return;
     const bounds=canvas.getBoundingClientRect();
     if(bounds.width<100||bounds.height<100)return;
     const width=Math.round(bounds.width),height=Math.round(bounds.height);
@@ -9918,47 +9929,107 @@ function _skeLiveMapMeasure(){
   });
 }
 function zoomSkeLiveMap(delta){
+  _skeLiveMapClearWheel();
   const view=_skeLiveMapRenderedView;
   if(!view||_skeLiveMapDrag)return;
   _skeLiveMapView={...view,zoom:Math.max(2,Math.min(18,view.zoom+delta))};
   _skeLiveMapRedraw();
 }
 function resetSkeLiveMap(){
+  _skeLiveMapClearWheel();
   _skeLiveMapDrag=null;
   _skeLiveMapView=null;
   _skeLiveMapSelectedId=null;
   _skeLiveMapRedraw();
 }
+function _skeLiveMapClearWheel(){
+  if(_skeLiveMapWheelState)clearTimeout(_skeLiveMapWheelState.timer);
+  _skeLiveMapWheelState=null;
+}
+function _skeLiveMapWheel(event){
+  if(!Number.isFinite(event.deltaY)||!event.deltaY)return;
+  event.preventDefault();
+  if(_skeLiveMapDrag||!_skeLiveMapRenderedView)return;
+  const canvas=event.currentTarget,bounds=canvas.getBoundingClientRect();
+  if(_skeLiveMapWheelState?.canvas!==canvas)_skeLiveMapClearWheel();
+  const state=_skeLiveMapWheelState||{canvas,delta:0,timer:0};
+  const delta=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?bounds.height:1);
+  if(state.delta*delta<0)state.delta=0;
+  state.delta+=delta;
+  state.anchor={x:event.clientX-bounds.left,y:event.clientY-bounds.top};
+  _skeLiveMapWheelState=state;
+  // Combine wheel/trackpad events so one gesture does not request tiles on every pixel.
+  if(!state.timer)state.timer=setTimeout(()=>{
+    _skeLiveMapWheelState=null;
+    if(!canvas.isConnected||_skeLiveMapDrag||Math.abs(state.delta)<4)return;
+    const view=_skeLiveMapRenderedView,zoom=Math.max(2,Math.min(18,view.zoom-Math.sign(state.delta)));
+    if(zoom===view.zoom)return;
+    _skeLiveMapView=_skeLiveMapAnchoredView(view,zoom,state.anchor,state.anchor);
+    _skeLiveMapRedraw();
+  },90);
+}
+function _skeLiveMapGestureBase(drag){
+  drag.baseView={...drag.pendingView};
+  drag.basePoints=[...drag.points.values()].map(point=>({...point}));
+}
+function _skeLiveMapPointerPoint(event,canvas){
+  const bounds=canvas.getBoundingClientRect();
+  return{x:event.clientX-bounds.left,y:event.clientY-bounds.top};
+}
 function _skeLiveMapPointerDown(event){
   if(_skeLiveMapDrag&&!_skeLiveMapDrag.canvas.isConnected)_skeLiveMapDrag=null;
-  if(event.button!==0||_skeLiveMapDrag||event.target.closest('button,.ske-live-osm-credit'))return;
+  if(event.button!==0||event.target.closest('button,.ske-live-osm-credit')||!_skeLiveMapRenderedView)return;
   const canvas=event.currentTarget;
-  if(!_skeLiveMapRenderedView)return;
-  _skeLiveMapDrag={pointerId:event.pointerId,canvas,view:{..._skeLiveMapRenderedView},startX:event.clientX,startY:event.clientY,dx:0,dy:0,moved:false};
-  // Capture only after a drag starts, so an ordinary tap on a marker still opens its location.
+  if(_skeLiveMapDrag&&(_skeLiveMapDrag.canvas!==canvas||_skeLiveMapDrag.points.size>=2))return;
+  _skeLiveMapClearWheel();
+  const drag=_skeLiveMapDrag||{canvas,view:{..._skeLiveMapRenderedView},pendingView:{..._skeLiveMapRenderedView},points:new Map(),moved:false};
+  drag.points.set(event.pointerId,_skeLiveMapPointerPoint(event,canvas));
+  _skeLiveMapDrag=drag;
+  _skeLiveMapGestureBase(drag);
+  if(drag.points.size===2){
+    drag.moved=true;
+    event.preventDefault();
+    drag.points.forEach((_,id)=>canvas.setPointerCapture(id));
+  }
+  // Preserve normal marker taps; capture a single pointer only once it starts dragging.
 }
 function _skeLiveMapPointerMove(event){
   const drag=_skeLiveMapDrag;
-  if(!drag||event.pointerId!==drag.pointerId)return;
-  drag.dx=event.clientX-drag.startX;drag.dy=event.clientY-drag.startY;
-  if(Math.hypot(drag.dx,drag.dy)>5&&!drag.moved){
-    drag.moved=true;
-    drag.canvas.setPointerCapture(event.pointerId);
+  if(!drag||!drag.points.has(event.pointerId))return;
+  drag.points.set(event.pointerId,_skeLiveMapPointerPoint(event,drag.canvas));
+  const points=[...drag.points.values()],base=drag.basePoints;
+  let from=base[0],to=points[0],zoom=drag.baseView.zoom;
+  if(points.length===2){
+    const before=Math.max(1,Math.hypot(base[1].x-base[0].x,base[1].y-base[0].y));
+    const after=Math.max(1,Math.hypot(points[1].x-points[0].x,points[1].y-points[0].y));
+    zoom=Math.max(2,Math.min(18,zoom+Math.log2(after/before)));
+    from={x:(base[0].x+base[1].x)/2,y:(base[0].y+base[1].y)/2};
+    to={x:(points[0].x+points[1].x)/2,y:(points[0].y+points[1].y)/2};
   }
-  if(!drag.moved)return;
+  if(!drag.moved&&Math.hypot(to.x-from.x,to.y-from.y)<=5)return;
+  if(!drag.moved){drag.moved=true;drag.canvas.setPointerCapture(event.pointerId);}
   event.preventDefault();
+  drag.anchor=to;
+  drag.pendingView=_skeLiveMapAnchoredView(drag.baseView,zoom,from,to);
+  const scale=Math.pow(2,zoom-drag.view.zoom),center=_skeLiveWorldPoint(drag.view,drag.view.zoom);
+  const nextCenter=_skeLiveWorldPoint(drag.pendingView,drag.view.zoom);
+  const dx=_skeLiveMapSize.width/2*(1-scale)+(center.x-nextCenter.x)*scale;
+  const dy=_skeLiveMapSize.height/2*(1-scale)+(center.y-nextCenter.y)*scale;
   const layer=drag.canvas.querySelector('.ske-live-map-layer');
-  if(layer)layer.style.transform=`translate(${drag.dx}px,${drag.dy}px)`;
+  if(layer){layer.style.transformOrigin='0 0';layer.style.transform=`translate(${dx}px,${dy}px) scale(${scale})`;}
 }
 function _skeLiveMapPointerUp(event,cancelled=false){
   const drag=_skeLiveMapDrag;
-  if(!drag||event.pointerId!==drag.pointerId)return;
+  if(!drag||!drag.points.has(event.pointerId))return;
+  drag.points.delete(event.pointerId);
+  if(drag.points.size&&!cancelled){_skeLiveMapGestureBase(drag);return;}
   _skeLiveMapDrag=null;
+  drag.points.forEach((_,id)=>{if(drag.canvas.hasPointerCapture(id))drag.canvas.releasePointerCapture(id);});
   if(!drag.moved)return;
   _skeLiveMapSuppressClickUntil=Date.now()+400;
   if(!cancelled){
-    const center=_skeLiveWorldPoint(drag.view,drag.view.zoom);
-    _skeLiveMapView={..._skeLiveWorldLocation({x:center.x-drag.dx,y:center.y-drag.dy},drag.view.zoom),zoom:drag.view.zoom};
+    const anchor=drag.anchor||{x:_skeLiveMapSize.width/2,y:_skeLiveMapSize.height/2};
+    _skeLiveMapView=_skeLiveMapAnchoredView(drag.pendingView,Math.round(drag.pendingView.zoom),anchor,anchor);
   }
   _skeLiveMapRedraw();
 }
@@ -10001,6 +10072,7 @@ function setSkeLiveFleetFilter(filter){
 }
 function openSkeLiveMapFromElement(element){
   if(Date.now()<_skeLiveMapSuppressClickUntil)return;
+  _skeLiveMapClearWheel();
   const id=element?.getAttribute?.('data-employee-id');
   const record=_skeLiveMapRecords.find(item=>String(item.employee.id)===id);
   if(!record)return;
@@ -10052,7 +10124,7 @@ function _skeLiveFleetMap(records){
     return `<a class="ske-live-marker" href="#skeLiveFleetMap" data-employee-id="${esc(String(record.employee.id))}" onclick="event.preventDefault();openSkeLiveMapFromElement(this)" aria-label="${esc(title)}"><title>${esc(title)}</title>${record.gps.key==='fresh'?`<circle class="pulse" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="16" fill="${record.gps.color}"/>`:''}<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="13" fill="#fff" stroke="${record.gps.color}" stroke-width="4"/><circle class="main" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="9" fill="${status.color}" stroke="#fff" stroke-width="2"/><text x="${x.toFixed(1)}" y="${(y+3.3).toFixed(1)}" text-anchor="middle" font-size="8.5" font-weight="900" fill="#fff">${index+1}</text></a>`;
   }).join('');
   _skeLiveMapMeasure();
-  return `<div id="skeLiveMapHost"><div class="ske-live-map" id="skeLiveFleetMap" data-zoom="${zoom}" tabindex="0" aria-label="แผนที่รถ ลากเพื่อเลื่อน หรือใช้ปุ่มบวกและลบเพื่อซูม" onpointerdown="_skeLiveMapPointerDown(event)" onpointermove="_skeLiveMapPointerMove(event)" onkeydown="_skeLiveMapKey(event)" ondragstart="return false"><div class="ske-live-map-layer">${tiles.join('')}<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="แผนที่ตำแหน่งรถล่าสุด">${markers}</svg></div><div class="ske-live-map-controls"><button type="button" onclick="zoomSkeLiveMap(1)" aria-label="ซูมเข้า" ${zoom>=18?'disabled':''}>+</button><button type="button" onclick="zoomSkeLiveMap(-1)" aria-label="ซูมออก" ${zoom<=2?'disabled':''}>−</button><button type="button" class="ske-live-map-fit" onclick="resetSkeLiveMap()">ดูรถทั้งหมด</button></div><a class="ske-live-osm-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a></div>${_skeLiveMapSelection(records)}</div>`;
+  return `<div id="skeLiveMapHost"><div class="ske-live-map" id="skeLiveFleetMap" data-zoom="${zoom}" tabindex="0" aria-label="แผนที่รถ ลากเพื่อเลื่อน ถ่างหรือหุบนิ้ว หมุนลูกกลิ้ง หรือใช้ปุ่มบวกและลบเพื่อซูม" onpointerdown="_skeLiveMapPointerDown(event)" onpointermove="_skeLiveMapPointerMove(event)" onkeydown="_skeLiveMapKey(event)" ondragstart="return false"><div class="ske-live-map-layer">${tiles.join('')}<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="แผนที่ตำแหน่งรถล่าสุด">${markers}</svg></div><div class="ske-live-map-controls"><button type="button" onclick="zoomSkeLiveMap(1)" aria-label="ซูมเข้า" ${zoom>=18?'disabled':''}>+</button><button type="button" onclick="zoomSkeLiveMap(-1)" aria-label="ซูมออก" ${zoom<=2?'disabled':''}>−</button><button type="button" class="ske-live-map-fit" onclick="resetSkeLiveMap()">ดูรถทั้งหมด</button></div><a class="ske-live-osm-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a></div>${_skeLiveMapSelection(records)}</div>`;
 }
 function _skeDailyJobSeries(rows,now=new Date()){
   const year=now.getFullYear(),month=now.getMonth(),days=new Date(year,month+1,0).getDate();
@@ -10107,7 +10179,7 @@ function _skeLiveFleetCard(dedupedEmployees){
     return `<button type="button" class="ske-live-map-chip" data-employee-id="${esc(String(record.employee.id))}" style="--gps-ring:${record.gps.color};--status-color:${status.color}" onclick="openSkeLiveMapFromElement(this)"><i></i><b>${index+1}. ${esc(record.employee.name||record.employee.plate||'-')}</b><span>${esc(record.employee.plate||'-')} · ${_skeLiveGpsAgeLabel(record.gps.ageMs)}</span></button>`;
   }).join('');
   const freshCount=records.filter(record=>record.gps.key==='fresh').length;
-  return `<section class="ske-live-card" aria-label="แผนที่ตำแหน่งรถล่าสุด"><div class="ske-live-card-head"><span class="ske-live-card-icon">${skeIcon('pin')}</span><div class="ske-live-card-copy"><div class="ske-live-card-title">ตำแหน่งรถล่าสุด</div><div class="ske-live-card-sub">แตะหมุดหรือชื่อรถเพื่อดูตำแหน่ง · ลากแผนที่เพื่อเลื่อน</div></div><span class="ske-live-card-count">${records.length}/${eligible.length} คัน</span></div><div class="ske-live-filter"><button type="button" class="${_skeLiveFleetFilter==='active'?'active':''}" onclick="setSkeLiveFleetFilter('active')">รถกำลังทำงาน</button><button type="button" class="${_skeLiveFleetFilter==='all'?'active':''}" onclick="setSkeLiveFleetFilter('all')">รถทั้งหมด</button></div>${_skeLiveFleetMap(records)}${chips?`<div class="ske-live-map-list">${chips}</div>`:''}<div class="ske-live-legend"><span><i style="--legend-color:#16A34A"></i>สด ≤10 นาที (${freshCount})</span><span><i style="--legend-color:#F59E0B"></i>10–30 นาที</span><span><i style="--legend-color:#DC2626"></i>เกิน 30 นาที</span><span>สีในหมุด = สถานะรถ</span></div></section>`;
+  return `<section class="ske-live-card" aria-label="แผนที่ตำแหน่งรถล่าสุด"><div class="ske-live-card-head"><span class="ske-live-card-icon">${skeIcon('pin')}</span><div class="ske-live-card-copy"><div class="ske-live-card-title">ตำแหน่งรถล่าสุด</div><div class="ske-live-card-sub">แตะหมุดเพื่อดูรถ · ลากเพื่อเลื่อน · ถ่าง/หุบนิ้วหรือหมุนลูกกลิ้งเพื่อซูม</div></div><span class="ske-live-card-count">${records.length}/${eligible.length} คัน</span></div><div class="ske-live-filter"><button type="button" class="${_skeLiveFleetFilter==='active'?'active':''}" onclick="setSkeLiveFleetFilter('active')">รถกำลังทำงาน</button><button type="button" class="${_skeLiveFleetFilter==='all'?'active':''}" onclick="setSkeLiveFleetFilter('all')">รถทั้งหมด</button></div>${_skeLiveFleetMap(records)}${chips?`<div class="ske-live-map-list">${chips}</div>`:''}<div class="ske-live-legend"><span><i style="--legend-color:#16A34A"></i>สด ≤10 นาที (${freshCount})</span><span><i style="--legend-color:#F59E0B"></i>10–30 นาที</span><span><i style="--legend-color:#DC2626"></i>เกิน 30 นาที</span><span>สีในหมุด = สถานะรถ</span></div></section>`;
 }
 function renderFleetDashboardWidgets(dedupedEmployees){
   return `<div class="ske-live-insights" id="skeLiveInsights">${_skeLiveFleetCard(dedupedEmployees)}${_skeDailyTripChart()}</div>`;
