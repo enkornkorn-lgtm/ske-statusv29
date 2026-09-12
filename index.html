@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.58P');
+  console.log('[SKE TRUCK] app version: v3.2.59P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -937,6 +937,12 @@
         }
         if (current == null && !op.create) return;
         if (current != null && String(current.id || '') !== op.id) return;
+        // รายการ "ยังไม่ส่ง" มาจากการประเมินค่าปรับเท่านั้น (รวม outbox รุ่นเก่า)
+        // เมื่อมีรายการบนเซิร์ฟเวอร์แล้ว ห้ามนำสถานะ/รูป/เวลาส่งจาก cache มาทับ
+        if (path === 'monthlyDocs' && op.patch.status === 'missing') {
+          const base = current && typeof current === 'object' ? current : { ...op.patch, id:op.id };
+          return { ...base, ..._docPenaltyFields(base, Date.now()), id:op.id };
+        }
         return { ...(current && typeof current === 'object' ? current : {}), ...op.patch, id:op.id };
       }, { applyLocally:false }), SKE_WRITE_TIMEOUT_MS, 'timeout:' + path + '-transaction');
       if (!tx.committed && !(op.delete && !tx.snapshot.exists())) {
@@ -960,8 +966,9 @@
     const task = previous.catch(() => {}).then(async () => {
       _recordWriteBusy[path] = true;
       try {
-        await _executeRecordOps(path, cleanOps);
+        const results = await _executeRecordOps(path, cleanOps);
         _obAckRecordOps(outboxKey, cleanOps);
+        return results;
       } finally {
         _recordWriteBusy[path] = false;
       }
@@ -1890,11 +1897,14 @@
     if (_isEmployeeDeleted(rec.empId)) throw new Error('employee account was deleted');
     if (window._fbConnected === false) throw new Error('การเชื่อมต่ออินเทอร์เน็ตหลุดอยู่ กรุณาเช็คสัญญาณแล้วลองใหม่');
     // upsert ด้วย deterministic key + transaction: ส่งเฉพาะเอกสารของคนนี้ ไม่แตะเอกสารคนอื่น
-    await _queueRecordOps('monthlyDocs', 'monthlyDocs', [{
+    const results = await _queueRecordOps('monthlyDocs', 'monthlyDocs', [{
       id:String(rec.id), create:true, patch:_cleanPatch(rec)
     }]);
-    const exists = (monthlyDocs || []).some(x => x && x.id === rec.id);
-    monthlyDocs = exists ? monthlyDocs.map(x => x && x.id === rec.id ? rec : x) : (monthlyDocs || []).concat([rec]);
+    const saved = results.find(result => result.op.id === String(rec.id))?.value;
+    if (!saved) throw new Error('ไม่พบผลยืนยันการบันทึกเอกสารจากส่วนกลาง กรุณาลองใหม่');
+    const exists = (monthlyDocs || []).some(x => x && x.id === saved.id);
+    // ใช้ค่าที่ transaction ยืนยันจริง ไม่ใช้ payload เก่าที่ส่งออกไป
+    monthlyDocs = _docNormalizeRecords(exists ? monthlyDocs.map(x => x && x.id === saved.id ? saved : x) : (monthlyDocs || []).concat([saved]));
     _skeCacheSet('ske_monthly_docs', monthlyDocs);
     return monthlyDocs;
   };
@@ -1914,44 +1924,27 @@
   };
 
   onValue(ref(db, 'monthlyDocs'), (snapshot) => {
-    const data = normalizeList(snapshot.val());
-    if (_obHasFresh('monthlyDocs')) { _firstSync.monthlyDocs = true; return; }
-    _setRecordShadow('monthlyDocs', data || []);
-    if (data) {
-      monthlyDocs = data;
-      _skeCacheSet('ske_monthly_docs', data);
-      const dash = document.getElementById('dashboard');
-      const admin = document.getElementById('admin');
-      if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
-      if (admin && !admin.classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
-    } else if (!_firstSync.monthlyDocs) {
-      // อัปโหลด cache เครื่องขึ้น Firebase เฉพาะครั้งแรกเท่านั้น เพื่อไม่ให้ข้อมูลเก่าในเครื่องฟื้นกลับมาทับข้อมูลที่ลบ/อัปเดตแล้ว
-      const cache = (()=>{try{return JSON.parse(localStorage.getItem('ske_monthly_docs')||'[]');}catch(e){return [];}})();
-      if (Array.isArray(cache) && cache.length) window.fbSaveMonthlyDocs(cache).catch(e=>console.error('fb seed monthlyDocs error', e));
-      else {
-        monthlyDocs = [];
-        localStorage.setItem('ske_monthly_docs', '[]');
-      }
-    } else {
-      monthlyDocs = [];
-      localStorage.setItem('ske_monthly_docs', '[]');
-      const dash = document.getElementById('dashboard');
-      const admin = document.getElementById('admin');
-      if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
-      if (admin && !admin.classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
-    }
+    const data = normalizeList(snapshot.val()) || [];
+    _setRecordShadow('monthlyDocs', data);
+    monthlyDocs = _docNormalizeRecords(data);
+    _skeCacheSet('ske_monthly_docs', monthlyDocs);
+    // รับ snapshot ก่อน render เสมอ ไม่ใช้ cache ตัดสินว่ายังไม่ส่ง และไม่ seed ข้อมูลเก่ากลับ
+    window._monthlyDocsReady = true;
+    window._monthlyDocsSyncError = false;
     _firstSync.monthlyDocs = true;
+    const dash = document.getElementById('dashboard');
+    const admin = document.getElementById('admin');
+    if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
+    if (admin && !admin.classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
+  }, error => {
+    window._monthlyDocsReady = false;
+    window._monthlyDocsSyncError = true;
+    console.error('monthlyDocs sync error', error);
+    const dash = document.getElementById('dashboard');
+    const admin = document.getElementById('admin');
+    if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
+    if (admin && !admin.classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
   });
-  get(ref(db, 'monthlyDocs')).then(snapshot => {
-    if (_obHasFresh('monthlyDocs')) return;
-    const data = normalizeList(snapshot.val());
-    _setRecordShadow('monthlyDocs', data || []);
-    if (data) {
-      monthlyDocs = data;
-      _skeCacheSet('ske_monthly_docs', data);
-    }
-    _firstSync.monthlyDocs = true;
-  }).catch(e => { _firstSync.monthlyDocs = true; console.error('fbGet monthlyDocs error', e); });
 
   // ══ แผนงาน (จ่ายงาน) — jobPlan ══
   window.fbSaveJobPlan = function(list) {
@@ -3947,7 +3940,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-route-modal{position:fixed;inset:0;z-index:130000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.70);backdrop-filter:blur(3px)}.ske-route-modal-card{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 26px 80px rgba(0,0,0,.35)}.ske-route-modal-head{display:flex;align-items:flex-start;gap:10px;padding:16px 17px;border-bottom:1px solid #E2E8F0}.ske-route-modal-title{flex:1;font-size:15px;font-weight:950;color:#172033}.ske-route-modal-sub{font-size:10px;color:#64748B;margin-top:3px}.ske-route-modal-close{width:34px;height:34px;border:0;border-radius:11px;background:#F1F5F9;color:#475569;font-size:18px;cursor:pointer}.ske-route-map-canvas{position:relative;margin:14px;border-radius:16px;overflow:hidden;background:linear-gradient(145deg,#F8FAFC,#EAF2FF);border:1px solid #D7E2F0}.ske-route-map-canvas svg{display:block;width:100%;height:auto}.ske-route-map-tiles{position:relative;width:100%;aspect-ratio:68/36;background:#E8EEF5;overflow:hidden}.ske-route-map-tiles img{position:absolute;max-width:none}.ske-route-map-tiles svg{position:absolute;inset:0;width:100%;height:100%;z-index:3}.ske-route-osm-credit{position:absolute;right:4px;bottom:3px;z-index:4;padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.88);font-size:7px;color:#334155;text-decoration:none}.ske-route-map-legend{display:flex;flex-wrap:wrap;gap:8px;padding:0 15px 12px;font-size:10px;color:#475569}.ske-route-map-legend span{display:flex;align-items:center;gap:5px}.ske-route-legend-line{width:22px;height:4px;border-radius:4px;background:#2563EB}.ske-route-legend-dot{width:10px;height:10px;border-radius:50%;background:#DC2626}.ske-route-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 15px}.ske-route-modal-actions button{border:0;padding:10px;border-radius:12px;text-align:center;font-size:10.5px;font-weight:900;background:#EAF2FF;color:#075DCE;cursor:pointer}.ske-route-modal-actions button.current{background:#FEF2F2;color:#B91C1C}
 .status-jump-flash#skeRouteAlertsSection{animation:ske-route-flash 1.5s ease}@keyframes ske-route-flash{0%,100%{box-shadow:0 10px 26px rgba(28,52,91,.07)}35%{box-shadow:0 0 0 5px rgba(239,68,68,.20),0 12px 30px rgba(239,68,68,.16)}}
 
-/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.58P ══ */
+/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.59P ══ */
 .ske-live-insights{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:0 0 18px}
 .ske-tracking-heading{padding:4px 3px 15px}.ske-tracking-heading h2{margin:0;color:#172033;font-size:20px;font-weight:900}.ske-tracking-heading p{margin:5px 0 0;color:#7B8799;font-size:11px;line-height:1.6}
 #admin>.bottom-nav .nav-btn{flex:1 1 0;min-width:0}
@@ -4012,7 +4005,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.58P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.59P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4020,7 +4013,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.58P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.59P</div>
       </div>
     </div>
 
@@ -4138,7 +4131,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.58P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.59P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4394,7 +4387,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.58P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.59P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5040,7 +5033,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.58P';
+const SKE_APP_VERSION='v3.2.59P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5275,6 +5268,8 @@ let runLogs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_runlogs')||'[
 // ประวัติเส้นทาง GPS จริง — เริ่มเมื่อ "ออกเดินทาง" และจบเมื่อ "ถึงแล้วรอลงงาน"
 let routeTracks=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_route_tracks')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let monthlyDocs=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_monthly_docs')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
+window._monthlyDocsReady=false;
+window._monthlyDocsSyncError=false;
 let jobPlanRows=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_jobplan')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let jobRouteTemplates=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_jobtemplates')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
 let companyFeedbacks=(()=>{try{const s=JSON.parse(localStorage.getItem('ske_feedbacks')||'[]');return Array.isArray(s)?s:[];}catch(e){return[];}})();
@@ -9058,6 +9053,17 @@ function _docPreviousMonthKey(d=new Date()){
 }
 // เปิดรับหลักฐานได้ตลอดเดือน แม้เลยกำหนดแล้ว เพื่อให้พนักงานยังส่งเอกสารย้อนหลังได้
 function isMonthlyDocWindowOpen(){return true;}
+function _docNormalizeRecords(list){
+  // กู้เฉพาะการแสดงผลของรายการที่ถูกทับเป็น missing แต่ยังมีหลักฐานและเวลาส่ง
+  // ส่งกลับให้ผู้ดูแลตรวจใหม่ ไม่อนุมัติแทนผู้ดูแล และไม่เปลี่ยน approved/rejected
+  return (list||[]).map(rec=>rec&&rec.status==='missing'&&rec.photo&&_docFirstSubmittedAt(rec)
+    ? {...rec,status:'pending'} : rec);
+}
+function _docLoadingNotice(){
+  return `<div class="card" role="status" style="margin-top:10px;padding:12px;color:#475569;">${window._monthlyDocsSyncError
+    ? 'ยังตรวจสอบข้อมูลเอกสารจากส่วนกลางไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วเปิดแอปใหม่'
+    : 'กำลังตรวจสอบข้อมูลส่งเอกสารล่าสุดจากส่วนกลาง…'}</div>`;
+}
 function getMonthlyDocSubmission(empId,monthKey=_docMonthKey()){
   return (monthlyDocs||[]).find(x=>x&&x.id===_docId(empId,monthKey))||null;
 }
@@ -9120,6 +9126,8 @@ function _docPreviousPenaltyNotice(emp){
 }
 const _monthlyDocPenaltySyncKeys=new Set();
 async function syncMonthlyDocumentPenaltyRecords(targetEmployees=[]){
+  // ห้ามใช้ข้อมูล cache ก่อน snapshot แรกมาประเมินค่าปรับ
+  if(!window._monthlyDocsReady||window._fbConnected===false||!window.fbUpsertMonthlyDoc)return;
   const now=new Date();
   const targets=(targetEmployees||[]).filter(e=>e&&e.id&&isDrivingPosition(e.position));
   if(!targets.length)return;
@@ -9137,17 +9145,16 @@ async function syncMonthlyDocumentPenaltyRecords(targetEmployees=[]){
     for(const monthKey of monthKeys){
       for(const emp of targets){
         const old=getMonthlyDocSubmission(emp.id,monthKey);
-        const status=old?String(old.status||'pending'):'missing';
         const base=old||{id:_docId(emp.id,monthKey),empId:emp.id,empName:emp.name||'',plate:emp.plate||'',phone:emp.phone||'',lineId:emp.lineId||'',monthKey,status:'missing',createdAt:Date.now()};
         const penaltyFields=_docPenaltyFields(base,Date.now());
         if(!penaltyFields.penaltyAmount)continue;
         if(old&&Number(old.penaltyAmount||0)===penaltyFields.penaltyAmount&&old.penaltyDeductionId===penaltyFields.penaltyDeductionId&&Number(old.penaltyFinalizedAt||0)===Number(penaltyFields.penaltyFinalizedAt||0))continue;
-        const rec={...base,...penaltyFields,status};
-        if(window.fbUpsertMonthlyDoc)monthlyDocs=await window.fbUpsertMonthlyDoc(rec);
-        else monthlyDocs=(monthlyDocs||[]).filter(x=>x&&x.id!==rec.id).concat([rec]);
+        // ส่งเฉพาะข้อมูลสำหรับสร้างรายการกรณีไม่มีเอกสาร ไม่ส่งสถานะ/รูปเดิมกลับไป
+        // transaction จะคำนวณค่าปรับใหม่จากรายการจริง หากพนักงานส่งแทรกเข้ามาระหว่างนี้
+        const rec={id:_docId(emp.id,monthKey),empId:emp.id,empName:emp.name||'',plate:emp.plate||'',phone:emp.phone||'',lineId:emp.lineId||'',monthKey,status:'missing',createdAt:Date.now()};
+        await window.fbUpsertMonthlyDoc(rec);
       }
     }
-    if(!window.fbUpsertMonthlyDoc)await saveMonthlyDocs();
   }catch(err){
     _monthlyDocPenaltySyncKeys.delete(syncKey);
     console.error('sync monthly document penalties error',err);
@@ -9157,6 +9164,7 @@ function renderMonthlyDocAlert(me){
   if(!me)return'';
   // เตือน/ให้ส่งเอกสารเฉพาะตำแหน่ง "พนักงานขับรถ" เท่านั้น — ตำแหน่งอื่นไม่ต้องส่งเอกสารเข้าส่วนกลาง เลยไม่ต้องเห็นป้ายนี้เลย
   if(!isDrivingPosition(me.position))return'';
+  if(!window._monthlyDocsReady)return _docLoadingNotice();
   // บันทึกยอดค่าปรับของพนักงานคนนี้ด้วยรหัสประจำเดือนแบบตายตัว จึงไม่สร้างรายการหักซ้ำเมื่อเปิดแอปหลายครั้ง
   syncMonthlyDocumentPenaltyRecords([me]);
   const monthKey=_docMonthKey();
@@ -9256,6 +9264,7 @@ async function handleMonthlyDocPhoto(ev){
     if(file.size>12*1024*1024){alert('รูปภาพมีขนาดใหญ่เกินไป กรุณาเลือกรูปไม่เกิน 12 MB');return;}
     const me=employees.find(e=>e.id===currentUser?.id)||currentUser;
     if(!me){alert('ไม่พบข้อมูลพนักงาน');return;}
+    if(!window._monthlyDocsReady){alert('กรุณารอให้โหลดข้อมูลส่งเอกสารล่าสุดจากส่วนกลางก่อน');return;}
     if(window._fbConnected===false){
       alert('⚠️ ตอนนี้เน็ตหลุดอยู่ กรุณาเช็คสัญญาณอินเทอร์เน็ตก่อนส่งเอกสาร');
       if(input)input.value='';
@@ -11385,6 +11394,7 @@ function getMonthlyDocCounts(monthKey=_docMonthKey()){
   return {pending,approved,rejected,missing,total:docs.length,late:penalties.length,penaltyTotal:penalties.reduce((sum,x)=>sum+x.amount,0)};
 }
 function updateAdminDocBadge(){
+  if(!window._monthlyDocsReady){document.getElementById('navDocNavBadge')?.classList.add('hidden');return;}
   const c=getMonthlyDocCounts();
   const n=c.pending+(new Date().getDate()>=11?c.missing:0);
   const b=document.getElementById('navDocNavBadge');
@@ -11395,6 +11405,7 @@ function renderAdminDocPanel(){
   const stats=document.getElementById('adminDocStats');
   const listEl=document.getElementById('adminDocList');
   if(!stats||!listEl)return;
+  if(!window._monthlyDocsReady){stats.innerHTML=_docLoadingNotice();listEl.innerHTML='';return;}
   const monthKey=_docMonthKey();
   // ฝั่งผู้ดูแลช่วยบันทึกรายการค่าปรับที่ยังไม่ส่งของพนักงานทุกคนไว้ส่วนกลาง แม้ยังไม่มีรูปหลักฐาน
   syncMonthlyDocumentPenaltyRecords(employees||[]);
