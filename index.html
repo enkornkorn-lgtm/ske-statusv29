@@ -755,7 +755,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.61P');
+console.log('[SKE TRUCK] app version: v3.2.62P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -767,8 +767,23 @@
   // งานค้างมีอายุจำกัด แม้ V2 จะเก็บเฉพาะ patch รายรายการแล้วก็ตาม:
   // กันคำสั่งเดิมที่ล้มเหลวถาวรค้างปิดกั้น onValue ของชุดข้อมูลนั้น และกัน patch เก่ามากไปทับฟิลด์เดียวกันที่เพิ่งแก้จากเครื่องอื่น
   const SKE_OUTBOX_MAX_AGE_MS = 10 * 60 * 1000;
-  function _obLoad() { try { return JSON.parse(localStorage.getItem(SKE_OUTBOX_KEY) || '{}'); } catch (e) { return {}; } }
-  function _obSaveAll(ob) { try { localStorage.setItem(SKE_OUTBOX_KEY, JSON.stringify(ob)); } catch (e) {} }
+  let _obMemory = null;
+  function _obLoad() {
+    if (_obMemory) return JSON.parse(JSON.stringify(_obMemory));
+    try { return JSON.parse(localStorage.getItem(SKE_OUTBOX_KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function _obSaveAll(ob) {
+    _obMemory = JSON.parse(JSON.stringify(ob));
+    try {
+      try { localStorage.setItem(SKE_OUTBOX_KEY, JSON.stringify(ob)); }
+      catch (_) { _skeReleaseConfirmedRouteCache(); localStorage.setItem(SKE_OUTBOX_KEY, JSON.stringify(ob)); }
+      _obMemory = null;
+      window._skeOutboxDurable = true;
+    } catch (e) {
+      window._skeOutboxDurable = false;
+      console.warn('[SKE] คิวรอส่งอยู่ในหน่วยความจำเท่านั้น พื้นที่เครื่องเต็ม อย่าปิดแอปจนบันทึกสำเร็จ');
+    }
+  }
   function _obClear(key) { const ob = _obLoad(); if (ob[key]) { delete ob[key]; _obSaveAll(ob); _obUpdateIndicator(); } }
   function _obHas(key) { return !!_obLoad()[key]; }
   // เช็คว่ามีงานค้างที่ "ยังไม่หมดอายุ" ไหม — ถ้าหมดอายุแล้วให้ล้างทิ้งทันทีและถือว่าไม่มี
@@ -940,6 +955,32 @@
       _obClear(key);
     }
   }
+  // Reject default/stale employee writes inside the transaction, not just in the UI.
+  function _employeePatchAllowed(current, op) {
+    if (op.delete) return true; // Explicit account deletion uses its own workflow.
+    const patch = op.patch || {};
+    if (!current) return !!op.create && !/^emp\d{3}$/.test(String(op.id));
+    if (op.create) return Object.keys(patch).every(k => _sameRecordValue(current[k], patch[k]));
+    const has = key => Object.prototype.hasOwnProperty.call(patch, key);
+    const priorTime = Date.parse(current.updatedAt || '');
+    const nextTime = Date.parse(patch.updatedAt || '');
+    if (has('updatedAt') && (!Number.isFinite(nextTime) || (Number.isFinite(priorTime) && nextTime < priorTime))) return false;
+    if (has('status') && patch.status !== current.status && !Number.isFinite(nextTime)) return false;
+    return true;
+  }
+  function _employeeSnapshotView(data) {
+    // Always consume the server snapshot. Only overlay this device's pending fields;
+    // a failed write for one person must never freeze the entire fleet.
+    _setRecordShadow('employees', data);
+    window._employeeListSynced = true;
+    const pending = _obLoad().employees?.payload;
+    const ops = pending?.__skeRecordOps === 1 ? _coalesceRecordOps(pending.ops) : [];
+    const byId = new Map(ops.filter(op => !op.delete).map(op => [op.id, op]));
+    return data.map(row => {
+      const op = byId.get(String(row.id));
+      return op && _employeePatchAllowed(row, op) ? { ...row, ...op.patch, id:row.id } : row;
+    });
+  }
   async function _executeRecordOps(path, ops) {
     const cleanOps = _coalesceRecordOps(ops);
     if (!cleanOps.length) return [];
@@ -970,6 +1011,7 @@
         }
         if (current == null && !op.create) return;
         if (current != null && String(current.id || '') !== op.id) return;
+        if (path === 'employees' && !_employeePatchAllowed(current, op)) return;
         // รายการ "ยังไม่ส่ง" มาจากการประเมินค่าปรับเท่านั้น (รวม outbox รุ่นเก่า)
         // เมื่อมีรายการบนเซิร์ฟเวอร์แล้ว ห้ามนำสถานะ/รูป/เวลาส่งจาก cache มาทับ
         if (path === 'monthlyDocs' && op.patch.status === 'missing') {
@@ -993,7 +1035,7 @@
   }
   function _queueRecordOps(path, outboxKey, ops) {
     const cleanOps = _coalesceRecordOps(ops);
-    if (!cleanOps.length) { _obClear(outboxKey); return Promise.resolve(); }
+    if (!cleanOps.length) return Promise.resolve();
     _obMarkRecordOps(outboxKey, cleanOps);
     const previous = _recordWriteChains[path] || Promise.resolve();
     const task = previous.catch(() => {}).then(async () => {
@@ -1017,7 +1059,8 @@
       );
     } else {
       const list = (Array.isArray(payload) ? payload : []).filter(row => !filterFn || filterFn(row));
-      ops = _buildRecordOps(path, list);
+      // A partial employee list is not a request to delete missing accounts.
+      ops = _buildRecordOps(path, list, path !== 'employees');
     }
     return _queueRecordOps(path, outboxKey, ops);
   }
@@ -1167,8 +1210,8 @@
 
   // บันทึกเฉพาะพนักงานที่เพิ่ม/แก้/ลบ โดยเทียบกับ shadow ล่าสุดของเครื่อง
   window.fbSaveEmployees = function(emps) {
-    return _saveRecordList('employees', 'employees', emps, emp => emp && !_isEmployeeDeleted(emp.id))
-      .catch(e => console.error('fbSave error', e));
+    if (!window._employeeListSynced) return Promise.reject(new Error('ยังโหลดรายชื่อจากส่วนกลางไม่ครบ กรุณารอสักครู่'));
+    return _saveRecordList('employees', 'employees', emps, emp => emp && !_isEmployeeDeleted(emp.id));
   };
 
   // อัพเดทเฉพาะ "ของพนักงานคนเดียว" (ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์มาก่อนแล้วแก้เฉพาะฟิลด์ที่เปลี่ยน)
@@ -1507,7 +1550,7 @@
   // ดึงข้อมูลล่าสุดจาก Firebase ทันที (สำหรับปุ่มรีเฟรชของผู้ดูแล)
   window.fbForceRefresh = function(cb) {
     get(ref(db, 'employees')).then(snapshot => {
-      const data = _activeEmployeeList(normalizeEmployees(snapshot.val()) || []);
+      const data = _employeeSnapshotView(_activeEmployeeList(normalizeEmployees(snapshot.val()) || []));
       if (data && data.length > 0) {
         employees = data;
         _skeCacheSet('ske_emp', employees);
@@ -1521,7 +1564,7 @@
       const vdata = normalizeList(snapshot.val());
       if (vdata) {
         vehicles = vdata;
-        localStorage.setItem('ske_vehicles', JSON.stringify(vehicles));
+        _skeCacheSet('ske_vehicles', vehicles);
       }
       if (typeof cb === 'function') cb(true);
     }).catch(e => {
@@ -1574,17 +1617,11 @@
     });
     if (Object.keys(revokedUpdates).length) update(ref(db), revokedUpdates).catch(() => {});
 
-    if (_obHasFresh('employees')) {
-      // ยังมีงานค้างส่งของเครื่องนี้อยู่ — ข้อมูลเซิร์ฟเวอร์ตอนนี้เก่ากว่าของเครื่อง อย่าเพิ่งเอามาทับ
-      // (setInterval ใน _obFlushAll จะพยายามส่งซ้ำเองจนสำเร็จ แล้วค่อยปล่อยให้ onValue รอบถัดไปทำงานตามปกติ)
-      if (currentUser && _isEmployeeDeleted(currentUser.id)) _notifyDeletedEmployee(currentUser.id);
-      _firstSync.employees = true; _empSynced = true; window._fbReady = true; return;
-    }
-    _setRecordShadow('employees', data);
+    const visibleData = _employeeSnapshotView(data);
     if (data && data.length > 0) {
       // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ (ไม่เขียนทับด้วยข้อมูลเครื่อง)
       const oldEmployees = employees;
-      employees = data;
+      employees = visibleData;
       _skeCacheSet('ske_emp', employees);
       if (_empSynced && typeof notifyNewlyAvailable === 'function') notifyNewlyAvailable(oldEmployees, employees);
       _empSynced = true;
@@ -1611,6 +1648,7 @@
     _empSynced = true;
     window._employeeListSynced = true;
     window._fbReady = true;
+    if(typeof renderEmpList==='function'&&document.getElementById('empList'))renderEmpList();
   });
 
   // ฟัง realtime — รายการรถทั้งหมด (แยกจากพนักงานเด็ดขาด — เพิ่ม/ลบ/แก้รถได้เองโดยไม่ต้องผูกกับคนขับ)
@@ -1796,9 +1834,7 @@
       _obFlushAll();
       // เพิ่งกลับมาเชื่อมต่อได้ → sync ข้อมูลทุกชุดทันที (onValue จะ replay ให้เองอยู่แล้ว แต่ get ย้ำให้ชัวร์+เร็ว)
       get(ref(db, 'employees')).then(s => {
-        if (_obHasFresh('employees')) return;
-        const d = _activeEmployeeList(normalizeList(s.val()) || []);
-        _setRecordShadow('employees', d);
+        const d = _employeeSnapshotView(_activeEmployeeList(normalizeList(s.val()) || []));
         if (d && d.length > 0) {
           employees = d;
           _skeCacheSet('ske_emp', employees);
@@ -1823,9 +1859,7 @@
   });
 
   get(ref(db, 'employees')).then(snapshot => {
-    if (_obHasFresh('employees')) { window._fbReady = true; return; }
-    const data = _activeEmployeeList(normalizeList(snapshot.val()) || []);
-    _setRecordShadow('employees', data);
+    const data = _employeeSnapshotView(_activeEmployeeList(normalizeList(snapshot.val()) || []));
     if (data && data.length > 0) {
       // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ
       employees = data;
@@ -3972,7 +4006,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-route-modal{position:fixed;inset:0;z-index:130000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.70);backdrop-filter:blur(3px)}.ske-route-modal-card{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 26px 80px rgba(0,0,0,.35)}.ske-route-modal-head{display:flex;align-items:flex-start;gap:10px;padding:16px 17px;border-bottom:1px solid #E2E8F0}.ske-route-modal-title{flex:1;font-size:15px;font-weight:950;color:#172033}.ske-route-modal-sub{font-size:10px;color:#64748B;margin-top:3px}.ske-route-modal-close{width:34px;height:34px;border:0;border-radius:11px;background:#F1F5F9;color:#475569;font-size:18px;cursor:pointer}.ske-route-map-canvas{position:relative;margin:14px;border-radius:16px;overflow:hidden;background:linear-gradient(145deg,#F8FAFC,#EAF2FF);border:1px solid #D7E2F0}.ske-route-map-canvas svg{display:block;width:100%;height:auto}.ske-route-map-tiles{position:relative;width:100%;aspect-ratio:68/36;background:#E8EEF5;overflow:hidden}.ske-route-map-tiles img{position:absolute;max-width:none}.ske-route-map-tiles svg{position:absolute;inset:0;width:100%;height:100%;z-index:3}.ske-route-osm-credit{position:absolute;right:4px;bottom:3px;z-index:4;padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.88);font-size:7px;color:#334155;text-decoration:none}.ske-route-map-legend{display:flex;flex-wrap:wrap;gap:8px;padding:0 15px 12px;font-size:10px;color:#475569}.ske-route-map-legend span{display:flex;align-items:center;gap:5px}.ske-route-legend-line{width:22px;height:4px;border-radius:4px;background:#2563EB}.ske-route-legend-dot{width:10px;height:10px;border-radius:50%;background:#DC2626}.ske-route-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 15px}.ske-route-modal-actions button{border:0;padding:10px;border-radius:12px;text-align:center;font-size:10.5px;font-weight:900;background:#EAF2FF;color:#075DCE;cursor:pointer}.ske-route-modal-actions button.current{background:#FEF2F2;color:#B91C1C}
 .status-jump-flash#skeRouteAlertsSection{animation:ske-route-flash 1.5s ease}@keyframes ske-route-flash{0%,100%{box-shadow:0 10px 26px rgba(28,52,91,.07)}35%{box-shadow:0 0 0 5px rgba(239,68,68,.20),0 12px 30px rgba(239,68,68,.16)}}
 
-/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.61P ══ */
+/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.62P ══ */
 .ske-live-insights{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:0 0 18px}
 .ske-tracking-heading{padding:4px 3px 15px}.ske-tracking-heading h2{margin:0;color:#172033;font-size:20px;font-weight:900}.ske-tracking-heading p{margin:5px 0 0;color:#7B8799;font-size:11px;line-height:1.6}
 #admin>.bottom-nav .nav-btn{flex:1 1 0;min-width:0}
@@ -4037,7 +4071,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.61P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.62P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4045,7 +4079,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.61P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.62P</div>
       </div>
     </div>
 
@@ -4419,7 +4453,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.61P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.62P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4855,10 +4889,44 @@ const FINISH_JOB_STATUS={id:"finish_job",label:"จบงาน",ic:"idle",emoji
 const EMPLOYEE_FINISHABLE_STATUSES=new Set(['got_job','loading_bay','unload_bay','loading','unloading','traveling','returning']);
 const INACTIVE_STATUS={id:"inactive",label:"ยังไม่ได้ผูกรถ (ถูกสลับออก)",ic:"idle",emoji:"⚪",color:"#64748B",bg:"#F1F5F9",border:"#CBD5E1"};
 function getS(id){if(id==='inactive')return INACTIVE_STATUS;return STATUSES.find(s=>s.id===id)||STATUSES.find(s=>s.id==='standby')||STATUSES[0];}
+function _skeNeedsStatusConfirmation(e){
+  return !!e&&e.status!=='inactive'&&isDrivingPosition(e.position)&&!Number.isFinite(Date.parse(e.updatedAt||''));
+}
+function _skeLastKnownStatus(e){
+  const events=[];
+  const add=(status,at,plate)=>{
+    const time=Date.parse(at||'');
+    if(Number.isFinite(time)&&time<=Date.now()+300000)events.push({status,at,time,plate:plate||''});
+  };
+  (routeTracks||[]).filter(t=>t&&String(t.empId)===String(e.id)).forEach(t=>{
+    add('traveling',t.startedAt,t.plate);
+    if(t.state==='completed'||t.state==='completed-partial')add('unload_bay',t.endedAt,t.plate);
+  });
+  (runLogs||[]).filter(r=>r&&String(r.empId)===String(e.id)).forEach(r=>add('traveling',r.createdAt,r.plate));
+  return events.sort((a,b)=>b.time-a.time)[0]||null;
+}
+function _skeStatusConfirmationHTML(list){
+  if(!list.length)return'';
+  return `<section style="margin:14px 0;padding:16px;background:#FFFBEB;border:2px solid #D97706;border-radius:18px;">
+    <div style="font-weight:900;color:#92400E;">รอยืนยันสถานะ ${list.length} รายชื่อ</div>
+    <p style="font-size:13px;color:#78350F;line-height:1.6;">ข้อมูลไม่มีเวลายืนยันสถานะ จึงยังไม่จัดเป็นรถว่างหรือรถกำลังทำงาน กรุณาให้พนักงานกดแก้ไขสถานะปัจจุบันอีกครั้ง ข้อมูลด้านล่างเป็นประวัติอ้างอิงเท่านั้น</p>
+    ${list.map(e=>{
+      const last=_skeLastKnownStatus(e);
+      const sameName=employees.find(other=>String(other.id)!==String(e.id)&&String(other.name||'').trim()===String(e.name||'').trim()&&!_skeNeedsStatusConfirmation(other));
+      return `<div id="status-confirm-${esc(e.id)}" style="background:#fff;border:1px solid #FDE68A;border-radius:12px;padding:12px;margin-top:8px;">
+        <strong>${esc(e.name)}</strong>${phoneLink(e.phone)}${lineLink(e.lineId)}
+        <div style="font-size:12px;color:#92400E;margin-top:5px;">${last?`ประวัติล่าสุด: ${esc(getS(last.status).label)} · ${esc(fmt(last.at))}${last.plate?` · ทะเบียนในประวัติ ${esc(last.plate)}`:''}`:'ไม่พบประวัติที่ใช้ยืนยันสถานะได้'}</div>
+        ${sameName?'<div style="font-size:12px;color:#B45309;margin-top:5px;">พบอีกรายชื่อชื่อเดียวกันที่มีสถานะแล้ว กรุณาตรวจบัญชีกับผู้ดูแลก่อนใช้งาน ไม่ได้ลบบัญชีใดออก</div>':''}
+        ${renderEmployeePhoneLocation(e)}
+      </div>`;
+    }).join('')}
+  </section>`;
+}
 // ── กันข้อมูลซ้ำ: ถ้ามีพนักงาน 2 คนขึ้นไปถือทะเบียนรถเดียวกันพร้อมกัน (เช่น แก้ไขโปรไฟล์ตรงๆ โดยไม่ผ่าน "สลับคนขับ"
 // หรือข้อมูลเก่าค้างจากก่อนหน้านี้) ให้ถือว่าคนที่อัปเดตสถานะล่าสุดคือคนขับตัวจริงของคันนั้น แล้วตัดคนอื่นออกจากบอร์ดสถานะ
 // ไม่กระทบข้อมูล/ประวัติเดิมของใครเลย แค่ไม่เอามาแสดง/นับซ้ำในหน้าสถานะเท่านั้น
 function _dedupByPlate(list){
+  list=list.filter(e=>!_skeNeedsStatusConfirmation(e));
   const latestByPlate={};
   list.forEach(e=>{
     const p=(e.plate||'').trim();
@@ -4868,9 +4936,9 @@ function _dedupByPlate(list){
   });
   return list.filter(e=>{
     const p=(e.plate||'').trim();
-    // ไม่มีทะเบียนรถ = พนักงานออฟฟิศ/ตำแหน่งที่ไม่ได้ผูกกับรถ — ไม่นับรวมในภาพรวม "สถานะรถ" ของแดชบอร์ด
-    // (ใช้ฟังก์ชันนี้เฉพาะจุดสรุป/แสดงกลุ่มสถานะรถ 6 จุดเท่านั้น ไม่กระทบระบบอื่น เช่น จัดการพนักงาน/ลา/เบิกเงิน)
-    if(!p)return false;
+    // A driver's confirmed status must remain visible even if their plate was lost.
+    // Office staff without a vehicle are still excluded; do not invent a plate.
+    if(!p)return isDrivingPosition(e.position);
     return latestByPlate[p]===e;
   });
 }
@@ -5015,6 +5083,7 @@ function updateWeatherWidget(province){
 }
 
 function getFullLabel(e){
+  if(_skeNeedsStatusConfirmation(e))return 'รอยืนยันสถานะ';
   let label='';
   if(e.status==='standby'&&e.province) label=`สแตนบาย — ${e.province}`;
   else if(e.status==='traveling'&&e.province) label=`ออกเดินทาง → ${e.province}`;
@@ -5055,7 +5124,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.61P';
+const SKE_APP_VERSION='v3.2.62P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5160,21 +5229,15 @@ function _cacheSet(key,value){
   catch(e){console.error('[SKE] พื้นที่เก็บในเครื่องเต็ม:',key);return false;}
 }
 
-// อัพเดทข้อมูลพนักงานรายคนขึ้น Firebase แบบกันพลาด:
-// 1) พยายามแพตช์เฉพาะฟิลด์ก่อน (เบา เร็ว ไม่แตะข้อมูลคนอื่น)
-// 2) ถ้าล้มเหลวค่อย fallback ผ่านตัวเทียบ shadow ซึ่งยังส่งเฉพาะรายการ/ฟิลด์ที่เปลี่ยน
-//    เพราะกว่าจะถึงตอน fallback ตัวแปร employees อาจถูก realtime ทับด้วยข้อมูลเก่า (ที่ยังไม่มีสถานะใหม่) ไปแล้ว
-//    การ reapply ก่อน fallback กันสถานะที่พนักงานเพิ่งกดยืนยันหายจากตัวแปรในเครื่อง (บั๊ก "สถานะเด้งกลับ")
+// Retry only this person's patch through the outbox; never fall back to a full roster write.
 function fbPatchEmployee(empId,patch){
   if(window.skeIsEmployeeDeleted&&window.skeIsEmployeeDeleted(empId)){
     return Promise.reject(new Error('employee account was deleted'));
   }
-  const reapply=()=>{employees=(employees||[]).map(e=>e&&e.id===empId?{...e,...patch}:e);_cacheSet('ske_emp',employees);};
   if(window.fbUpdateEmployeeFields){
-    return window.fbUpdateEmployeeFields(empId,patch).catch(()=>{reapply();if(window.fbSaveEmployees)return window.fbSaveEmployees(employees);});
+    return window.fbUpdateEmployeeFields(empId,patch);
   }
-  if(window.fbSaveEmployees){reapply();return window.fbSaveEmployees(employees);}
-  return Promise.resolve();
+  return Promise.reject(new Error('Firebase employee writer is not ready'));
 }
 
 // ══ คลังรูปฝั่งแอป ══
@@ -5230,12 +5293,10 @@ async function uploadPhotos(dataUrls){
   return ids;
 }
 
-const _DEFAULT_EMP=[{"id": "emp001", "name": "นพการณ์ ขันทะ", "plate": "", "phone": "", "pin": "1111", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp002", "name": "อภิวัฒน์ กำทอง", "plate": "", "phone": "", "pin": "2222", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp003", "name": "ราม สุขจิตเกษม", "plate": "731744", "phone": "", "pin": "3333", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp004", "name": "ธีรนัย หมัดเด", "plate": "", "phone": "", "pin": "4444", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp005", "name": "อรรคพล มีแก้ว", "plate": "73-4296", "phone": "", "pin": "5555", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp006", "name": "วิชญาดา งามจันทร์", "plate": "", "phone": "", "pin": "6666", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp007", "name": "นิรุช ศรีภาชน์", "plate": "", "phone": "", "pin": "7777", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp008", "name": "ณัฎฐกฤต รักสุข", "plate": "73-1856", "phone": "", "pin": "8888", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp009", "name": "กฤษฎิ์ ชมชื่น", "plate": "73-4397", "phone": "", "pin": "9999", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp010", "name": "เจริญ ตั้งเสถียร", "plate": "73-4397", "phone": "", "pin": "1010", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp011", "name": "สำราญ สิงห์โต", "plate": "73-1854", "phone": "", "pin": "1112", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp012", "name": "ศราวุฒิ เมืองสอน", "plate": "73-4253", "phone": "", "pin": "1212", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp013", "name": "กอบชัย เสนาวัลย์", "plate": "73-1861", "phone": "", "pin": "1313", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp014", "name": "อนุรักษ์ เสยกระโทก", "plate": "73-1896", "phone": "", "pin": "1414", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp015", "name": "สิทธิโชค สระเสือ", "plate": "73-6521", "phone": "", "pin": "1515", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp016", "name": "วันชัย จันทร์คง", "plate": "73-1853", "phone": "", "pin": "1616", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}, {"id": "emp017", "name": "รัชชานนท์ กริบกระโทก", "plate": "73-1883", "phone": "", "pin": "1717", "status": "standby", "province": "", "note": "", "updatedAt": null, "standbyAt": null}];
 let employees=(()=>{
-  const stored=JSON.parse(localStorage.getItem('ske_emp')||'[]');
-  // ใช้ข้อมูลที่บันทึกไว้เสมอถ้ามี — ใช้ default เฉพาะตอนเครื่องใหม่ที่ยังไม่เคยมีข้อมูลเลย (รอ Firebase ซิงค์ข้อมูลจริงมาแทนภายในไม่กี่วินาที)
-  if(!Array.isArray(stored)||stored.length===0) return _DEFAULT_EMP.map(e=>e);
-  return stored;
+  // Missing/full/corrupt cache must never resurrect the installation's demo roster.
+  try { const stored=JSON.parse(localStorage.getItem('ske_emp')||'[]');return Array.isArray(stored)?stored:[]; }
+  catch (_) { return []; }
 })();
 // ── รถ (vehicles) — เอนทิตี้แยกจากพนักงานเด็ดขาด: เพิ่ม/ลบ/แก้ไขทะเบียนรถได้เองจากหน้า "จัดการรถ"
 // ไม่ผูกกับคนขับอีกต่อไป — "รถทั้งหมด" นับจาก vehicles.length ตรงๆ ไม่ต้องเดาจากทะเบียนที่กรอกไว้ในโปรไฟล์พนักงาน
@@ -5302,7 +5363,11 @@ let _fluNewPhotos=[]; // รูปที่พนักงานเลือก�
 function saveE(){
   employees=(employees||[]).filter(e=>e&&!(window.skeIsEmployeeDeleted&&window.skeIsEmployeeDeleted(e.id)));
   _cacheSet('ske_emp', employees);
-  if(window.fbSaveEmployees) window.fbSaveEmployees(employees);
+  if(window.fbSaveEmployees) return window.fbSaveEmployees(employees).catch(error=>{
+    console.error('ยังบันทึกรายชื่อขึ้นส่วนกลางไม่สำเร็จ',error);
+    if(typeof showDocUploadToast==='function')showDocUploadToast('⚠️ ยังบันทึกข้อมูลส่วนกลางไม่สำเร็จ กรุณาตรวจการเชื่อมต่อ',false);
+    return false;
+  });
 }
 function saveU(){_cacheSet('ske_user',currentUser);}
 
@@ -6882,6 +6947,7 @@ function compressAvatar(file){
 function renderEmpList(){
   const el=document.getElementById('empList');
   if(!employees.length){
+    if(!window._employeeListSynced){el.innerHTML='<div class="card" style="padding:24px;text-align:center;">กำลังโหลดรายชื่อจากส่วนกลาง… หากรอนาน กรุณาตรวจการเชื่อมต่ออินเทอร์เน็ต</div>';return;}
     el.innerHTML='<div class="card" style="text-align:center;color:#9CA3AF;padding:32px;border-radius:20px;"><div style="font-size:44px;margin-bottom:10px;">👷</div><b style="color:#374151;">ยังไม่มีพนักงาน</b><br>กรุณาติดต่อผู้ดูแลเพื่อเพิ่มพนักงาน</div>';
     return;
   }
@@ -9627,7 +9693,7 @@ function renderSharedTruckDashboardCard(me,s,lbl){
     </div>
     <div class="emp-status-strip">
       <div class="emp-status-left"><span style="font-size:26px;">${skeIcon(s.ic)}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${lbl}</span></div>
-      <span class="emp-status-badge">${me.status==='standby'?'รอขึ้นงาน':s.label}</span>
+      <span class="emp-status-badge">${_skeNeedsStatusConfirmation(me)?'รอยืนยันสถานะ':me.status==='standby'?'รอขึ้นงาน':s.label}</span>
     </div>
     ${me.note?`<div style="margin-top:10px;background:#F8FAFC;border:1.5px solid #CBD5E1;border-radius:12px;padding:11px 13px;">
       <div style="font-size:11px;font-weight:800;color:#475569;margin-bottom:4px;">${skeIcon('note')} รายละเอียดสถานะ/งาน</div>
@@ -9651,7 +9717,8 @@ function renderDashboard(){
     return;
   }
   const sharedTruck=isSharedTruckEmployee(me);
-  const s=getS(me.status);const lbl=getFullLabel(me);
+  const awaitingStatus=_skeNeedsStatusConfirmation(me);
+  const s=awaitingStatus?{ic:'alert',label:'รอยืนยันสถานะ',color:'#92400E',bg:'#FFFBEB',border:'#FCD34D'}:getS(me.status);const lbl=getFullLabel(me);
   if(!editOpen&&!document.getElementById('statusEditModal')){
     // ซิงค์ค่าที่กำลังเลือกจากข้อมูลล่าสุดเฉพาะตอนยังไม่ได้เปิดแผงแก้ไขอยู่จริงๆ (เช็ค 2 ชั้น: ทั้ง flag และ DOM จริง)
     // (ป้องกันไม่ให้ realtime update จากพนักงานคนอื่นมาทับสถานะ/จังหวัดที่เพิ่งพิมพ์ไว้แต่ยังไม่ได้กดบันทึก)
@@ -9691,8 +9758,9 @@ function renderDashboard(){
     </div>
     <div class="emp-status-strip">
       <div class="emp-status-left"><span style="font-size:26px;">${skeIcon(s.ic)}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${lbl}</span></div>
-      <span class="emp-status-badge">${me.status==='standby'?'รอขึ้นงาน':s.label}</span>
+      <span class="emp-status-badge">${awaitingStatus?'รอยืนยันสถานะ':me.status==='standby'?'รอขึ้นงาน':s.label}</span>
     </div>
+    ${awaitingStatus?'<div role="alert" style="margin-top:10px;padding:12px;background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;color:#92400E;">ยังยืนยันสถานะปัจจุบันไม่ได้ กรุณากด “แก้ไขสถานะ” และเลือกสถานะจริงอีกครั้ง ข้อมูลประวัติเดิมยังเก็บไว้</div>':''}
     ${renderNativeGpsBanner(me)}
     ${(me.status==='got_job'&&me.note)?`<div style="margin-top:10px;background:#EEF2FF;border:2px solid #A5B4FC;border-radius:12px;padding:12px 14px;">
       <div style="font-size:12px;font-weight:800;color:#4F46E5;margin-bottom:5px;">📦 รายละเอียดงานที่ได้รับ</div>
@@ -10353,12 +10421,14 @@ function jumpToStatus(statusId){
 
 function buildSummaryHTML(){
   if(!employees.length){
+    if(!window._employeeListSynced)return '<div class="empty-state">กำลังโหลดสถานะจากส่วนกลาง… กรุณาตรวจการเชื่อมต่อหากรอนาน</div>';
     return '<div class="empty-state"><div class="empty-icon">'+skeIcon('overview')+'</div><div class="empty-text">ยังไม่มีข้อมูลพนักงาน</div></div>';
   }
 
   // นับแต่ละสถานะ (ไม่นับรวมคนที่ลาอยู่วันนี้ — รถของคนลาไม่ถือว่าอยู่ในสถานะปกติ, ไม่นับคนที่ถูกสลับคนขับออกแล้ว — status==='inactive',
   // และตัดรายการที่ทะเบียนซ้ำกัน — เหลือแค่คนที่อัปเดตสถานะล่าสุดของทะเบียนนั้นเท่านั้น ไม่งั้นตัวเลขสรุปจะไม่ตรงกับที่แสดงในลิสต์)
   const dedupedEmployees=_dedupByPlate(employees);
+  const awaitingStatus=employees.filter(e=>_skeNeedsStatusConfirmation(e)&&!isLeaveActiveToday(e));
   const counts={};
   STATUSES.forEach(st=>counts[st.id]=0);
   dedupedEmployees.forEach(e=>{
@@ -10372,7 +10442,7 @@ function buildSummaryHTML(){
   // สรุปบนสุด — "รถทั้งหมด" นับจากรายการรถจริง (vehicles) ตรงๆ แยกขาดจากพนักงาน/คนขับโดยสิ้นเชิง
   // แจ้งเตือนเฉพาะสถานะที่กำลังทำงานอยู่ที่ช่อง (4 สถานะ) เกิน ALERT_HOURS ชม.
   const total=vehicles.filter(v=>v.active!==false).length;
-  const stale=dedupedEmployees.filter(e=>!isLeaveActiveToday(e)&&ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS)).length;
+  const stale=awaitingStatus.length+dedupedEmployees.filter(e=>!isLeaveActiveToday(e)&&ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS)).length;
   const primaryActionIds=['unload_bay','loading','traveling','standby'];
   const primaryActionLabels={unload_bay:'ถึงแล้ว',loading:'ขึ้นงาน',traveling:'เดินทาง',standby:'สแตนบาย'};
   const primaryActions=primaryActionIds.map(id=>STATUSES.find(st=>st.id===id)).filter(Boolean);
@@ -10424,7 +10494,8 @@ function buildSummaryHTML(){
   // รายชื่อพนักงานที่ยังไม่อัพเดทเกิน 24 ชม. (ทุกสถานะ — แจ้งเตือนผู้ดูแลแบบภาพรวม)
   // ไม่รวมคนที่ลาอยู่ (ลาที่อนุมัติแล้วและอยู่ในช่วงวันลา) เพราะไม่ควรต้องอัพเดทสถานะระหว่างลา
   // ไม่รวมตำแหน่งที่ไม่ใช่พนักงานขับรถ (เช่น แอดมิน/ฝ่ายบุคคล/ช่างซ่อม) เพราะไม่ต้องแจ้งสถานะรถอยู่แล้ว ไม่ควรถูกนับว่า "ค้าง"
-  const stale24List=employees.filter(e=>isDrivingPosition(e.position)&&!isLeaveActiveToday(e)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS));
+  html+=_skeStatusConfirmationHTML(awaitingStatus);
+  const stale24List=employees.filter(e=>isDrivingPosition(e.position)&&!_skeNeedsStatusConfirmation(e)&&!isLeaveActiveToday(e)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=STALE_ALL_HOURS));
   if(stale24List.length){
     stale24List.sort((a,b)=>{const av=a.updatedAt?new Date(a.updatedAt).getTime():0,bv=b.updatedAt?new Date(b.updatedAt).getTime():0;return av-bv;});
     html+=`<div class="ske-stale-panel" style="background:#FEF2F2;border:2px solid #F87171;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
@@ -11157,7 +11228,7 @@ async function doSave(){
   // ให้ถือว่าเป็นการปิดงานปัจจุบันเช่นเดียวกับปุ่ม "จบงาน"
   const isFinishAction=_selStatus==='finish_job'||(_selStatus==='done'&&prev?.status==='returning');
   // พนักงานตำแหน่งออฟฟิศ (เช่นแอดมิน) หรือไม่มีทะเบียนรถผูกอยู่ ไม่ต้องเลือกจังหวัดสแตนบาย
-  const isOffice=!canSelfUpdateVehicleStatus(currentUser?.position)||!(currentUser&&currentUser.plate);
+  const isOffice=!canSelfUpdateVehicleStatus(currentUser?.position);
   if(isOffice&&_selStatus==='standby'){
     alert('⚠️ ตำแหน่งนี้ไม่สามารถเลือกสถานะ "สแตนบายรอขึ้นงาน" ได้');
     return;
@@ -11269,7 +11340,9 @@ async function doSave(){
     reapplySavedPatch();
     renderDashboard();
     console.warn('doSave: บันทึกไม่สำเร็จในทันที รอคิวส่งซ้ำอัตโนมัติ',e);
-    showDocUploadToast('⚠️ เน็ตช้า/หลุดอยู่ — ระบบจะส่งสถานะนี้ต่อให้อัตโนมัติเมื่อสัญญาณกลับมา ไม่ต้องกดซ้ำ',false);
+    showDocUploadToast(window._skeOutboxDurable===false
+      ?'⚠️ ยังไม่ถึงส่วนกลาง และพื้นที่เครื่องเต็ม กรุณาเปิดแอปไว้จนบันทึกสำเร็จ หากปิดแอปต้องตรวจและส่งสถานะใหม่'
+      :'⚠️ ยังบันทึกส่วนกลางไม่สำเร็จ ระบบกำลังลองส่งซ้ำ กรุณาตรวจว่าสถานะตรงกับส่วนกลางก่อนปิดแอป',false);
   }
   // reset timer หลังอัพเดทสถานะ
   startAlertTimer();
@@ -12003,7 +12076,6 @@ function isDrivingPosition(position){
 // พนักงานคนนี้ต้อง "ผูกกับสถานะรถ/จังหวัดสแตนบาย" ไหม — ต้องมีทั้งทะเบียนรถ และตำแหน่งเป็นพนักงานขับรถ/รถร่วม (หรือยังไม่ตั้งตำแหน่ง)
 function needsVehicleTracking(e){
   if(!e)return true;
-  if(!e.plate)return false;
   return isDrivingPosition(e.position);
 }
 
