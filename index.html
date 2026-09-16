@@ -545,9 +545,43 @@
     ske_fluid: list => (list || []).map(f => f ? { ...f, photos: [] } : f),
     ske_monthly_docs: list => (list || []).map(d => d ? { ...d, photo: null } : d)
   };
+  // ย่อเฉพาะสำเนาเที่ยวที่จบแล้วและเทียบตรงกับ snapshot ส่วนกลางในรอบนี้
+  // ไม่แก้ routeTracks ในหน่วยความจำ, Firebase, เที่ยวที่กำลังวิ่ง หรือคิวรอส่ง
+  let _skeConfirmedRouteCache = new Map();
+  function _skeCompactRouteCache(list) {
+    if (!Array.isArray(list) || !_skeConfirmedRouteCache.size) return list;
+    try {
+      const pending = JSON.parse(localStorage.getItem('ske_outbox_v2_record_ops') || '{}');
+      if (!pending || typeof pending !== 'object' || pending.routeTracks) return list;
+    } catch (_) { return list; }
+    return list.filter(row => {
+      if (!row || !['completed','completed-partial'].includes(row.state)) return true;
+      return _skeConfirmedRouteCache.get(String(row.id)) !== JSON.stringify(row);
+    });
+  }
+  function _skeReleaseConfirmedRouteCache() {
+    try {
+      const raw = localStorage.getItem('ske_route_tracks');
+      if (!raw) return false;
+      const old = JSON.parse(raw), compact = _skeCompactRouteCache(old);
+      if (!Array.isArray(old) || compact.length === old.length) return false;
+      // setItem เป็น atomic: ถ้าบันทึกไม่สำเร็จ สำเนาเดิมยังอยู่ครบ
+      localStorage.setItem('ske_route_tracks', JSON.stringify(compact));
+      return true;
+    } catch (_) { return false; }
+  }
+  function _skeRememberConfirmedRoutes(list) {
+    _skeConfirmedRouteCache = new Map((list || []).filter(row => row && row.id != null)
+      .map(row => [String(row.id), JSON.stringify(row)]));
+    _skeReleaseConfirmedRouteCache();
+  }
   function _skeCacheSet(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+    const cached = key === 'ske_route_tracks' ? _skeCompactRouteCache(value) : value;
+    try { localStorage.setItem(key, JSON.stringify(cached)); return true; }
     catch (e) {
+      if (_skeReleaseConfirmedRouteCache()) {
+        try { localStorage.setItem(key, JSON.stringify(cached)); return true; } catch (_) {}
+      }
       try {
         const strip = _SKE_CACHE_STRIP[key];
         if (strip) {
@@ -555,8 +589,7 @@
           console.warn('[SKE] พื้นที่เก็บในเครื่องเต็ม — เก็บ cache "' + key + '" แบบไม่รวมรูปแทน (ข้อมูลจริงอยู่บน Firebase ครบ)');
           return true;
         }
-      } catch (e2) { /* ยังเต็มอยู่ — ปล่อยไปลบทิ้งด้านล่าง */ }
-      try { localStorage.removeItem(key); } catch (e3) {}
+      } catch (e2) { /* ยังเต็มอยู่ — รักษาสำเนาเดิม ไม่ลบจนแอปกลับไปใช้ข้อมูลตั้งต้น */ }
       console.error('[SKE] พื้นที่เก็บในเครื่องเต็มจนบันทึก cache ไม่ได้: ' + key);
       return false;
     }
@@ -571,7 +604,7 @@
       try {
         const v = JSON.parse(localStorage.getItem(k) || 'null');
         if (Array.isArray(v)) _skeCacheSet(k, v); // ถ้ายังเต็มจะถูก strip รูปให้อัตโนมัติ
-      } catch (e) { try { localStorage.removeItem(k); } catch (e2) {} }
+      } catch (e) { /* ไม่ลบข้อมูลเดิมเมื่ออ่านไม่ได้ */ }
     });
   })();
 
@@ -722,7 +755,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.60P');
+  console.log('[SKE TRUCK] app version: v3.2.61P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1594,7 +1627,6 @@
       const admin = document.getElementById('admin');
       if (summaryEl && admin && !admin.classList.contains('hidden') && typeof buildSummaryHTML === 'function') summaryEl.innerHTML = buildSummaryHTML();
       const vp = document.getElementById('adminVehiclePanel');
-      if (typeof renderAdminTracking === 'function') renderAdminTracking();
       if (vp && !vp.classList.contains('hidden') && typeof renderAdminVehicleList === 'function') renderAdminVehicleList();
     } else if (!_firstSync.vehicles && vehicles.length > 0) {
       // Firebase ว่างจริงๆ (ครั้งแรกที่ใช้งาน) → อัพโหลดข้อมูลเครื่องขึ้นไปครั้งเดียว
@@ -1672,7 +1704,7 @@
     _setRecordShadow('cashRequests', data || []);
     if (data) {
       cashRequests = data;
-      localStorage.setItem('ske_cash', JSON.stringify(cashRequests));
+      _skeCacheSet('ske_cash', cashRequests);
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
       if (typeof updateAdminCashBadge === 'function') updateAdminCashBadge();
       const m = document.getElementById('cashModal');
@@ -1692,7 +1724,7 @@
     _setRecordShadow('leaveLogs', data || []);
     if (data) {
       leaveLogs = data;
-      localStorage.setItem('ske_leaveLogs', JSON.stringify(leaveLogs));
+      _skeCacheSet('ske_leaveLogs', leaveLogs);
       const lp = document.getElementById('adminLeaveHistoryPanel');
       if (lp && !lp.classList.contains('hidden') && typeof renderLeaveHistory === 'function') renderLeaveHistory();
     } else if (!_firstSync.leaveLogs && leaveLogs.length > 0) {
@@ -1708,7 +1740,7 @@
     _setRecordShadow('runLogs', data || []);
     if (data) {
       runLogs = data;
-      localStorage.setItem('ske_runlogs', JSON.stringify(runLogs));
+      _skeCacheSet('ske_runlogs', runLogs);
       const rm = document.getElementById('employeeRunLogModal');
       if (rm && typeof openEmployeeRunLogModal === 'function') openEmployeeRunLogModal();
       const dash = document.getElementById('dashboard');
@@ -1726,11 +1758,12 @@
   // ฟัง realtime — ประวัติเส้นทางตั้งแต่ "ออกเดินทาง" ถึง "ถึงแล้วรอลงงาน"
   onValue(ref(db, 'routeTracks'), (snapshot) => {
     const data = normalizeList(snapshot.val());
-    if (_obHasFresh('routeTracks')) { _firstSync.routeTracks = true; return; }
+    if (_obHas('routeTracks')) { _firstSync.routeTracks = true; return; }
     _setRecordShadow('routeTracks', data || []);
     if (data) {
+      _skeRememberConfirmedRoutes(data);
       routeTracks = data;
-      localStorage.setItem('ske_route_tracks', JSON.stringify(routeTracks));
+      _skeCacheSet('ske_route_tracks', routeTracks);
     } else if (!_firstSync.routeTracks && routeTracks.length > 0) {
       window.fbSaveRouteTracks(routeTracks).catch(() => {});
     }
@@ -1739,7 +1772,6 @@
       setTimeout(() => { if (typeof backfillRouteTracksFromExistingData === 'function') backfillRouteTracksFromExistingData(); }, 3200);
     }
     _firstSync.routeTracks = true;
-    if (typeof renderAdminTracking === 'function') renderAdminTracking();
     const summaryEl = document.getElementById('adminSummaryContent');
     const admin = document.getElementById('admin');
     if (summaryEl && admin && !admin.classList.contains('hidden') && typeof buildSummaryHTML === 'function') summaryEl.innerHTML = buildSummaryHTML();
@@ -1869,7 +1901,7 @@
     _setRecordShadow('cashRequests', data || []);
     if (data) {
       cashRequests = data;
-      localStorage.setItem('ske_cash', JSON.stringify(cashRequests));
+      _skeCacheSet('ske_cash', cashRequests);
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
     } else if (!_firstSync.cashRequests && cashRequests.length > 0) {
       window.fbSaveCashRequests(cashRequests);
@@ -3940,7 +3972,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-route-modal{position:fixed;inset:0;z-index:130000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.70);backdrop-filter:blur(3px)}.ske-route-modal-card{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 26px 80px rgba(0,0,0,.35)}.ske-route-modal-head{display:flex;align-items:flex-start;gap:10px;padding:16px 17px;border-bottom:1px solid #E2E8F0}.ske-route-modal-title{flex:1;font-size:15px;font-weight:950;color:#172033}.ske-route-modal-sub{font-size:10px;color:#64748B;margin-top:3px}.ske-route-modal-close{width:34px;height:34px;border:0;border-radius:11px;background:#F1F5F9;color:#475569;font-size:18px;cursor:pointer}.ske-route-map-canvas{position:relative;margin:14px;border-radius:16px;overflow:hidden;background:linear-gradient(145deg,#F8FAFC,#EAF2FF);border:1px solid #D7E2F0}.ske-route-map-canvas svg{display:block;width:100%;height:auto}.ske-route-map-tiles{position:relative;width:100%;aspect-ratio:68/36;background:#E8EEF5;overflow:hidden}.ske-route-map-tiles img{position:absolute;max-width:none}.ske-route-map-tiles svg{position:absolute;inset:0;width:100%;height:100%;z-index:3}.ske-route-osm-credit{position:absolute;right:4px;bottom:3px;z-index:4;padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.88);font-size:7px;color:#334155;text-decoration:none}.ske-route-map-legend{display:flex;flex-wrap:wrap;gap:8px;padding:0 15px 12px;font-size:10px;color:#475569}.ske-route-map-legend span{display:flex;align-items:center;gap:5px}.ske-route-legend-line{width:22px;height:4px;border-radius:4px;background:#2563EB}.ske-route-legend-dot{width:10px;height:10px;border-radius:50%;background:#DC2626}.ske-route-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 15px}.ske-route-modal-actions button{border:0;padding:10px;border-radius:12px;text-align:center;font-size:10.5px;font-weight:900;background:#EAF2FF;color:#075DCE;cursor:pointer}.ske-route-modal-actions button.current{background:#FEF2F2;color:#B91C1C}
 .status-jump-flash#skeRouteAlertsSection{animation:ske-route-flash 1.5s ease}@keyframes ske-route-flash{0%,100%{box-shadow:0 10px 26px rgba(28,52,91,.07)}35%{box-shadow:0 0 0 5px rgba(239,68,68,.20),0 12px 30px rgba(239,68,68,.16)}}
 
-/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.60P ══ */
+/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.61P ══ */
 .ske-live-insights{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:0 0 18px}
 .ske-tracking-heading{padding:4px 3px 15px}.ske-tracking-heading h2{margin:0;color:#172033;font-size:20px;font-weight:900}.ske-tracking-heading p{margin:5px 0 0;color:#7B8799;font-size:11px;line-height:1.6}
 #admin>.bottom-nav .nav-btn{flex:1 1 0;min-width:0}
@@ -4005,7 +4037,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.60P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.61P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4013,7 +4045,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.60P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.61P</div>
       </div>
     </div>
 
@@ -4131,7 +4163,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.60P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.61P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4387,7 +4419,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.60P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.61P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4405,12 +4437,6 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <!-- summary panel (default landing) -->
     <div id="adminSummaryPanel">
       <div id="adminSummaryContent"></div>
-    </div>
-
-    <!-- tracking panel: กราฟและเฝ้าระวังแยกจากแผนที่ในภาพรวม -->
-    <div id="adminTrackingPanel" class="hidden">
-      <div class="ske-tracking-heading"><h2>ติดตามรถ</h2><p>จำนวนเที่ยวรายวัน · เฝ้าระวังเส้นทาง</p></div>
-      <div id="adminTrackingContent"></div>
     </div>
 
     <!-- maintenance panel: รายการแจ้งซ่อม (มีสถานะรออนุมัติ/กำลังซ่อม) -->
@@ -4721,10 +4747,6 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <span class="nav-icon" data-ic="overview"></span><span>ภาพรวม</span>
       <span id="navStaleNavBadge" class="nav-bottom-badge hidden">0</span>
     </button>
-    <button class="nav-btn" id="navAdminTracking" onclick="switchAdminTab('tracking')" style="position:relative;">
-      <span class="nav-icon" data-ic="pin"></span><span>ติดตามรถ</span>
-      <span id="navTrackingBadge" class="nav-bottom-badge hidden">0</span>
-    </button>
     <button class="nav-btn" id="navAdminJobPlan" onclick="openJobPlan()" style="position:relative;">
       <span class="nav-icon">📋</span><span>แผนงาน</span>
     </button>
@@ -5033,7 +5055,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.60P';
+const SKE_APP_VERSION='v3.2.61P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5282,7 +5304,7 @@ function saveE(){
   _cacheSet('ske_emp', employees);
   if(window.fbSaveEmployees) window.fbSaveEmployees(employees);
 }
-function saveU(){localStorage.setItem('ske_user',JSON.stringify(currentUser));}
+function saveU(){_cacheSet('ske_user',currentUser);}
 
 // ── ตำแหน่งล่าสุดจากโทรศัพท์พนักงาน ─────────────────────────────────────────
 // เว็บปกติติดตามได้เมื่อหน้าแอปเปิดอยู่ ส่วน SKE Mobile ใช้ native background watcher
@@ -6452,9 +6474,9 @@ function purgeDeletedEmployeeLocalData(empId){
   _cacheSet('ske_emp',employees);
   _cacheSet('ske_repairs',repairs);
   _cacheSet('ske_fluid',fluidLogs);
-  localStorage.setItem('ske_cash',JSON.stringify(cashRequests));
-  localStorage.setItem('ske_leaveLogs',JSON.stringify(leaveLogs));
-  localStorage.setItem('ske_runlogs',JSON.stringify(runLogs));
+  _cacheSet('ske_cash',cashRequests);
+  _cacheSet('ske_leaveLogs',leaveLogs);
+  _cacheSet('ske_runlogs',runLogs);
   _cacheSet('ske_route_tracks',routeTracks);
   _cacheSet('ske_monthly_docs',monthlyDocs);
   _cacheSet('ske_feedbacks',companyFeedbacks);
@@ -6555,11 +6577,11 @@ function _patchFluid(id,patch){
   return Promise.resolve();
 }
 function saveCash(){
-  localStorage.setItem('ske_cash',JSON.stringify(cashRequests));
+  _cacheSet('ske_cash',cashRequests);
   if(window.fbSaveCashRequests) window.fbSaveCashRequests(cashRequests);
 }
 function saveLeaveLogs(){
-  localStorage.setItem('ske_leaveLogs',JSON.stringify(leaveLogs));
+  _cacheSet('ske_leaveLogs',leaveLogs);
   if(window.fbSaveLeaveLogs) window.fbSaveLeaveLogs(leaveLogs);
 }
 function saveMonthlyDocs(){
@@ -6568,7 +6590,7 @@ function saveMonthlyDocs(){
   return Promise.resolve();
 }
 function saveRunLogs(){
-  localStorage.setItem('ske_runlogs',JSON.stringify(runLogs));
+  _cacheSet('ske_runlogs',runLogs);
   if(window.fbSaveRunLogs) window.fbSaveRunLogs(runLogs);
 }
 function saveRouteTracks(){
@@ -7006,8 +7028,7 @@ function applyAdminRoleUI(){
   document.getElementById('adminRefreshBtn')?.classList.toggle('hidden',false);
   // แสดงปุ่ม "ดูประวัติการลา" ในหน้าลาเฉพาะ viewer (ผู้ดูแลมีปุ่มนี้ใน accordion ตั้งค่าอยู่แล้ว)
   document.getElementById('viewerLeaveHistoryBar')?.classList.toggle('hidden',!isViewer);
-  // ข้อมูลติดตามรถเดิมที่ viewer ดูได้ในภาพรวม ย้ายไปแท็บ tracking โดยยังเป็นสิทธิ์อ่านเท่านั้น
-  if(isViewer&&window._currentAdminTab!=='tracking')switchAdminTab('summary');
+  if(isViewer)switchAdminTab('summary');
 }
 
 async function doAdminLogin(){
@@ -10315,45 +10336,9 @@ function _skeLiveFleetCard(dedupedEmployees){
   const freshCount=records.filter(record=>record.gps.key==='fresh').length;
   return `<section class="ske-live-card" aria-label="แผนที่ตำแหน่งรถล่าสุด"><div class="ske-live-card-head"><span class="ske-live-card-icon">${skeIcon('pin')}</span><div class="ske-live-card-copy"><div class="ske-live-card-title">ตำแหน่งรถล่าสุด</div><div class="ske-live-card-sub">ลูกศรบอกทิศทางล่าสุด · แตะหมุดเพื่อดูรถ · ลากหรือซูมแผนที่</div></div><span class="ske-live-card-count">${records.length}/${eligible.length} คัน</span></div><div class="ske-live-filter"><button type="button" class="${_skeLiveFleetFilter==='active'?'active':''}" onclick="setSkeLiveFleetFilter('active')">รถกำลังทำงาน</button><button type="button" class="${_skeLiveFleetFilter==='all'?'active':''}" onclick="setSkeLiveFleetFilter('all')">รถทั้งหมด</button></div>${_skeLiveFleetMap(records)}${chips?`<div class="ske-live-map-list">${chips}</div>`:''}<div class="ske-live-legend"><span><i style="--legend-color:#16A34A"></i>สด ≤10 นาที (${freshCount})</span><span><i style="--legend-color:#F59E0B"></i>10–30 นาที</span><span><i style="--legend-color:#DC2626"></i>เกิน 30 นาที</span><span>สีในหมุด = สถานะรถ</span><span>↑ ลูกศร = ทิศทางล่าสุด</span><span>ลูกศรเทา = GPS เกิน 2 นาที / ไม่ทราบความเร็ว</span></div></section>`;
 }
-function renderTrackingWidgets(){
-  return `<div class="ske-live-insights" id="skeTrackingInsights">${_skeDailyTripChart()}</div>`;
-}
-function updateTrackingBadge(){
-  const badge=document.getElementById('navTrackingBadge');
-  if(!badge)return;
-  const count=_skeRouteMonitorSnapshot().attention;
-  badge.textContent=String(count);
-  badge.classList.toggle('hidden',count===0);
-}
-function renderAdminTracking(){
-  updateTrackingBadge();
-  const panel=document.getElementById('adminTrackingPanel'),admin=document.getElementById('admin');
-  if(!panel||panel.classList.contains('hidden')||!admin||admin.classList.contains('hidden'))return;
-  const content=document.getElementById('adminTrackingContent');
-  if(!content)return;
-  const current=content.querySelector('#skeTrackingInsights');
-  if(current){
-    const chartScroll=current.querySelector('.ske-candle-chart-scroll')?.scrollLeft||0;
-    current.outerHTML=renderTrackingWidgets();
-    const chart=content.querySelector('#skeTrackingInsights .ske-candle-chart-scroll');
-    if(chart)chart.scrollLeft=chartScroll;
-  }else{
-    content.innerHTML=renderTrackingWidgets()+'<div id="adminTrackingRoutes"></div>';
-  }
-  const routes=content.querySelector('#adminTrackingRoutes');
-  if(routes){
-    // Keep expanded history dates stable during GPS refreshes; a new app session still starts folded.
-    const detailKey=el=>el.className+'|'+(el.querySelector('summary > span')?.textContent||'').trim();
-    const openState=new Map(Array.from(routes.querySelectorAll('details'),el=>[detailKey(el),el.open]));
-    routes.innerHTML=renderRouteSummaryButton()+renderRouteMonitoringPanel();
-    routes.querySelectorAll('details').forEach(el=>{const key=detailKey(el);if(openState.has(key))el.open=openState.get(key);});
-  }
-}
 function _skeRefreshLiveInsightsOnly(){
-  // หน้า overview ไม่แสดงแผนที่แล้ว; คงการรีเฟรชกราฟและเฝ้าระวังในแท็บติดตาม
-  renderAdminTracking();
+  // ยกเลิกหน้า "ติดตามรถ" แล้ว ไม่สร้างกราฟ/แผนที่หรือเฝ้าระวังซ้ำระหว่าง sync
 }
-setInterval(()=>{if(document.visibilityState!=='hidden')_skeRefreshLiveInsightsOnly();},60*1000);
 
 function jumpToStatus(statusId){
   const target=document.getElementById('admin-status-'+statusId);
@@ -11508,7 +11493,6 @@ function renderAdmin(){
   renderSysInfo();
   const el=document.getElementById('adminSummaryContent');
   if(el)el.innerHTML=buildSummaryHTML();
-  renderAdminTracking();
   const lc=document.getElementById('adminLeaveContent');
   if(lc)lc.innerHTML=buildLeaveHTML();
   updateAdminMaintBadge();
@@ -11663,12 +11647,13 @@ function openAdminMoreMenu(){
 }
 function closeAdminMoreMenu(){
   document.getElementById('adminMoreModal')?.classList.add('hidden');
-  const activeMain=['navAdminSum','navAdminTracking','navAdminMaint','navAdminCash','navAdminDoc'].some(id=>document.getElementById(id)?.classList.contains('active'));
+  const activeMain=['navAdminSum','navAdminMaint','navAdminCash','navAdminDoc'].some(id=>document.getElementById(id)?.classList.contains('active'));
   if(activeMain)document.getElementById('navAdminMore')?.classList.remove('active');
 }
 
 function switchAdminTab(t){
-  if(adminRole==='viewer'&&t!=='summary'&&t!=='tracking'&&t!=='leave'&&t!=='leaveHistory'&&t!=='jobPlan')t='summary';
+  if(t==='tracking')t='summary'; // รองรับทางลัด/สถานะหน้าค้างจากรุ่นก่อน
+  if(adminRole==='viewer'&&t!=='summary'&&t!=='leave'&&t!=='leaveHistory'&&t!=='jobPlan')t='summary';
   // เก็บตำแหน่ง scroll ของแท็บเดิมไว้ก่อนสลับ เพื่อให้กลับมาที่เดิมได้เวลาสลับกลับมาแท็บนี้อีก
   const prevTab=window._currentAdminTab;
   if(prevTab==='summary'&&t!=='summary'){_skeLiveMapDrag=null;_skeLiveMapClearWheel();}
@@ -11687,7 +11672,6 @@ function switchAdminTab(t){
   if((t==='history'||t==='leaveHistory'||t==='fluidHistory'||t==='cashHistory')&&adminRole!=='viewer'){document.getElementById('adminTabBar')?.classList.add('hidden');}
   else{document.getElementById('adminTabBar')?.classList.remove('hidden');}
   document.getElementById('adminSummaryPanel').classList.toggle('hidden',t!=='summary');
-  document.getElementById('adminTrackingPanel')?.classList.toggle('hidden',t!=='tracking');
   document.getElementById('adminMaintPanel').classList.toggle('hidden',t!=='maint');
   document.getElementById('adminCashPanel').classList.toggle('hidden',t!=='cash');
   document.getElementById('adminLeavePanel').classList.toggle('hidden',t!=='leave');
@@ -11701,9 +11685,8 @@ function switchAdminTab(t){
   document.getElementById('tabCashTop')?.classList.toggle('active',t==='cash'||t==='cashHistory');
   document.getElementById('tabLeaveTop')?.classList.toggle('active',t==='leave');
   document.getElementById('tabSettings')?.classList.toggle('active',t==='settings'||t==='history'||t==='leaveHistory'||t==='fluidHistory');
-  ['navAdminSum','navAdminTracking','navAdminJobPlan','navAdminMaint','navAdminCash','navAdminDoc','navAdminMore'].forEach(id=>{document.getElementById(id)?.classList.remove('active');});
+  ['navAdminSum','navAdminJobPlan','navAdminMaint','navAdminCash','navAdminDoc','navAdminMore'].forEach(id=>{document.getElementById(id)?.classList.remove('active');});
   if(t==='summary')document.getElementById('navAdminSum')?.classList.add('active');
-  if(t==='tracking'){document.getElementById('navAdminTracking')?.classList.add('active');renderAdminTracking();}
   if(t==='jobPlan')document.getElementById('navAdminJobPlan')?.classList.add('active');
   if(t==='maint')document.getElementById('navAdminMaint')?.classList.add('active');
   if(t==='cash'||t==='cashHistory')document.getElementById('navAdminCash')?.classList.add('active');
