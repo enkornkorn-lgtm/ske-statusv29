@@ -722,7 +722,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-  console.log('[SKE TRUCK] app version: v3.2.59P');
+  console.log('[SKE TRUCK] app version: v3.2.60P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -3940,7 +3940,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-route-modal{position:fixed;inset:0;z-index:130000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.70);backdrop-filter:blur(3px)}.ske-route-modal-card{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 26px 80px rgba(0,0,0,.35)}.ske-route-modal-head{display:flex;align-items:flex-start;gap:10px;padding:16px 17px;border-bottom:1px solid #E2E8F0}.ske-route-modal-title{flex:1;font-size:15px;font-weight:950;color:#172033}.ske-route-modal-sub{font-size:10px;color:#64748B;margin-top:3px}.ske-route-modal-close{width:34px;height:34px;border:0;border-radius:11px;background:#F1F5F9;color:#475569;font-size:18px;cursor:pointer}.ske-route-map-canvas{position:relative;margin:14px;border-radius:16px;overflow:hidden;background:linear-gradient(145deg,#F8FAFC,#EAF2FF);border:1px solid #D7E2F0}.ske-route-map-canvas svg{display:block;width:100%;height:auto}.ske-route-map-tiles{position:relative;width:100%;aspect-ratio:68/36;background:#E8EEF5;overflow:hidden}.ske-route-map-tiles img{position:absolute;max-width:none}.ske-route-map-tiles svg{position:absolute;inset:0;width:100%;height:100%;z-index:3}.ske-route-osm-credit{position:absolute;right:4px;bottom:3px;z-index:4;padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.88);font-size:7px;color:#334155;text-decoration:none}.ske-route-map-legend{display:flex;flex-wrap:wrap;gap:8px;padding:0 15px 12px;font-size:10px;color:#475569}.ske-route-map-legend span{display:flex;align-items:center;gap:5px}.ske-route-legend-line{width:22px;height:4px;border-radius:4px;background:#2563EB}.ske-route-legend-dot{width:10px;height:10px;border-radius:50%;background:#DC2626}.ske-route-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 15px}.ske-route-modal-actions button{border:0;padding:10px;border-radius:12px;text-align:center;font-size:10.5px;font-weight:900;background:#EAF2FF;color:#075DCE;cursor:pointer}.ske-route-modal-actions button.current{background:#FEF2F2;color:#B91C1C}
 .status-jump-flash#skeRouteAlertsSection{animation:ske-route-flash 1.5s ease}@keyframes ske-route-flash{0%,100%{box-shadow:0 10px 26px rgba(28,52,91,.07)}35%{box-shadow:0 0 0 5px rgba(239,68,68,.20),0 12px 30px rgba(239,68,68,.16)}}
 
-/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.59P ══ */
+/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.60P ══ */
 .ske-live-insights{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:0 0 18px}
 .ske-tracking-heading{padding:4px 3px 15px}.ske-tracking-heading h2{margin:0;color:#172033;font-size:20px;font-weight:900}.ske-tracking-heading p{margin:5px 0 0;color:#7B8799;font-size:11px;line-height:1.6}
 #admin>.bottom-nav .nav-btn{flex:1 1 0;min-width:0}
@@ -4005,7 +4005,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.59P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.60P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4013,7 +4013,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.59P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.60P</div>
       </div>
     </div>
 
@@ -4131,7 +4131,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.59P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.60P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4387,7 +4387,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.59P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.60P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5033,7 +5033,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.59P';
+const SKE_APP_VERSION='v3.2.60P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -10315,9 +10315,6 @@ function _skeLiveFleetCard(dedupedEmployees){
   const freshCount=records.filter(record=>record.gps.key==='fresh').length;
   return `<section class="ske-live-card" aria-label="แผนที่ตำแหน่งรถล่าสุด"><div class="ske-live-card-head"><span class="ske-live-card-icon">${skeIcon('pin')}</span><div class="ske-live-card-copy"><div class="ske-live-card-title">ตำแหน่งรถล่าสุด</div><div class="ske-live-card-sub">ลูกศรบอกทิศทางล่าสุด · แตะหมุดเพื่อดูรถ · ลากหรือซูมแผนที่</div></div><span class="ske-live-card-count">${records.length}/${eligible.length} คัน</span></div><div class="ske-live-filter"><button type="button" class="${_skeLiveFleetFilter==='active'?'active':''}" onclick="setSkeLiveFleetFilter('active')">รถกำลังทำงาน</button><button type="button" class="${_skeLiveFleetFilter==='all'?'active':''}" onclick="setSkeLiveFleetFilter('all')">รถทั้งหมด</button></div>${_skeLiveFleetMap(records)}${chips?`<div class="ske-live-map-list">${chips}</div>`:''}<div class="ske-live-legend"><span><i style="--legend-color:#16A34A"></i>สด ≤10 นาที (${freshCount})</span><span><i style="--legend-color:#F59E0B"></i>10–30 นาที</span><span><i style="--legend-color:#DC2626"></i>เกิน 30 นาที</span><span>สีในหมุด = สถานะรถ</span><span>↑ ลูกศร = ทิศทางล่าสุด</span><span>ลูกศรเทา = GPS เกิน 2 นาที / ไม่ทราบความเร็ว</span></div></section>`;
 }
-function renderFleetDashboardWidgets(dedupedEmployees){
-  return `<div class="ske-live-insights" id="skeLiveInsights">${_skeLiveFleetCard(dedupedEmployees)}</div>`;
-}
 function renderTrackingWidgets(){
   return `<div class="ske-live-insights" id="skeTrackingInsights">${_skeDailyTripChart()}</div>`;
 }
@@ -10353,14 +10350,7 @@ function renderAdminTracking(){
   }
 }
 function _skeRefreshLiveInsightsOnly(){
-  const panel=document.getElementById('adminSummaryPanel'),admin=document.getElementById('admin');
-  if(panel&&!panel.classList.contains('hidden')&&admin&&!admin.classList.contains('hidden')){
-    if(!_skeLiveMapDrag?.canvas?.isConnected){
-      _skeLiveMapDrag=null;
-      const current=panel.querySelector('#skeLiveInsights');
-      if(current)current.outerHTML=renderFleetDashboardWidgets(_dedupByPlate(employees||[]));
-    }
-  }
+  // หน้า overview ไม่แสดงแผนที่แล้ว; คงการรีเฟรชกราฟและเฝ้าระวังในแท็บติดตาม
   renderAdminTracking();
 }
 setInterval(()=>{if(document.visibilityState!=='hidden')_skeRefreshLiveInsightsOnly();},60*1000);
@@ -10425,7 +10415,6 @@ function buildSummaryHTML(){
       </div>
     </div>
   </div>
-  ${renderFleetDashboardWidgets(dedupedEmployees)}
   <div class="ske-primary-actions" aria-label="ปุ่มลัดสถานะหลัก">
     ${primaryActions.map(st=>`
       <button type="button" class="ske-primary-action" style="--status-color:${st.color};--status-bg:${st.bg};--status-border:${st.border};" onclick="jumpToStatus('${st.id}')" aria-label="ไปยังสถานะ ${esc(st.label)}">
