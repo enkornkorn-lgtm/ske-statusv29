@@ -755,7 +755,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.62P');
+console.log('[SKE TRUCK] app version: v3.2.63P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1523,6 +1523,64 @@ console.log('[SKE TRUCK] app version: v3.2.62P');
   };
   window.fbDeleteCashRequest = requestId => _deleteRecord('cashRequests', 'cashRequests', requestId);
 
+  // Opening a cash request round is separate from approving/paying any request.
+  window.fbLoadCashOpeningDates = async function() {
+    try {
+      if (window._fbConnected !== true || navigator.onLine === false) throw new Error('กรุณาเชื่อมต่ออินเทอร์เน็ตเพื่อตรวจวันเปิดรอบ');
+      const snapshot = await _withTimeout(get(ref(db, 'cashOpeningDates')), SKE_WRITE_TIMEOUT_MS, 'โหลดวันเปิดรอบไม่สำเร็จ กรุณาลองใหม่');
+      _applyCashOpeningDates(snapshot.val());
+      return cashOpeningDates;
+    } catch (error) {
+      cashOpeningReady = false;
+      cashOpeningError = 'ยังตรวจวันเปิดรอบจากส่วนกลางไม่ได้';
+      refreshCashViews();
+      throw error;
+    }
+  };
+  window.fbSetCashOpeningDate = async function(dateKey, approved) {
+    if (!adminMode || adminRole !== 'super') throw new Error('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้นที่อนุมัติวันเปิดรอบได้');
+    if (!_cashValidDateKey(dateKey) || dateKey < _cashDateKey()) throw new Error('กรุณาเลือกวันนี้หรือวันข้างหน้า');
+    if (typeof approved !== 'boolean') throw new Error('คำสั่งอนุมัติไม่ถูกต้อง');
+    if (window._fbConnected !== true || navigator.onLine === false) throw new Error('กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนอนุมัติ');
+    const now = new Date().toISOString();
+    const status = approved ? 'approved' : 'revoked';
+    const target = ref(db, 'cashOpeningDates/' + dateKey);
+    const tx = await _withTimeout(runTransaction(target, current => ({
+      ...(current && typeof current === 'object' ? current : {}),
+      date:dateKey, status, updatedAt:now, updatedByRole:'super',
+      ...(approved ? {approvedAt:now, revokedAt:null} : {revokedAt:now})
+    }), {applyLocally:false}), SKE_WRITE_TIMEOUT_MS, 'บันทึกวันเปิดรอบไม่สำเร็จ');
+    if (!tx.committed) throw new Error('ยังบันทึกวันเปิดรอบไม่สำเร็จ');
+    const verified = await _withTimeout(get(target), SKE_WRITE_TIMEOUT_MS, 'ยังตรวจยืนยันวันเปิดรอบไม่ได้');
+    const row = verified.val();
+    if (!row || row.status !== status || row.updatedAt !== now) throw new Error('วันเปิดรอบมีการเปลี่ยนแปลง กรุณาโหลดใหม่ก่อนทำรายการ');
+    _applyCashOpeningDates({...cashOpeningDates, [dateKey]:row});
+    return row;
+  };
+  window.fbSubmitGeneralCashRequest = async function(request) {
+    if (!currentUser || String(request.empId) !== String(currentUser.id) || _isEmployeeDeleted(request.empId)) throw new Error('กรุณาเข้าสู่บัญชีพนักงานของคุณอีกครั้ง');
+    if (!Number.isFinite(request.amount) || request.amount <= 0 || !String(request.reason || '').trim()) throw new Error('กรุณากรอกจำนวนเงินและเหตุผลให้ครบ');
+    const dates = await window.fbLoadCashOpeningDates();
+    if (!currentUser || String(request.empId) !== String(currentUser.id) || _isEmployeeDeleted(request.empId)) throw new Error('บัญชีเปลี่ยนระหว่างส่งคำขอ กรุณาลองใหม่');
+    const today = _cashDateKey();
+    const approval = _cashApprovedOpening(dates, today);
+    if (!approval) throw new Error('วันนี้ยังไม่เปิดรับคำขอเบิกเงิน กรุณารอวันที่ผู้ดูแลอนุมัติ');
+    const row = {...request, status:'pending', requestType:'general', openingDate:today, openingApprovedAt:approval.approvedAt};
+    // Do not queue a new cash request for later: the approved date may have ended.
+    const target = ref(db, 'cashRequests/' + _safeRecordKey(row.id));
+    const tx = await _withTimeout(runTransaction(target, current => {
+      if (current) return current.id === row.id && current.empId === row.empId ? current : undefined;
+      if (_cashDateKey() !== today) return;
+      return row;
+    }, {applyLocally:false}), SKE_WRITE_TIMEOUT_MS, 'ยังยืนยันการส่งคำขอไม่ได้ กรุณาตรวจรายการหรือลองส่งซ้ำ');
+    if (!tx.committed) throw new Error('รอบเบิกเงินเปลี่ยนแล้ว กรุณาตรวจวันที่และลองใหม่');
+    const saved = tx.snapshot.val();
+    const shadow = _recordShadows.cashRequests || new Map();
+    shadow.set(String(saved.id), _cloneRecord(saved));
+    _recordShadows.cashRequests = shadow;
+    return saved;
+  };
+
   // บันทึกเฉพาะประวัติการลาที่เปลี่ยน
   window.fbSaveLeaveLogs = function(list) {
     return _saveRecordList('leaveLogs', 'leaveLogs', list, row => row && !_isEmployeeDeleted(row.empId))
@@ -1733,6 +1791,15 @@ console.log('[SKE TRUCK] app version: v3.2.62P');
       window.fbSaveFluidLogs(fluidLogs).catch(() => {});
     }
     _firstSync.fluidLogs = true;
+  });
+
+  onValue(ref(db, 'cashOpeningDates'), snapshot => {
+    _applyCashOpeningDates(snapshot.val());
+  }, error => {
+    cashOpeningReady = false;
+    cashOpeningError = 'โหลดวันเปิดรอบไม่สำเร็จ กรุณาตรวจการเชื่อมต่อ';
+    console.warn('cash opening dates', error);
+    refreshCashViews();
   });
 
   // ฟัง realtime — รายการเบิกเงินพนักงาน
@@ -4006,7 +4073,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-route-modal{position:fixed;inset:0;z-index:130000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.70);backdrop-filter:blur(3px)}.ske-route-modal-card{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 26px 80px rgba(0,0,0,.35)}.ske-route-modal-head{display:flex;align-items:flex-start;gap:10px;padding:16px 17px;border-bottom:1px solid #E2E8F0}.ske-route-modal-title{flex:1;font-size:15px;font-weight:950;color:#172033}.ske-route-modal-sub{font-size:10px;color:#64748B;margin-top:3px}.ske-route-modal-close{width:34px;height:34px;border:0;border-radius:11px;background:#F1F5F9;color:#475569;font-size:18px;cursor:pointer}.ske-route-map-canvas{position:relative;margin:14px;border-radius:16px;overflow:hidden;background:linear-gradient(145deg,#F8FAFC,#EAF2FF);border:1px solid #D7E2F0}.ske-route-map-canvas svg{display:block;width:100%;height:auto}.ske-route-map-tiles{position:relative;width:100%;aspect-ratio:68/36;background:#E8EEF5;overflow:hidden}.ske-route-map-tiles img{position:absolute;max-width:none}.ske-route-map-tiles svg{position:absolute;inset:0;width:100%;height:100%;z-index:3}.ske-route-osm-credit{position:absolute;right:4px;bottom:3px;z-index:4;padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.88);font-size:7px;color:#334155;text-decoration:none}.ske-route-map-legend{display:flex;flex-wrap:wrap;gap:8px;padding:0 15px 12px;font-size:10px;color:#475569}.ske-route-map-legend span{display:flex;align-items:center;gap:5px}.ske-route-legend-line{width:22px;height:4px;border-radius:4px;background:#2563EB}.ske-route-legend-dot{width:10px;height:10px;border-radius:50%;background:#DC2626}.ske-route-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 15px}.ske-route-modal-actions button{border:0;padding:10px;border-radius:12px;text-align:center;font-size:10.5px;font-weight:900;background:#EAF2FF;color:#075DCE;cursor:pointer}.ske-route-modal-actions button.current{background:#FEF2F2;color:#B91C1C}
 .status-jump-flash#skeRouteAlertsSection{animation:ske-route-flash 1.5s ease}@keyframes ske-route-flash{0%,100%{box-shadow:0 10px 26px rgba(28,52,91,.07)}35%{box-shadow:0 0 0 5px rgba(239,68,68,.20),0 12px 30px rgba(239,68,68,.16)}}
 
-/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.62P ══ */
+/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.63P ══ */
 .ske-live-insights{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:0 0 18px}
 .ske-tracking-heading{padding:4px 3px 15px}.ske-tracking-heading h2{margin:0;color:#172033;font-size:20px;font-weight:900}.ske-tracking-heading p{margin:5px 0 0;color:#7B8799;font-size:11px;line-height:1.6}
 #admin>.bottom-nav .nav-btn{flex:1 1 0;min-width:0}
@@ -4071,7 +4138,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.62P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.63P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4079,7 +4146,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.62P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.63P</div>
       </div>
     </div>
 
@@ -4197,7 +4264,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.61P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.63P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4381,7 +4448,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   </div>
 </div>
 
-<!-- ══ CASH MODAL — เบิกเงินพนักงาน (เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน) ══ -->
+<!-- ══ CASH MODAL — เบิกเงินพนักงานตามวันที่ผู้ดูแลอนุมัติ ══ -->
 <div id="cashModal" class="hidden" style="position:fixed;inset:0;z-index:9998;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.5);">
   <div class="maint-sheet">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
@@ -4390,10 +4457,10 @@ select.inp option{background:#fff;color:#1a1a2e;}
     </div>
     <div id="cashDayNotice"></div>
 
-    <!-- เบิกค่าทางด่วน — แยกจากเบิกเงินทั่วไป เบิกได้ทุกเมื่อ ไม่ล็อกวันที่ 15 -->
+    <!-- เบิกค่าทางด่วน — ไม่ผูกกับวันที่อนุมัติเปิดรอบเงินเบิกทั่วไป -->
     <div class="card" style="margin-bottom:14px;display:flex;flex-direction:column;gap:10px;background:#F0F9FF;border-color:#7DD3FC;">
       <div style="font-weight:800;font-size:14px;color:#0369A1;">🛣️ เบิกค่าทางด่วน</div>
-      <div style="background:#ECFEFF;border:1px solid #A5F3FC;border-radius:8px;padding:8px 11px;font-size:11.5px;color:#155E75;">✅ เบิกได้ทุกเมื่อ ไม่ต้องรอวันที่ 15</div>
+      <div style="background:#ECFEFF;border:1px solid #A5F3FC;border-radius:8px;padding:8px 11px;font-size:11.5px;color:#155E75;">✅ ค่าทางด่วนเบิกได้ทุกวัน ไม่ต้องรอรอบเงินเบิกทั่วไป</div>
       <div><div class="inp-label">จำนวนเงิน (บาท) *</div><input class="inp" id="tollAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="เช่น 150"></div>
       <div><div class="inp-label">เส้นทาง/รายละเอียด (ไม่บังคับ)</div><input class="inp" id="tollReason" placeholder="เช่น ด่านบางปะอิน"></div>
       <div>
@@ -4409,7 +4476,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <div id="cashForm" class="hidden card" style="margin-top:12px;display:flex;flex-direction:column;gap:11px;">
       <div><div class="inp-label">จำนวนเงินที่ต้องการเบิก (บาท) *</div><input class="inp" id="cashAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="เช่น 1500"></div>
       <div><div class="inp-label">รายละเอียด / เหตุผลที่เบิก *</div><textarea class="inp" id="cashReason" rows="3" placeholder="เช่น ค่าน้ำมัน, ค่าทางด่วน, ค่าซ่อมเร่งด่วน..."></textarea></div>
-      <button class="btn btn-blue btn-full" onclick="doAddCash()">✓ ส่งคำขอเบิกเงิน</button>
+      <button id="cashSubmitBtn" class="btn btn-blue btn-full" onclick="doAddCash()">✓ ส่งคำขอเบิกเงิน</button>
     </div>
     <div style="margin-top:16px;" id="cashList"></div>
   </div>
@@ -4453,7 +4520,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.62P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.63P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4483,8 +4550,19 @@ select.inp option{background:#fff;color:#1a1a2e;}
       </div>
     </div>
 
-    <!-- cash requisition panel: รายการเบิกเงินพนักงานทุกคน (เปิดให้กรอกเฉพาะวันที่ 15) -->
+    <!-- cash requisition panel: ผู้ดูแลอนุมัติวันที่เปิดรับคำขอ -->
     <div id="adminCashPanel" class="hidden">
+      <section id="cashOpeningAdmin" class="card" style="padding:16px;margin-bottom:14px;border:1.5px solid #BAE6FD;border-radius:16px;">
+        <h3 style="font-size:16px;color:#075985;margin:0 0 6px;">📅 อนุมัติวันเปิดรอบเงินเบิก</h3>
+        <p style="font-size:12px;color:#64748B;line-height:1.6;margin:0 0 12px;">เลือกวัน/เดือน/ปี แล้วกดอนุมัติ พนักงานกรอกได้เฉพาะวันนั้น เวลา 00:00–23:59 น. ตามเวลาไทย<br>เป็นการเปิดให้ยื่นคำขอเท่านั้น ไม่ใช่อนุมัติจ่ายเงิน และไม่กระทบค่าทางด่วน</p>
+        <div id="cashOpeningStatus" role="status" style="font-size:12px;line-height:1.6;margin-bottom:10px;"></div>
+        <div id="cashOpeningControls" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+          <label style="flex:1;min-width:170px;font-size:12px;color:#475569;">วันที่เปิดรับคำขอ<input id="cashOpeningDate" type="date" class="inp" style="margin-top:5px;width:100%;box-sizing:border-box;"></label>
+          <button id="cashOpeningApproveBtn" type="button" class="btn btn-blue" onclick="approveCashOpeningDate()">✓ อนุมัติเปิดวันที่เลือก</button>
+        </div>
+        <button type="button" class="btn btn-gray btn-sm" style="margin-top:10px;" onclick="reloadCashOpeningDates()">↻ โหลดวันเปิดรอบล่าสุด</button>
+        <div id="cashOpeningDatesList" style="margin-top:12px;"></div>
+      </section>
       <button class="btn btn-full" style="background:#F5F3FF;color:#7B2FBE;border:1.5px solid #D8B4FE;font-weight:700;margin-bottom:12px;" onclick="switchAdminTab('cashHistory')">📜 ดูประวัติการเบิกเงิน (จ่ายแล้ว)</button>
       <button class="btn btn-full" style="background:#FEF2F2;color:#DC2626;border:1.5px solid #FECACA;font-weight:700;margin-bottom:12px;font-size:12.5px;" onclick="doDeleteAllCashPhotos()">🗑️ ลบรูปบิลทั้งหมดที่แนบไว้ (ตรวจสอบแล้ว)</button>
       <div id="adminCashStats"></div>
@@ -5124,7 +5202,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.62P';
+const SKE_APP_VERSION='v3.2.63P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -8301,14 +8379,98 @@ function refreshFluidViews(){
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// ── เบิกเงินพนักงาน (Cash requisition) — เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน ──
+// ── เงินเบิกทั่วไป — วันที่เปิดรอบต้องได้รับอนุมัติเป็นครั้ง ๆ จากผู้ดูแล ──
 // ══════════════════════════════════════════════════════════════════════════
-function isCashDayOpen(){return new Date().getDate()===15;}
-function nextCashDateLabel(){
-  const now=new Date();
-  let y=now.getFullYear(),m=now.getMonth();
-  if(now.getDate()>=15){m+=1;if(m>11){m=0;y+=1;}}
-  return new Date(y,m,15).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
+let cashOpeningDates={},cashOpeningReady=false,cashOpeningError='';
+let _cashApprovalBusy=false,_cashSubmitting=false,_cashDraftRequest=null;
+function _cashDateKey(now=new Date()){
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(now));
+  const part=name=>parts.find(p=>p.type===name).value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+function _cashValidDateKey(value){
+  if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
+  const date=new Date(value+'T00:00:00Z');
+  return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value;
+}
+function _cashNormalizeOpeningDates(value){
+  const dates={};
+  if(!value||typeof value!=='object'||Array.isArray(value))return dates;
+  Object.entries(value).forEach(([key,row])=>{
+    if(_cashValidDateKey(key)&&row&&row.date===key&&['approved','revoked'].includes(row.status))dates[key]={...row};
+  });
+  return dates;
+}
+function _cashApprovedOpening(dates,key){
+  const row=dates?.[key];
+  return _cashValidDateKey(key)&&row?.date===key&&row.status==='approved'&&Number.isFinite(Date.parse(row.approvedAt||''))?row:null;
+}
+function _cashDateLabel(key){
+  return _cashValidDateKey(key)?new Date(key+'T12:00:00+07:00').toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'long',year:'numeric'}):'';
+}
+function _applyCashOpeningDates(value){
+  cashOpeningDates=_cashNormalizeOpeningDates(value);
+  cashOpeningReady=true;cashOpeningError='';
+  // Do not cache permission to open a round: always read it from the central data.
+  if(typeof refreshCashViews==='function')refreshCashViews();
+}
+function isCashDayOpen(now=new Date()){
+  return cashOpeningReady&&!!_cashApprovedOpening(cashOpeningDates,_cashDateKey(now));
+}
+function nextCashDateLabel(now=new Date()){
+  if(!cashOpeningReady)return 'กำลังตรวจวันเปิดรอบ';
+  const today=_cashDateKey(now);
+  const next=Object.keys(cashOpeningDates).filter(key=>key>=today&&_cashApprovedOpening(cashOpeningDates,key)).sort()[0];
+  return next?_cashDateLabel(next):'ยังไม่มีวันที่ได้รับอนุมัติ';
+}
+function cashOpeningNoticeText(){
+  if(!cashOpeningReady)return cashOpeningError||'กำลังตรวจวันเปิดรอบจากส่วนกลาง…';
+  return isCashDayOpen()?'วันนี้ผู้ดูแลอนุมัติให้กรอกเงินเบิก ถึง 23:59 น. (เวลาไทย)':'วันนี้ยังไม่เปิดให้กรอกเงินเบิก · รอบถัดไป: '+nextCashDateLabel();
+}
+function renderCashOpeningAdmin(){
+  const box=document.getElementById('cashOpeningAdmin');
+  if(!box)return;
+  const allowed=adminMode&&adminRole==='super';
+  box.classList.toggle('hidden',!allowed);
+  if(!allowed)return;
+  const input=document.getElementById('cashOpeningDate');
+  if(input){input.min=_cashDateKey();input.disabled=_cashApprovalBusy;}
+  const button=document.getElementById('cashOpeningApproveBtn');
+  if(button){button.disabled=!cashOpeningReady||_cashApprovalBusy;button.textContent=_cashApprovalBusy?'กำลังบันทึกและยืนยัน…':'✓ อนุมัติเปิดวันที่เลือก';}
+  document.getElementById('cashOpeningStatus').textContent=cashOpeningNoticeText();
+  const today=_cashDateKey();
+  const all=Object.entries(cashOpeningDates).sort(([a],[b])=>a.localeCompare(b));
+  const active=all.filter(([key])=>key>=today&&_cashApprovedOpening(cashOpeningDates,key));
+  const past=all.filter(([key,row])=>key<today||row.status==='revoked').reverse();
+  document.getElementById('cashOpeningDatesList').innerHTML=(active.length?active.map(([key])=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;margin-top:6px;"><div style="color:#065F46;font-size:13px;"><b>${esc(_cashDateLabel(key))}</b><br><span style="font-size:11px;">${key===today?'เปิดให้กรอกวันนี้':'อนุมัติแล้ว · เปิดอัตโนมัติเมื่อถึงวันที่เลือก'}</span></div><button type="button" class="btn btn-gray btn-sm" ${_cashApprovalBusy?'disabled':''} onclick="revokeCashOpeningDate('${key}')">ยกเลิกเปิดรอบ</button></div>`).join(''):'<div style="font-size:12px;color:#64748B;padding:10px 0;">ยังไม่มีรอบที่อนุมัติสำหรับวันนี้หรือวันข้างหน้า</div>')+
+    (past.length?`<details style="font-size:12px;color:#64748B;margin-top:10px;"><summary>ประวัติรอบที่ผ่านมา / ยกเลิก (${past.length} วัน)</summary>${past.slice(0,12).map(([key,row])=>`<div style="padding:6px 0;">${esc(_cashDateLabel(key))} · ${row.status==='revoked'?'ยกเลิกแล้ว':'สิ้นสุดรอบแล้ว'}</div>`).join('')}${past.length>12?'<div>แสดง 12 วันล่าสุด ประวัติทั้งหมดเก็บอยู่ส่วนกลาง</div>':''}</details>`:'');
+}
+async function reloadCashOpeningDates(){
+  try{
+    if(!window.fbLoadCashOpeningDates)throw new Error('ระบบส่วนกลางยังไม่พร้อม กรุณารอสักครู่');
+    await window.fbLoadCashOpeningDates();
+  }catch(error){alert('⚠️ '+error.message);}
+}
+async function approveCashOpeningDate(){
+  const date=document.getElementById('cashOpeningDate')?.value||'';
+  if(!_cashValidDateKey(date)||date<_cashDateKey()){alert('กรุณาเลือกวันนี้หรือวันข้างหน้าก่อนอนุมัติ');return;}
+  if(!confirm('อนุมัติให้พนักงานกรอกเงินเบิกวันที่ '+_cashDateLabel(date)+' ใช่ไหม?\nเปิดเฉพาะวันดังกล่าวตามเวลาไทย และยังไม่ใช่การอนุมัติจ่ายเงิน'))return;
+  await _saveCashOpeningApproval(date,true);
+}
+async function revokeCashOpeningDate(date){
+  if(!confirm('ยกเลิกเปิดรับคำขอวันที่ '+_cashDateLabel(date)+' ใช่ไหม?\nคำขอที่ส่งไว้แล้วจะยังอยู่ครบ'))return;
+  await _saveCashOpeningApproval(date,false);
+}
+async function _saveCashOpeningApproval(date,approved){
+  if(!adminMode||adminRole!=='super'){alert('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้น');return;}
+  if(_cashApprovalBusy)return;
+  _cashApprovalBusy=true;renderCashOpeningAdmin();
+  try{
+    if(!window.fbSetCashOpeningDate)throw new Error('ระบบส่วนกลางยังไม่พร้อม');
+    await window.fbSetCashOpeningDate(date,approved);
+    alert(approved?'✅ อนุมัติวันเปิดรอบแล้ว และตรวจยืนยันจากส่วนกลางแล้ว':'✅ ยกเลิกเปิดรอบแล้ว คำขอเดิมยังอยู่ครบ');
+  }catch(error){alert('❌ ยังยืนยันการบันทึกไม่ได้: '+error.message+'\nกรุณากดโหลดวันเปิดรอบล่าสุดเพื่อตรวจสอบ');}
+  finally{_cashApprovalBusy=false;refreshCashViews();}
 }
 // ── แจ้งลาพนักงาน — กรอกคำขอได้ทุกเมื่อ แต่วันที่ลาต้องอยู่ในช่วง 16-25 ของเดือนเท่านั้น (ตรวจใน doRequestLeave/_isLeaveDayAllowed) ──
 function fmtBaht(n){const num=Number(n)||0;return num.toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:2});}
@@ -8346,11 +8508,11 @@ function renderCashDayNotice(){
   const btn=document.getElementById('cashFormToggleBtn');
   if(!el)return;
   if(isCashDayOpen()){
-    el.innerHTML=`<div style="background:#ECFDF5;border:1.5px solid #6EE7B7;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#065F46;">✅ วันนี้เปิดให้กรอกคำขอเบิกเงิน</div>`;
-    if(btn){btn.style.opacity='1';btn.style.pointerEvents='auto';}
+    el.innerHTML=`<div style="background:#ECFDF5;border:1.5px solid #6EE7B7;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#065F46;">✅ ${esc(cashOpeningNoticeText())}</div>`;
+    if(btn){btn.disabled=false;btn.style.opacity='1';btn.style.pointerEvents='auto';}
   }else{
-    el.innerHTML=`<div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400E;">🔒 เปิดให้กรอกคำขอเบิกเงินเฉพาะวันที่ 15 ของทุกเดือนเท่านั้น<br>รอบถัดไป: <b>${nextCashDateLabel()}</b></div>`;
-    if(btn){btn.style.opacity='.5';btn.style.pointerEvents='none';}
+    el.innerHTML=`<div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400E;">🔒 ${esc(cashOpeningNoticeText())}</div>`;
+    if(btn){btn.disabled=true;btn.textContent='+ เบิกเงินใหม่';btn.style.opacity='.5';btn.style.pointerEvents='none';}
     document.getElementById('cashForm').classList.add('hidden');
   }
 }
@@ -8360,24 +8522,38 @@ function toggleCashForm(){
   const open=f.classList.toggle('hidden');
   document.getElementById('cashFormToggleBtn').textContent=open?'+ เบิกเงินใหม่':'✕ ยกเลิก';
 }
-function doAddCash(){
-  if(!currentUser||!isCashDayOpen())return;
+async function doAddCash(){
+  if(!currentUser||_cashSubmitting)return;
+  if(denySharedTruckRestrictedAccess())return;
   const amount=parseFloat(document.getElementById('cashAmount').value);
   const reason=document.getElementById('cashReason').value.trim();
-  if(!amount||amount<=0){document.getElementById('cashAmount').focus();return;}
+  if(!Number.isFinite(amount)||amount<=0){document.getElementById('cashAmount').focus();return;}
   if(!reason){document.getElementById('cashReason').focus();return;}
   const me=employees.find(e=>e.id===currentUser.id)||currentUser;
-  cashRequests.unshift({
-    id:'cash_'+Date.now(),
+  const sameDraft=_cashDraftRequest&&_cashDraftRequest.empId===me.id&&_cashDraftRequest.amount===amount&&_cashDraftRequest.reason===reason;
+  if(!sameDraft)_cashDraftRequest={
+    id:'cash_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
     empId:me.id,empName:me.name,plate:me.plate||'',
     amount,reason,status:'pending',requestType:'general',
     createdAt:new Date().toISOString()
-  });
-  saveCash();
-  document.getElementById('cashAmount').value='';
-  document.getElementById('cashReason').value='';
-  toggleCashForm();
-  refreshCashViews();
+  };
+  _cashSubmitting=true;
+  const submit=document.getElementById('cashSubmitBtn');
+  if(submit){submit.disabled=true;submit.textContent='กำลังตรวจวันเปิดรอบและส่งคำขอ…';}
+  try{
+    if(!window.fbSubmitGeneralCashRequest)throw new Error('ระบบส่วนกลางยังไม่พร้อม');
+    const saved=await window.fbSubmitGeneralCashRequest(_cashDraftRequest);
+    cashRequests=[saved,...cashRequests.filter(row=>row.id!==saved.id)];
+    _cacheSet('ske_cash',cashRequests);
+    _cashDraftRequest=null;
+    document.getElementById('cashAmount').value='';
+    document.getElementById('cashReason').value='';
+    document.getElementById('cashForm').classList.add('hidden');
+    document.getElementById('cashFormToggleBtn').textContent='+ เบิกเงินใหม่';
+    refreshCashViews();
+    alert('✅ ส่งคำขอเบิกเงินแล้ว รอผู้ดูแลพิจารณา');
+  }catch(error){alert('⚠️ '+error.message);}
+  finally{_cashSubmitting=false;if(submit){submit.disabled=false;submit.textContent='✓ ส่งคำขอเบิกเงิน';}}
 }
 // เก็บรูปบิลค่าทางด่วนที่เลือกไว้ชั่วคราว (ยังไม่อัพโหลดจนกว่าจะกดส่งจริง กันอัพรูปทิ้งเปล่าถ้าไม่ได้ส่งคำขอ) — แนบได้หลายรูป สูงสุด 5
 let _tollNewPhotos=[];
@@ -8411,7 +8587,7 @@ function renderNewTollPhotos(){
     <button type="button" onclick="delNewTollPhoto(${i})" style="position:absolute;top:-6px;right:-6px;background:#EF4444;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:13px;line-height:1;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3);">✕</button>
   </div>`).join('');
 }
-// เบิกค่าทางด่วน — แยกประเภทจากเบิกเงินทั่วไป เบิกได้ทุกเมื่อ ไม่ผูกกับวันที่ 15 แต่บังคับต้องแนบรูปบิลอย่างน้อย 1 รูปก่อนถึงจะส่งได้
+// เบิกค่าทางด่วน — เบิกได้ทุกวัน ไม่ผูกกับรอบเงินเบิกทั่วไป แต่ต้องแนบรูปบิลอย่างน้อย 1 รูป
 async function doAddTollCash(){
   if(!currentUser)return;
   const amount=parseFloat(document.getElementById('tollAmount').value);
@@ -8485,6 +8661,7 @@ function toggleCashStatus(id){
 }
 // รีเฟรชทุกหน้าที่อาจกำลังแสดงรายการเบิกเงินอยู่ (หน้าพนักงาน + แผงผู้ดูแล)
 function refreshCashViews(){
+  renderCashOpeningAdmin();
   const empModal=document.getElementById('cashModal');
   if(empModal && !empModal.classList.contains('hidden')){renderCashDayNotice();renderCashList();}
   else updateMaintBadges();
@@ -8492,6 +8669,13 @@ function refreshCashViews(){
   if(adminPanel && !adminPanel.classList.contains('hidden'))renderAdminCashList();
   else updateAdminCashBadge();
 }
+let _cashLastCalendarDay=_cashDateKey();
+function _refreshCashCalendar(){
+  const today=_cashDateKey();
+  if(today!==_cashLastCalendarDay){_cashLastCalendarDay=today;refreshCashViews();}
+}
+setInterval(_refreshCashCalendar,30000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')_refreshCashCalendar();});
 
 // ── อัพเดทตัวเลขสรุปบนการ์ดลัด แจ้งซ่อม/เปลี่ยนถ่าย/เบิกเงิน ในหน้าหลัก ────────
 function updateMaintBadges(){
@@ -8983,6 +9167,7 @@ async function doDeleteAllCashPhotos(){
   alert(`✅ ลบรูปบิล ${photoIds.length} รูปเรียบร้อยแล้ว`);
 }
 function renderAdminCashList(){
+  renderCashOpeningAdmin();
   const statsEl=document.getElementById('adminCashStats');
   const groupsEl=document.getElementById('adminCashGroups');
   if(!statsEl||!groupsEl)return;
@@ -8991,7 +9176,7 @@ function renderAdminCashList(){
   const totalPendingAmount=pendingItems.reduce((sum,s)=>sum+(Number(s.amount)||0),0);
   const dayOpen=isCashDayOpen();
   statsEl.innerHTML=`<div style="background:${dayOpen?'#ECFDF5':'#F5F6FA'};border:1.5px solid ${dayOpen?'#6EE7B7':'#E8EAF0'};border-radius:14px;padding:12px 14px;margin-bottom:12px;font-size:12.5px;color:${dayOpen?'#065F46':'#666'};">
-      ${dayOpen?'✅ วันนี้เปิดให้พนักงานกรอกคำขอเบิกเงิน':'🔒 เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน — รอบถัดไป '+nextCashDateLabel()}
+      ${dayOpen?'✅ ':'🔒 '}${esc(cashOpeningNoticeText())}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
       <div style="background:#fff;border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1.5px solid ${totalPending>0?'#FCD34D':'#E8EAF0'};">
@@ -11593,7 +11778,7 @@ function renderSysInfo(){
   const el=document.getElementById('sysInfo');
   if(!el)return;
   const now=new Date();
-  el.innerHTML=`พนักงานทั้งหมด: <b>${employees.length}</b> คน<br>เวอร์ชันแอพ: <b style="color:#7C3AED;">${SKE_APP_VERSION}</b><br>เวลาปัจจุบัน: <b>${now.toLocaleString('th-TH')}</b><br>ประวัติซ่อมบำรุง: <b>เก็บไว้ 12 เดือน แล้วลบอัตโนมัติ</b><br>รูปภาพแนบ: <b>ลบอัตโนมัติเมื่ออายุเกิน 12 เดือน (ข้อมูลรายการยังอยู่)</b><br>บันทึกเที่ยววิ่ง (6W): <b>เก็บ 3 เดือนปฏิทินล่าสุด แล้วลบอัตโนมัติ — export เก็บถาวรได้ที่ปุ่มด้านบน</b><br>เบิกเงินพนักงาน: <b>เปิดให้กรอกเฉพาะวันที่ 15 ของทุกเดือน</b>`;
+  el.innerHTML=`พนักงานทั้งหมด: <b>${employees.length}</b> คน<br>เวอร์ชันแอพ: <b style="color:#7C3AED;">${SKE_APP_VERSION}</b><br>เวลาปัจจุบัน: <b>${now.toLocaleString('th-TH')}</b><br>ประวัติซ่อมบำรุง: <b>เก็บไว้ 12 เดือน แล้วลบอัตโนมัติ</b><br>รูปภาพแนบ: <b>ลบอัตโนมัติเมื่ออายุเกิน 12 เดือน (ข้อมูลรายการยังอยู่)</b><br>บันทึกเที่ยววิ่ง (6W): <b>เก็บ 3 เดือนปฏิทินล่าสุด แล้วลบอัตโนมัติ — export เก็บถาวรได้ที่ปุ่มด้านบน</b><br>เบิกเงินพนักงาน: <b>เปิดเฉพาะวัน/เดือน/ปีที่ผู้ดูแลอนุมัติ (เวลาไทย)</b>`;
 }
 
 function renderTravelingByProv(){
