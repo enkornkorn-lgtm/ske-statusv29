@@ -755,7 +755,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.63P');
+console.log('[SKE TRUCK] app version: v3.2.64L');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1580,6 +1580,49 @@ console.log('[SKE TRUCK] app version: v3.2.63P');
     _recordShadows.cashRequests = shadow;
     return saved;
   };
+
+window.fbApplyLeaveAction = async function(empId, action, input) {
+  const id=String(empId||'');
+  const authorized=()=>['request','cancel'].includes(action)?(String(currentUser?.id||'')===id||(adminMode&&adminRole==='super')):(adminMode&&adminRole==='super');
+  if(!authorized())throw new Error('ไม่มีสิทธิ์ทำรายการลานี้');
+  if(_isEmployeeDeleted(id))throw new Error('บัญชีนี้ถูกลบแล้ว');
+  if(window._fbConnected!==true||navigator.onLine===false)throw new Error('กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนทำรายการลา');
+  const snap=await _withTimeout(get(ref(db,'employees')),SKE_WRITE_TIMEOUT_MS,'โหลดคำขอลาล่าสุดไม่สำเร็จ');
+  let key=null,latest=null;
+  snap.forEach(child=>{const row=child.val();if(row&&String(row.id)===id){key=child.key;latest=row;}return key!==null;});
+  if(key===null)throw new Error('ไม่พบพนักงาน');
+  if(!authorized())throw new Error('บัญชีเปลี่ยนระหว่างบันทึก กรุณาลองใหม่');
+  const now=new Date().toISOString();
+  _leaveTransition(latest,action,input,now);
+  // Persist the previous request before allowing it to be replaced. No history deletion.
+  async function archive(row){
+    if(!row.leaveRequestId||row.leaveFlowVersion!==2)return;
+    const log=_leaveLogFromEmployee(row);
+    const result=await _withTimeout(runTransaction(ref(db,'leaveLogs/'+_safeRecordKey(log.id)),current=>{
+      if(current?.revisionAt&&current.revisionAt>log.revisionAt)return current;
+      return {...(current||{}),...log};
+    },{applyLocally:false}),SKE_WRITE_TIMEOUT_MS,'สถานะบันทึกแล้ว แต่ยังยืนยันประวัติไม่ได้ กรุณาโหลดใหม่');
+    if(!result.committed)throw new Error('ยังยืนยันการเก็บประวัติไม่ได้');
+    const saved=result.snapshot.val();
+    leaveLogs=[saved,...leaveLogs.filter(item=>item.id!==saved.id)];
+    _skeCacheSet('ske_leaveLogs',leaveLogs);
+    const shadow=_recordShadows.leaveLogs||new Map();shadow.set(String(saved.id),_cloneRecord(saved));_recordShadows.leaveLogs=shadow;
+  }
+  if(action==='request')await archive(latest);
+  let reason='คำขอเปลี่ยนระหว่างบันทึก กรุณาโหลดใหม่';
+  const identity=_leaveIdentity(latest),revision=latest.leaveRevisionAt||null;
+  const tx=await _withTimeout(runTransaction(ref(db,'employees/'+key),current=>{
+    if(!authorized()||!current||String(current.id)!==id||_isEmployeeDeleted(id))return;
+    if(_leaveIdentity(current)!==identity||(current.leaveRevisionAt||null)!==revision)return;
+    try{return {...current,..._leaveTransition(current,action,input,now)};}catch(error){reason=error.message;return;}
+  },{applyLocally:false}),SKE_WRITE_TIMEOUT_MS,'ยังยืนยันการเปลี่ยนสถานะลาไม่ได้ กรุณาตรวจรายการล่าสุด');
+  if(!tx.committed)throw new Error(reason);
+  const saved=tx.snapshot.val();
+  const shadow=_recordShadows.employees||new Map();shadow.set(id,_cloneRecord(saved));_recordShadows.employees=shadow;
+  _leaveApplySaved(saved);
+  await archive(saved);
+  return saved;
+};
 
   // บันทึกเฉพาะประวัติการลาที่เปลี่ยน
   window.fbSaveLeaveLogs = function(list) {
@@ -4073,7 +4116,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-route-modal{position:fixed;inset:0;z-index:130000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.70);backdrop-filter:blur(3px)}.ske-route-modal-card{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 26px 80px rgba(0,0,0,.35)}.ske-route-modal-head{display:flex;align-items:flex-start;gap:10px;padding:16px 17px;border-bottom:1px solid #E2E8F0}.ske-route-modal-title{flex:1;font-size:15px;font-weight:950;color:#172033}.ske-route-modal-sub{font-size:10px;color:#64748B;margin-top:3px}.ske-route-modal-close{width:34px;height:34px;border:0;border-radius:11px;background:#F1F5F9;color:#475569;font-size:18px;cursor:pointer}.ske-route-map-canvas{position:relative;margin:14px;border-radius:16px;overflow:hidden;background:linear-gradient(145deg,#F8FAFC,#EAF2FF);border:1px solid #D7E2F0}.ske-route-map-canvas svg{display:block;width:100%;height:auto}.ske-route-map-tiles{position:relative;width:100%;aspect-ratio:68/36;background:#E8EEF5;overflow:hidden}.ske-route-map-tiles img{position:absolute;max-width:none}.ske-route-map-tiles svg{position:absolute;inset:0;width:100%;height:100%;z-index:3}.ske-route-osm-credit{position:absolute;right:4px;bottom:3px;z-index:4;padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.88);font-size:7px;color:#334155;text-decoration:none}.ske-route-map-legend{display:flex;flex-wrap:wrap;gap:8px;padding:0 15px 12px;font-size:10px;color:#475569}.ske-route-map-legend span{display:flex;align-items:center;gap:5px}.ske-route-legend-line{width:22px;height:4px;border-radius:4px;background:#2563EB}.ske-route-legend-dot{width:10px;height:10px;border-radius:50%;background:#DC2626}.ske-route-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 15px}.ske-route-modal-actions button{border:0;padding:10px;border-radius:12px;text-align:center;font-size:10.5px;font-weight:900;background:#EAF2FF;color:#075DCE;cursor:pointer}.ske-route-modal-actions button.current{background:#FEF2F2;color:#B91C1C}
 .status-jump-flash#skeRouteAlertsSection{animation:ske-route-flash 1.5s ease}@keyframes ske-route-flash{0%,100%{box-shadow:0 10px 26px rgba(28,52,91,.07)}35%{box-shadow:0 0 0 5px rgba(239,68,68,.20),0 12px 30px rgba(239,68,68,.16)}}
 
-/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.63P ══ */
+/* ══ แผนที่รถเรียลไทม์ + กราฟเที่ยววิ่งรายวัน V3.2.64L ══ */
 .ske-live-insights{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:0 0 18px}
 .ske-tracking-heading{padding:4px 3px 15px}.ske-tracking-heading h2{margin:0;color:#172033;font-size:20px;font-weight:900}.ske-tracking-heading p{margin:5px 0 0;color:#7B8799;font-size:11px;line-height:1.6}
 #admin>.bottom-nav .nav-btn{flex:1 1 0;min-width:0}
@@ -4103,6 +4146,9 @@ select.inp option{background:#fff;color:#1a1a2e;}
 @media(max-width:820px){.ske-live-insights{grid-template-columns:1fr}.ske-live-map{min-height:250px}}
 @media(max-width:600px){.ske-live-card{border-radius:18px}.ske-live-card-head{padding:12px}.ske-live-map{aspect-ratio:16/10;min-height:230px}.ske-live-map-chip{max-width:165px}.ske-trip-chart-wrap{padding:9px 6px 6px}.ske-candle-chart{min-width:720px}}
 @media(max-width:600px){.ske-route-panel{padding:12px 10px;border-radius:17px}.ske-route-chip-row{grid-template-columns:repeat(2,minmax(0,1fr))}.ske-route-alert{align-items:flex-start}.ske-route-modal-actions{grid-template-columns:1fr}.ske-route-summary{padding:11px 12px}.ske-route-summary-icon{width:38px;height:38px;flex-basis:38px}.ske-route-summary-count{font-size:19px}.ske-route-summary-actions{grid-template-columns:1fr}.ske-route-history-shortcut{min-width:0}.ske-route-catalog-row{align-items:flex-start;flex-wrap:wrap}.ske-route-catalog-main{flex-basis:100%}.ske-route-history-row{align-items:flex-start}.ske-route-history-row .ske-route-map-btn{align-self:center}}
+
+.lv-page{max-width:1000px;margin:0 auto;color:#172033}.lv-page-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px;background:#fff;border:1px solid #E2E8F0;border-radius:20px}.lv-heading{display:flex;gap:12px;align-items:center}.lv-heading h2,.lv-heading h3{margin:0;font-size:19px;font-weight:850}.lv-heading p{margin:4px 0 0;font-size:12px;color:#64748B}.lv-heading-icon{width:44px;height:44px;border-radius:14px;background:#EFF6FF;color:#2563EB;display:flex;align-items:center;justify-content:center;flex-shrink:0}.lv-rule{padding:10px 14px;border-radius:12px;background:#F8FAFC;font-size:11px;line-height:1.8;color:#475569}.lv-rule b{color:#1D4ED8}.lv-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 24px}.lv-stat{padding:14px;border:1px solid #E2E8F0;border-radius:15px;display:flex;flex-direction:column;gap:5px;background:#fff}.lv-stat strong{font-size:27px;line-height:1.1}.lv-stat span{font-size:11px;font-weight:700}.lv-pending{color:#A16207;background:#FFFBEB}.lv-ready{color:#1D4ED8;background:#EFF6FF}.lv-active{color:#7C3AED;background:#F5F3FF}.lv-group{margin-bottom:24px}.lv-group>h3{font-size:14px;margin:0 0 10px}.lv-group>h3>span{margin-left:6px;background:#E2E8F0;border-radius:6px;padding:2px 6px;font-size:11px}.lv-card{border:1px solid #E2E8F0;border-left:4px solid var(--lv-color);border-radius:15px;background:#fff;padding:15px;margin:9px 0;box-shadow:0 3px 14px rgba(15,23,42,.035)}.lv-card-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.lv-person{flex:1;min-width:140px}.lv-person b{font-size:14px}.lv-person small{display:block;font-size:11px;color:#64748B;margin-top:3px}.lv-pill{display:inline-flex;align-items:center;padding:5px 9px;border-radius:8px;font-size:10.5px;font-weight:800;line-height:1.6}.lv-dates{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 10px}.lv-dates>div{background:#F8FAFC;border:1px solid #E2E8F0;padding:11px;border-radius:10px}.lv-dates small,.lv-actual small{display:block;color:#64748B;font-size:10.5px;margin-bottom:4px}.lv-dates strong,.lv-actual strong{font-size:12px;color:#334155;display:block}.lv-note{color:#475569;font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0}.lv-info{background:#F8FAFC;border-radius:9px;color:#475569;padding:10px 12px;font-size:11px;line-height:1.8;margin:10px 0}.lv-actual{background:#F5F3FF;border:1px solid #DDD6FE;border-radius:10px;padding:12px;margin:10px 0;line-height:1.7}.lv-actual p{font-size:11px;color:#6D28D9;margin:4px 0}.lv-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}.lv-actions .btn{font-size:12px;min-height:40px}.lv-actions .btn:disabled{opacity:.4;cursor:not-allowed}.lv-message{border-top:1px solid #F1F5F9;margin-top:13px;padding-top:10px;font-size:11px;color:#64748B}.lv-message summary{cursor:pointer}.lv-message textarea{margin:8px 0}.lv-archive{border:1px solid #E2E8F0;border-radius:14px;padding:14px;margin-top:12px;background:#F8FAFC}.lv-archive>summary{font-size:12px;font-weight:800;cursor:pointer}.lv-footnote{font-size:11px;color:#64748B;line-height:1.8;margin:16px 2px}.lv-empty{text-align:center;background:white;border:1px dashed #CBD5E1;border-radius:14px;padding:30px 14px;color:#64748B;font-size:13px}.lv-employee{margin-top:18px;padding-top:16px;border-top:1px solid #E2E8F0}.lv-employee .lv-heading{margin-bottom:12px}.lv-employee .lv-heading h3{font-size:16px}.lv-employee .btn-full{margin-top:10px}.lv-form-dates{display:grid;grid-template-columns:1fr 1fr;gap:10px}.lv-form-dates label,.lv-note-label{font-size:12px;color:#334155;font-weight:700}.lv-form-dates input{width:100%;min-width:0;box-sizing:border-box;margin-top:5px}.lv-note-label{display:block;margin-top:12px}.lv-note-label textarea{margin-top:5px;width:100%;box-sizing:border-box}
+@media(max-width:620px){.lv-page-head{display:block;padding:16px}.lv-rule{margin-top:12px}.lv-heading h2{font-size:18px}.lv-stats{gap:6px}.lv-stat{padding:12px 9px}.lv-stat span{font-size:10px;line-height:1.5}.lv-card{padding:12px}.lv-dates{grid-template-columns:1fr}.lv-card-head>.lv-pill{margin-left:50px}.lv-actions .btn{flex:1;padding:10px 7px;font-size:11.5px}.lv-form-dates{grid-template-columns:1fr}.lv-person{min-width:180px}}
 
 </style>
 </head>
@@ -4138,7 +4184,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.63P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.64L</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4146,7 +4192,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.63P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.64L</div>
       </div>
     </div>
 
@@ -4520,7 +4566,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.63P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.64L</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5175,13 +5221,7 @@ function getFullLabel(e){
 }
 // ── ไอคอนป้ายเล็กมุมรูปประจำตัว บอกว่า "กำลังลา" — สีจะเปลี่ยนตามสถานะอนุมัติ ──
 // 🟡 รออนุมัติ  🟢 อนุมัติแล้ว  🔴 ไม่อนุมัติ (แต่ยังลาอยู่ในระบบ)
-function leaveIcon(e){
-  // ไอคอนลาในหน้าสถานะปกติให้ขึ้นเฉพาะรายการที่อนุมัติแล้ว
-  if(!e.onLeave||e.leaveApproval!=='approved')return'';
-  const border='#6EE7B7';
-  const title='ลา (อนุมัติแล้ว)';
-  return`<span class="leave-badge" style="border-color:${border};" title="${title}">${skeIcon('leave')}</span>`;
-}
+function leaveIcon(e){return isLeaveActiveToday(e)?'<span class="leave-badge" style="border-color:#A78BFA" title="ผู้ดูแลยืนยันเริ่มลาจริงแล้ว">'+skeIcon('leave')+'</span>':'';}
 
 // ── Helpers: escape user text + clickable phone ──────────────────────────────
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -5202,7 +5242,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.63P';
+const SKE_APP_VERSION='v3.2.64L';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -7846,74 +7886,142 @@ async function doAddRepair(){
 }
 // ── สถานะรวม "อนุมัติ/ไม่อนุมัติ" + "ซ่อมเสร็จ/รอดำเนินการ" ของรายการแจ้งซ่อม ──
 // ── สถานะ "อนุมัติ/ไม่อนุมัติ" การลา ──────────────────────────────────────────
-function leaveApprovalPill(e){
-  if(e.leaveApproval==='approved')return{text:'✅ อนุมัติการลาแล้ว',bg:'#ECFDF5',color:'#065F46',border:'#6EE7B7'};
-  if(e.leaveApproval==='rejected')return{text:'❌ ไม่อนุมัติการลา',bg:'#FEF2F2',color:'#DC2626',border:'#FCA5A5'};
-  return{text:'🕐 รอการอนุมัติ',bg:'#FFFBEB',color:'#92400E',border:'#FCD34D'};
+function _leaveDay(now=new Date()){
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(now));
+  const value=type=>parts.find(p=>p.type===type).value;
+  return `${value('year')}-${value('month')}-${value('day')}`;
 }
-function setLeaveApproval(empId,decision){
+function _leaveValidDay(day){
+  if(typeof day!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(day))return false;
+  const date=new Date(day+'T00:00:00Z');
+  return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===day;
+}
+function _leaveHasTime(value){return !!value&&Number.isFinite(Date.parse(value));}
+function _leaveTimeLabel(value){
+  return _leaveHasTime(value)?new Date(value).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'ไม่ได้บันทึก (รายการเดิม)';
+}
+function _leaveDateLabel(value){
+  return _leaveValidDay(value)?new Date(value+'T12:00:00+07:00').toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'short',year:'numeric'}):'ยังไม่ระบุ';
+}
+function _leaveIdentity(e){return e?.leaveRequestId||[e?.id||'',e?.leaveFrom||'',e?.leaveTo||''].join('_');}
+function _leaveStage(e){
+  if(!e)return 'none';
+  if(_leaveHasTime(e.leaveEndedAt))return 'ended';
+  if(e.leaveApproval==='cancelled'||e.leaveApproval==='rejected')return e.leaveApproval;
+  if(e.onLeave&&e.leaveApproval==='approved'&&_leaveHasTime(e.leaveStartedAt))return 'active';
+  if(!e.onLeave)return 'none';
+  return e.leaveApproval==='approved'?'ready':'pending';
+}
+function _leaveStageInfo(e){
+  const stage=_leaveStage(e);
+  return ({pending:{label:'รออนุมัติ',color:'#A16207',bg:'#FFFBEB'},ready:{label:'อนุมัติแล้ว · รอเริ่มลา',color:'#1D4ED8',bg:'#EFF6FF'},active:{label:'กำลังลาจริง',color:'#7C3AED',bg:'#F5F3FF'},ended:{label:'กลับมาทำงานแล้ว',color:'#047857',bg:'#ECFDF5'},cancelled:{label:'ยกเลิกคำขอแล้ว',color:'#64748B',bg:'#F1F5F9'},rejected:{label:'ไม่อนุมัติ',color:'#B91C1C',bg:'#FEF2F2'},none:{label:'ไม่มีคำขอลา',color:'#64748B',bg:'#F1F5F9'}})[stage];
+}
+function _leaveTransition(e,action,input,now){
+  const stage=_leaveStage(e),today=_leaveDay(now);
+  if(action==='request'){
+    if(['pending','ready','active'].includes(stage))throw new Error('มีคำขอลาที่ยังไม่สิ้นสุด กรุณาจัดการรายการเดิมก่อน');
+    const from=input.from,to=input.to||from;
+    if(!_leaveValidDay(from)||!_leaveValidDay(to)||from<today||to<from)throw new Error('กรุณาเลือกวันลาตั้งแต่วันนี้ และวันสิ้นสุดไม่ก่อนวันเริ่ม');
+    if(from.slice(0,7)!==to.slice(0,7)||!_isLeaveDayAllowed(from)||!_isLeaveDayAllowed(to))throw new Error('วันลาที่ขอต้องอยู่ในช่วงวันที่ 16–25 ของเดือนเดียวกัน');
+    if(!/^lv2_[a-zA-Z0-9_]+$/.test(input.requestId||''))throw new Error('รหัสคำขอไม่ถูกต้อง');
+    return {onLeave:true,leaveFlowVersion:2,leaveRequestId:input.requestId,leaveRequestedAt:now,leaveFrom:from,leaveTo:to,leaveNote:input.note||'',leaveApproval:'pending',leaveApprovedAt:null,leaveStartedAt:null,leaveEndedAt:null,leaveCancelledAt:null,leaveReply:null,leaveReplyAt:null,leaveRevisionAt:now};
+  }
+  if(input.expected!==_leaveIdentity(e))throw new Error('คำขอลาเปลี่ยนแล้ว กรุณาโหลดรายการล่าสุด');
+  const patch={leaveFlowVersion:2,leaveRequestId:_leaveIdentity(e),leaveRevisionAt:now};
+  if(action==='approve'){
+    if(stage!=='pending')throw new Error('คำขอนี้ไม่ได้รออนุมัติแล้ว');
+    if(!_leaveValidDay(e.leaveFrom)||!_leaveValidDay(e.leaveTo||e.leaveFrom))throw new Error('วันลาของคำขอไม่ครบ กรุณาให้พนักงานส่งใหม่');
+    return {...patch,onLeave:true,leaveApproval:'approved',leaveApprovedAt:now,leaveStartedAt:null,leaveEndedAt:null};
+  }
+  if(action==='start'){
+    if(stage!=='ready')throw new Error('ต้องอนุมัติคำขอก่อนเริ่มลา หรือมีผู้ดูแลกดเริ่มแล้ว');
+    if(!_leaveValidDay(e.leaveFrom)||today<e.leaveFrom)throw new Error('ยังไม่ถึงวันเริ่มลาที่ขอไว้');
+    return {...patch,onLeave:true,leaveStartedAt:now,leaveEndedAt:null};
+  }
+  if(action==='end'){
+    if(stage!=='active')throw new Error('พนักงานยังไม่ได้เริ่มลาจริง');
+    return {...patch,onLeave:false,leaveEndedAt:now};
+  }
+  if(action==='cancel'||action==='reject'){
+    if(!['pending','ready'].includes(stage))throw new Error('ยกเลิกได้เฉพาะคำขอที่ยังไม่เริ่มลาจริง');
+    return {...patch,onLeave:false,leaveApproval:action==='reject'?'rejected':'cancelled',leaveCancelledAt:now};
+  }
+  throw new Error('คำสั่งลาไม่ถูกต้อง');
+}
+function _leaveLogFromEmployee(e){
+  const from=e.leaveFrom||'',to=e.leaveTo||from;
+  const started=_leaveHasTime(e.leaveStartedAt),ended=_leaveHasTime(e.leaveEndedAt);
+  const startDay=started?_leaveDay(e.leaveStartedAt):null,endDay=ended?_leaveDay(e.leaveEndedAt):null;
+  return {id:_leaveIdentity(e),empId:e.id,empName:e.name||'',plate:e.plate||'',leaveFlowVersion:2,leaveFrom:from,leaveTo:to,leaveNote:e.leaveNote||'',leaveReply:e.leaveReply||'',requestedAt:e.leaveRequestedAt||null,approvedAt:e.leaveApprovedAt||null,actualStartedAt:e.leaveStartedAt||null,actualEndedAt:e.leaveEndedAt||null,cancelledAt:e.leaveCancelledAt||null,state:_leaveStage(e),revisionAt:e.leaveRevisionAt,cleared:!e.onLeave,year:Number((startDay||from).slice(0,4)),month:Number((startDay||from).slice(5,7)),days:started&&ended?Math.max(1,Math.round((Date.parse(endDay)-Date.parse(startDay))/86400000)+1):0,plannedDays:_leaveValidDay(from)&&_leaveValidDay(to)?Math.round((Date.parse(to)-Date.parse(from))/86400000)+1:0};
+}
+function _leaveApplySaved(e){
+  employees=employees.map(row=>String(row.id)===String(e.id)?e:row);
+  _cacheSet('ske_emp',employees);
+  if(String(currentUser?.id||'')===String(e.id)){currentUser={...currentUser,...e};saveU();}
+}
+function _leaveRefreshViews(){
+  if(currentUser&&document.getElementById('dashboard')&&!document.getElementById('dashboard').classList.contains('hidden'))renderDashboard();
+  if(adminMode)renderAdmin();
+}
+async function _leaveRunAction(empId,action,input){
+  if(window._leaveActionBusy)return false;
+  window._leaveActionBusy=true;
+  try{
+    if(!window.fbApplyLeaveAction)throw new Error('ระบบส่วนกลางยังไม่พร้อม');
+    await window.fbApplyLeaveAction(empId,action,input);
+    _leaveRefreshViews();return true;
+  }catch(error){alert('ยังยืนยันการบันทึกไม่ได้: '+error.message+'\nกรุณาตรวจรายการล่าสุดก่อนทำซ้ำ');return false;}
+  finally{window._leaveActionBusy=false;}
+}
+async function adminStartLeave(empId){
+  if(!adminMode||adminRole!=='super'){alert('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้น');return;}
   const e=employees.find(x=>x.id===empId);if(!e)return;
-
-  if(decision==='approved'){
-    // อนุมัติแล้ว: ให้คงสถานะลาไว้ เพื่อให้ขึ้นในหน้าภาพรวม/สถานะรถระหว่างวันที่ลา
-    // และบันทึกประวัติ 1 ครั้งเท่านั้น
-    const logKey=empId+'_'+(e.leaveFrom||todayStr())+'_'+(e.leaveTo||e.leaveFrom||todayStr());
-    const exists=leaveLogs.some(l=>(l.empId+'_'+l.leaveFrom+'_'+l.leaveTo)===logKey);
-    if(!exists){
-      const log={
-        id:'lv_'+Date.now()+'_'+empId,
-        empId,empName:e.name,plate:e.plate||'',phone:e.phone||'',
-        leaveFrom:e.leaveFrom||todayStr(),leaveTo:e.leaveTo||e.leaveFrom||todayStr(),
-        leaveNote:e.leaveNote||'',leaveReply:e.leaveReply||'',
-        approvedAt:new Date().toISOString(),
-        year:new Date().getFullYear(),
-        month:new Date().getMonth()+1,
-      };
-      try{
-        const d1=new Date(log.leaveFrom),d2=new Date(log.leaveTo);
-        log.days=Math.max(1,Math.round((d2-d1)/(86400000))+1);
-      }catch(_){log.days=1;}
-      leaveLogs.unshift(log);
-      const curYear=new Date().getFullYear();
-      leaveLogs=leaveLogs.filter(l=>l.year>=curYear-1);
-      saveLeaveLogs();
-    }
-    const patch={onLeave:true,leaveFrom:e.leaveFrom||todayStr(),leaveTo:e.leaveTo||e.leaveFrom||todayStr(),leaveApproval:'approved'};
-    employees=employees.map(x=>x.id===empId?{...x,...patch}:x);
-    if(currentUser?.id===empId){currentUser={...currentUser,...patch};saveU();}
-    _cacheSet('ske_emp', employees);
-    if(window.fbUpdateEmployeeFields){
-      fbPatchEmployee(empId,patch);
-    } else if(window.fbSaveEmployees){window.fbSaveEmployees(employees);}
-    renderAdmin();
-    return;
-  }
-
-  if(decision==='rejected'){
-    // ไม่อนุมัติ: ไม่แสดงสถานะลา และไม่เก็บเข้าประวัติการลา
-    const patch={onLeave:false,leaveFrom:null,leaveTo:null,leaveNote:null,leaveApproval:null,leaveReply:null,leaveReplyAt:null};
-    employees=employees.map(x=>x.id===empId?{...x,...patch}:x);
-    if(currentUser?.id===empId){currentUser={...currentUser,...patch};saveU();}
-    _cacheSet('ske_emp', employees);
-    if(window.fbUpdateEmployeeFields){
-      fbPatchEmployee(empId,patch);
-    } else if(window.fbSaveEmployees){
-      window.fbSaveEmployees(employees);
-    }
-    renderAdmin();
-    return;
-  }
-
-  const patch={leaveApproval:decision};
-  employees=employees.map(x=>x.id===empId?{...x,...patch}:x);
-  if(currentUser?.id===empId){currentUser={...currentUser,...patch};saveU();}
-  _cacheSet('ske_emp', employees);
-  if(window.fbUpdateEmployeeFields){
-    fbPatchEmployee(empId,patch);
-  } else if(window.fbSaveEmployees){
-    window.fbSaveEmployees(employees);
-  }
-  renderAdmin();
+  if(!confirm('ยืนยันว่า '+e.name+' หยุดงานและเริ่มลาจริงแล้วใช่ไหม?\nจะบันทึกเวลาเริ่มจริงเป็นตอนนี้ ไม่ย้อนหลังไปวันที่ขอไว้'))return;
+  await _leaveRunAction(empId,'start',{expected:_leaveIdentity(e)});
+}
+function _leaveDraftChanged(){
+  _selLeaveAt=document.getElementById('leaveFromInp')?.value||'';
+  _selLeaveTo=document.getElementById('leaveToInp')?.value||'';
+  _selLeaveNote=document.getElementById('leaveNoteInp2')?.value||'';
+}
+function renderEmployeeLeaveCard(e){
+  const stage=_leaveStage(e),p=_leaveStageInfo(e),has=['pending','ready','active'].includes(stage);
+  const due=stage==='ready'&&e.leaveFrom<=_leaveDay();
+  return `<section class="lv-employee"><div class="lv-heading"><span class="lv-heading-icon">${skeIcon('leave')}</span><div><h3>การลาของฉัน</h3><p>วันที่ส่งคำขอ ไม่ใช่วันเริ่มลาจริง</p></div></div>
+    ${stage!=='none'?`<div class="lv-pill" style="color:${p.color};background:${p.bg}">${p.label}</div><div class="lv-dates"><div><small>วันที่ส่งคำขอ</small><strong>${esc(_leaveTimeLabel(e.leaveRequestedAt))}</strong></div><div><small>วันลาที่ขอไว้</small><strong>${esc(fmtLeaveRange(e))}</strong></div></div>${e.leaveNote?`<p class="lv-note">${esc(e.leaveNote)}</p>`:''}
+    ${stage==='ready'?`<div class="lv-info">${due?'ถึงกำหนดที่ขอไว้แล้ว แต่ยังถือว่าทำงานตามปกติ':'ยังคงสถานะทำงานตามปกติ'}<br><b>รอผู้ดูแลกด “เริ่มลาจริง” เท่านั้น</b></div>`:''}
+    ${stage==='active'||stage==='ended'?`<div class="lv-actual"><small>ผู้ดูแลยืนยันเริ่มจริง</small><strong>${esc(_leaveTimeLabel(e.leaveStartedAt))}</strong>${stage==='ended'?`<small>กลับมาทำงานจริง</small><strong>${esc(_leaveTimeLabel(e.leaveEndedAt))}</strong>`:'<p>เมื่อกลับมาทำงาน ให้แจ้งผู้ดูแลยืนยันจบการลา</p>'}</div>`:''}
+    ${e.leaveReply?`<div class="lv-info">ข้อความผู้ดูแล: ${esc(e.leaveReply)}</div>`:''}
+    ${['pending','ready'].includes(stage)?'<button class="btn btn-gray btn-full" onclick="doCancelLeave()">ยกเลิกคำขอนี้</button>':''}`:''}
+    ${!has?`${renderApprovedLeaveNoticeForEmployees(e.id)}<button class="btn btn-blue btn-full" onclick="toggleLeaveForm()">${leaveFormOpen?'ปิดแบบฟอร์ม':'+ ส่งคำขอลา'}</button><div id="leaveFormWrap" class="${leaveFormOpen?'':'hidden'}"><div class="lv-info">เลือกช่วงวันที่ต้องการหยุดงาน (วันที่ 16–25 ตามกติกาเดิม)<br>วันที่ส่งคำขอจะบันทึกให้อัตโนมัติ</div><div class="lv-form-dates"><label>วันเริ่มลาที่ขอ<input id="leaveFromInp" class="inp" type="date" min="${_leaveDay()}" value="${esc(_selLeaveAt)}" onchange="_leaveDraftChanged()"></label><label>วันสิ้นสุดที่ขอ<input id="leaveToInp" class="inp" type="date" min="${_leaveDay()}" value="${esc(_selLeaveTo)}" onchange="_leaveDraftChanged()"></label></div><label class="lv-note-label">เหตุผลการลา<textarea id="leaveNoteInp2" class="inp" rows="2" oninput="_leaveDraftChanged()" placeholder="เช่น ลากิจ / ลาป่วย">${esc(_selLeaveNote)}</textarea></label><button class="btn btn-blue btn-full" onclick="doRequestLeave()">ส่งให้ผู้ดูแลอนุมัติ</button></div>`:''}</section>`;
+}
+function renderAdminLeaveCard(e){
+  const stage=_leaveStage(e),p=_leaveStageInfo(e),can=adminRole==='super',due=stage==='ready'&&e.leaveFrom<=_leaveDay();
+  let buttons='';
+  if(can&&stage==='pending')buttons=`<button class="btn btn-blue" onclick="setLeaveApproval('${esc(e.id)}','approved')">อนุมัติคำขอ</button><button class="btn btn-gray" onclick="setLeaveApproval('${esc(e.id)}','rejected')">ไม่อนุมัติ</button>`;
+  if(can&&stage==='ready')buttons=`<button class="btn btn-blue" ${due?'':'disabled'} onclick="adminStartLeave('${esc(e.id)}')">ยืนยันเริ่มลาจริง</button>`;
+  if(can&&stage==='active')buttons=`<button class="btn btn-green" onclick="adminClearLeaveToNormal('${esc(e.id)}')">ยืนยันกลับมาทำงาน</button>`;
+  return `<article class="lv-card" style="--lv-color:${p.color}"><div class="lv-card-head"><div class="avatar" style="width:40px;height:40px;font-size:16px">${avatarImg(e,40)}</div><div class="lv-person"><b>${esc(e.name)}</b><small>${esc(e.plate||'ไม่ระบุทะเบียน')}${phoneLink(e.phone)}</small></div><span class="lv-pill" style="color:${p.color};background:${p.bg}">${p.label}</span></div>
+    <div class="lv-dates"><div><small>ส่งคำขอเมื่อ</small><strong>${esc(_leaveTimeLabel(e.leaveRequestedAt))}</strong></div><div><small>วันลาที่ขอไว้</small><strong>${esc(fmtLeaveRange(e))}</strong></div></div>
+    ${e.leaveNote?`<p class="lv-note">${esc(e.leaveNote)}</p>`:''}
+    ${stage==='ready'?`<div class="lv-info">${due?'ถึงกำหนดแล้ว · ยังไม่ถือว่าลา':'รอถึงวันลาที่ขอไว้'} — ต้องกดยืนยันเมื่อหยุดงานจริง</div>`:''}
+    ${_leaveHasTime(e.leaveStartedAt)?`<div class="lv-actual"><small>เริ่มลาจริง</small><strong>${esc(_leaveTimeLabel(e.leaveStartedAt))}</strong>${_leaveHasTime(e.leaveEndedAt)?`<small>กลับมาทำงาน</small><strong>${esc(_leaveTimeLabel(e.leaveEndedAt))}</strong>`:''}</div>`:''}
+    ${buttons?`<div class="lv-actions">${buttons}</div>`:''}
+    <details class="lv-message"><summary>${e.leaveReply?'ข้อความจากผู้ดูแล':'ข้อความถึงพนักงาน'}</summary>${can?`<textarea class="inp" id="lr_${esc(e.id)}" rows="2">${esc(e.leaveReply||'')}</textarea><button class="btn btn-gray btn-sm" onclick="saveLeaveReply('${esc(e.id)}')">ส่งข้อความ</button>`:`<p>${esc(e.leaveReply||'ยังไม่มีข้อความ')}</p>`}</details></article>`;
+}
+function _refreshLeaveCalendar(){
+  const key=_leaveDay();if(key===window._leaveCalendarDay)return;window._leaveCalendarDay=key;
+  const panel=document.getElementById('adminLeavePanel'),content=document.getElementById('adminLeaveContent');
+  if(panel&&content&&!panel.classList.contains('hidden'))content.innerHTML=buildLeaveHTML();
+  updateLeaveBadge();
+}
+function leaveApprovalPill(e){const p=_leaveStageInfo(e);return {text:p.label,color:p.color,bg:p.bg,border:p.color};}
+async function setLeaveApproval(empId,decision){
+  if(!adminMode||adminRole!=='super'){alert('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้น');return;}
+  const e=employees.find(x=>x.id===empId);if(!e)return;
+  const action=decision==='approved'?'approve':'reject';
+  if(!confirm((action==='approve'?'อนุมัติวันลาที่ขอ แต่ยังไม่เริ่มลาจริง':'ไม่อนุมัติคำขอนี้')+' ของ '+e.name+'?'))return;
+  await _leaveRunAction(empId,action,{expected:_leaveIdentity(e)});
 }
 
 function saveLeaveReply(empId){
@@ -9980,57 +10088,20 @@ function renderDashboard(){
     ${(me.note&&me.status!=='got_job'&&!me.note.includes('ถูกยกเลิก'))?`<div style="color:#666;font-size:12px;margin-top:8px;">${skeIcon('note')} ${esc(me.note)}</div>`:''}
     ${me.status==='standby'&&me.standbyAt?`<div style="color:#7B2FBE;font-size:12px;font-weight:700;margin-top:6px;padding:5px 10px;background:#F5F3FF;border-radius:8px;border:1px solid #C4B5FD;">⏱️ สแตนบายตั้งแต่: ${fmt(me.standbyAt)}</div>`:''}
     ${me.updatedAt?`<div style="color:#aaa;font-size:11px;margin-top:4px;">🕐 อัพเดท: ${fmt(me.updatedAt)}</div>`:''}
-    <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(0,0,0,.08);">
-      ${me.onLeave?`
-        <div style="color:#475569;font-size:12px;font-weight:700;padding:8px 10px;background:#F1F5F9;border-radius:8px;border:1px solid #CBD5E1;">🌴 แจ้งลา: ${fmtLeaveRange(me)}</div>
-        ${me.leaveNote?`<div style="color:#666;font-size:12px;margin-top:6px;">${skeIcon('note')} ${esc(me.leaveNote)}</div>`:''}
-        <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-          <span class="pill" style="background:${leavePill.bg};color:${leavePill.color};border:1px solid ${leavePill.border};">${leavePill.text}</span>
-          <button class="btn btn-gray btn-sm" onclick="doCancelLeave()">✕ ยกเลิกการลา</button>
-        </div>
-        ${me.leaveReply?`<div style="margin-top:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:10px 12px;">
-          <div style="font-size:11px;color:#1E90D6;font-weight:700;margin-bottom:3px;">💬 ข้อความจากผู้ดูแล${me.leaveReplyAt?` · ${fmt(me.leaveReplyAt)}`:''}</div>
-          <div style="font-size:13px;color:#1a1a2e;line-height:1.6;white-space:pre-wrap;">${esc(me.leaveReply)}</div>
-        </div>`:''}
-      `:`
-        ${renderApprovedLeaveNoticeForEmployees(me.id)}
-        <div style="background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:12px;color:#1E40AF;">📌 กรอกคำขอลาได้ทุกเมื่อ แต่เลือก<b>วันที่ลาได้เฉพาะวันที่ 16-25 ของเดือน</b>เท่านั้น</div>
-        <button class="btn btn-gray btn-full" style="font-size:13px;margin-top:10px;" onclick="toggleLeaveForm()">${leaveFormOpen?'✕ ยกเลิก':skeIcon('leave')+' แจ้งลา'}</button>
-        <div id="leaveFormWrap" class="${leaveFormOpen?'':'hidden'}" style="margin-top:10px;">
-          <div class="province-box">
-            <div class="province-title">📅 ลาตั้งแต่วันที่ (16-25 เท่านั้น)</div>
-            <input type="date" class="inp" id="leaveFromInp" value="${_selLeaveAt||''}">
-            <div class="province-title" style="margin-top:10px;">📅 ถึงวันที่ (16-25 เท่านั้น)</div>
-            <input type="date" class="inp" id="leaveToInp" value="${_selLeaveTo||''}">
-            <div class="province-title" style="margin-top:10px;">${skeIcon('note')} หมายเหตุการลา</div>
-            <textarea class="inp" id="leaveNoteInp2" rows="2" placeholder="เช่น ลากิจ, ลาป่วย, ลาพักร้อน...">${esc(_selLeaveNote||'')}</textarea>
-          </div>
-          <button class="btn btn-blue btn-full" style="margin-top:10px;" onclick="doRequestLeave()">✓ ส่งคำขอลา</button>
-        </div>
-      `}
-    </div>`;
+    ${renderEmployeeLeaveCard(me)}`;
 
   if(!sharedTruck&&me.province)updateWeatherWidget(me.province);
   if(!sharedTruck)updateMaintBadges();
   if(!sharedTruck)setTimeout(()=>ensureEmployeePhoneGpsMode(),0);
 }
 // แสดงช่วงวันที่ลาแบบอ่านง่าย (ถ้าวันเริ่ม-สิ้นสุดเป็นวันเดียวกันโชว์วันเดียว)
-function fmtLeaveRange(e){
-  if(!e.leaveFrom)return'-';
-  const fmtD=d=>new Date(d).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'});
-  if(e.leaveTo&&e.leaveTo!==e.leaveFrom)return`${fmtD(e.leaveFrom)} — ${fmtD(e.leaveTo)}`;
-  return fmtD(e.leaveFrom);
-}
+function fmtLeaveRange(e){return _leaveDateLabel(e.leaveFrom)+(e.leaveTo&&e.leaveTo!==e.leaveFrom?' – '+_leaveDateLabel(e.leaveTo):'');}
 
 // หน้าลาผู้ดูแลยึดตามเดือนปฏิทินปัจจุบันเท่านั้น
 // ถ้าลาคาบเกี่ยวปลายเดือนก่อน/ต้นเดือนนี้ ยังต้องแสดง เพราะมีวันลาอยู่ในเดือนปัจจุบันจริง
 function _leaveCurrentMonthBounds(refDate=new Date()){
-  const y=refDate.getFullYear(),m=refDate.getMonth();
-  const pad=n=>String(n).padStart(2,'0');
-  const start=`${y}-${pad(m+1)}-01`;
-  const lastDay=new Date(y,m+1,0).getDate();
-  const end=`${y}-${pad(m+1)}-${pad(lastDay)}`;
-  return{start,end,year:y,month:m};
+  const key=_leaveDay(refDate),y=Number(key.slice(0,4)),m=Number(key.slice(5,7))-1;
+  return {start:key.slice(0,7)+'-01',end:key.slice(0,7)+'-'+new Date(Date.UTC(y,m+1,0)).getUTCDate(),year:y,month:m};
 }
 function _leaveOverlapsCurrentMonth(e,refDate=new Date()){
   if(!e)return false;
@@ -10043,11 +10114,9 @@ function _leaveOverlapsCurrentMonth(e,refDate=new Date()){
   const month=_leaveCurrentMonthBounds(refDate);
   return from<=month.end&&to>=month.start;
 }
-function _leaveCurrentMonthLabel(refDate=new Date()){
-  return refDate.toLocaleDateString('th-TH',{month:'long',year:'numeric'});
-}
+function _leaveCurrentMonthLabel(refDate=new Date()){return new Date(refDate).toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',month:'long',year:'numeric'});}
 function _leaveSeenKey(e){
-  return `${e?.id||''}_${String(e?.leaveFrom||e?.leaveAt||'').slice(0,10)}_${String(e?.leaveTo||e?.leaveFrom||e?.leaveAt||'').slice(0,10)}`;
+  return e?.leaveRequestId||`${e?.id||''}_${String(e?.leaveFrom||e?.leaveAt||'').slice(0,10)}_${String(e?.leaveTo||e?.leaveFrom||e?.leaveAt||'').slice(0,10)}`;
 }
 
 // เช็กว่าพนักงานคนนี้อยู่ในช่วงวันลาวันนี้จริงหรือไม่ (รวมวันเริ่มและวันสิ้นสุด)
@@ -10062,39 +10131,12 @@ function _dateInLeaveRange(fromVal,toVal){
 // ของเครื่องเดียว ทำให้อุปกรณ์อื่นมองไม่เห็นว่าเคลียร์แล้ว (สถานะลาเด้งกลับมา) — ถูกแทนที่ด้วยฟิลด์ cleared
 // บน leaveLogs ที่ซิงก์ผ่าน Firebase แทนแล้ว (ดู adminClearLeaveToNormal และ activeApprovedLeaveLogForEmployee)
 function activeApprovedLeaveLogForEmployee(e){
-  if(!e)return null;
-  // จับคู่ด้วย empId ก่อนเป็นหลักเสมอถ้าบันทึกนั้นมี empId อยู่แล้ว (สร้างตอนอนุมัติลาจะมี empId ติดมาด้วยทุกครั้ง)
-  // ใช้ทะเบียนรถ/ชื่อ เป็นตัวสำรองเฉพาะบันทึกเก่าที่ไม่มี empId เท่านั้น — ป้องกันจับผิดคนตอนพนักงาน 2 คนใช้รถทะเบียนเดียวกัน (ผลัดกันขับ)
-  const sameEmp=l=>l.empId?(String(l.empId)===String(e.id||'')):(((l.plate||'')&&e.plate&&String(l.plate).trim()===String(e.plate).trim()) || ((l.empName||'')&&e.name&&String(l.empName).trim()===String(e.name).trim()));
-  return (leaveLogs||[]).find(l=>sameEmp(l)&&_dateInLeaveRange(l.leaveFrom,l.leaveTo)&&!l.cleared)||null;
+  if(!isLeaveActiveToday(e))return null;
+  return (leaveLogs||[]).find(l=>String(l.id)===_leaveIdentity(e)&&l.leaveFlowVersion===2)||null;
 }
-function isLeaveActiveToday(e){
-  // แสดงสถานะลาเฉพาะที่อนุมัติแล้วเท่านั้น (onLeave/leaveApproval ถูกซิงก์ผ่าน Firebase อยู่แล้ว
-  // เมื่อผู้ดูแลกด "ทำงานปกติ" ค่าจะถูกล้างที่นี่โดยตรง จึงไม่ต้องพึ่ง localStorage ซึ่งไม่ซิงก์ข้ามอุปกรณ์)
-  if(!e)return false;
-  if(e.onLeave&&e.leaveApproval==='approved'&&_dateInLeaveRange(e.leaveFrom,e.leaveTo))return true;
-  return !!activeApprovedLeaveLogForEmployee(e);
-}
+function isLeaveActiveToday(e){return _leaveStage(e)==='active';}
 function getApprovedLeaveListForEmployees(){
-  const map=new Map();
-  const add=(item)=>{
-    if(!item||!item.leaveFrom)return;
-    // จับคู่ด้วย empId ก่อนเป็นหลักเสมอ ใช้ทะเบียนรถ/ชื่อเป็นตัวสำรองเฉพาะกรณีไม่มี empId (บันทึกเก่า)
-    // ป้องกันจับผิดคนตอนพนักงาน 2 คนใช้รถทะเบียนเดียวกัน
-    let emp=item.empId?employees.find(e=>String(e.id)===String(item.empId)):null;
-    if(!emp)emp=employees.find(e=>(item.plate&&e.plate&&String(item.plate).trim()===String(e.plate).trim()) || (item.empName&&e.name&&String(item.empName).trim()===String(e.name).trim()));
-    const id=emp?.id||item.empId||item.plate||item.empName;
-    const from=String(item.leaveFrom).slice(0,10), to=String(item.leaveTo||item.leaveFrom).slice(0,10);
-    if(item.cleared)return;
-    const end=new Date(to+'T23:59:59');
-    if(end < new Date(todayStr()+'T00:00:00'))return;
-    const key=String(id)+'_'+from+'_'+to;
-    if(map.has(key))return;
-    map.set(key,{empId:id,empName:emp?.name||item.empName||'-',plate:emp?.plate||item.plate||'-',leaveFrom:from,leaveTo:to,leaveNote:item.leaveNote||''});
-  };
-  employees.filter(e=>e.onLeave&&e.leaveApproval==='approved').forEach(add);
-  (leaveLogs||[]).forEach(add);
-  return [...map.values()].sort((a,b)=>(a.leaveFrom||'').localeCompare(b.leaveFrom||'') || (a.empName||'').localeCompare(b.empName||''));
+  return employees.filter(e=>['ready','active'].includes(_leaveStage(e))).map(e=>({empId:e.id,empName:e.name,plate:e.plate,leaveFrom:e.leaveFrom,leaveTo:e.leaveTo,leaveNote:e.leaveNote})).sort((a,b)=>a.leaveFrom.localeCompare(b.leaveFrom));
 }
 function renderApprovedLeaveNoticeForEmployees(currentEmpId){
   const list=getApprovedLeaveListForEmployees().filter(x=>String(x.empId)!==String(currentEmpId||''));
@@ -10111,35 +10153,13 @@ function renderApprovedLeaveNoticeForEmployees(currentEmpId){
     <div style="font-size:10.5px;color:#92400E;margin-top:6px;">แสดงเฉพาะรายการที่ผู้ดูแลอนุมัติแล้ว เพื่อไม่ให้ลาซ้ำวันพร้อมกัน</div>
   </div>`;
 }
-function getActiveLeaveRange(e){
-  const log=activeApprovedLeaveLogForEmployee(e);
-  if(log)return{leaveFrom:log.leaveFrom,leaveTo:log.leaveTo};
-  return e;
-}
-function leaveTodayBadge(e){
-  if(!isLeaveActiveToday(e))return'';
-  return `<div style="margin-top:4px;display:inline-flex;align-items:center;gap:4px;background:#FFF7ED;color:#C2410C;border:1px solid #FDBA74;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:800;">🌴 ลาอยู่วันนี้ ${fmtLeaveRange(getActiveLeaveRange(e))}</div>`;
-}
-function adminClearLeaveToNormal(id){
-  const emp=employees.find(e=>e.id===id);
-  if(!emp)return;
-  if(!confirm('เปลี่ยนจากลาอยู่ เป็นทำงานปกติ?'))return;
-  const activeLog=activeApprovedLeaveLogForEmployee(emp);
-  // ทำเครื่องหมาย "เคลียร์แล้ว" บนบันทึกประวัติการลาโดยตรง แล้วซิงก์ขึ้น Firebase
-  // (เดิมเก็บไว้ใน localStorage ของเครื่องเดียว ทำให้อุปกรณ์/เบราว์เซอร์อื่นมองไม่เห็นว่าเคลียร์แล้ว สถานะลาจึงเด้งกลับมา)
-  if(activeLog){
-    leaveLogs=leaveLogs.map(l=>l.id===activeLog.id?{...l,cleared:true}:l);
-    saveLeaveLogs();
-  }
-  const patch={onLeave:false,leaveFrom:null,leaveTo:null,leaveNote:null,leaveApproval:null,leaveReply:null,leaveReplyAt:null};
-  employees=employees.map(e=>e.id===id?{...e,...patch}:e);
-  _cacheSet('ske_emp', employees);
-  if(window.fbUpdateEmployeeFields){
-    fbPatchEmployee(id,patch);
-  }else if(window.fbSaveEmployees){
-    window.fbSaveEmployees(employees);
-  }
-  renderAdmin();
+function getActiveLeaveRange(e){return isLeaveActiveToday(e)?{leaveFrom:_leaveDay(e.leaveStartedAt),leaveTo:null}:e;}
+function leaveTodayBadge(e){return isLeaveActiveToday(e)?'<div class="lv-pill lv-active">กำลังลาจริง · เริ่ม '+esc(_leaveTimeLabel(e.leaveStartedAt))+'</div>':'';}
+async function adminClearLeaveToNormal(empId){
+  if(!adminMode||adminRole!=='super'){alert('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้น');return;}
+  const e=employees.find(x=>x.id===empId);if(!e)return;
+  if(!confirm('ยืนยันว่า '+e.name+' กลับมาทำงานแล้ว?\nระบบจะบันทึกเวลาสิ้นสุดการลาจริงเป็นตอนนี้'))return;
+  await _leaveRunAction(empId,'end',{expected:_leaveIdentity(e)});
 }
 
 function toggleLeaveForm(){
@@ -10155,46 +10175,18 @@ function _isLeaveDayAllowed(dateStr){
   const day=d.getDate();
   return day>=16&&day<=25;
 }
-function doRequestLeave(){
-  if(denySharedTruckRestrictedAccess())return;
-  if(!currentUser)return;
-  const fromEl=document.getElementById('leaveFromInp');
-  const toEl=document.getElementById('leaveToInp');
-  const noteEl=document.getElementById('leaveNoteInp2');
-  const from=fromEl?.value||'';
-  if(!from){fromEl?.focus();return;}
-  const to=toEl?.value||from;
-  if(!_isLeaveDayAllowed(from)){alert('⚠️ เลือกวันเริ่มลาได้เฉพาะวันที่ 16-25 ของเดือนเท่านั้น');fromEl?.focus();return;}
-  if(!_isLeaveDayAllowed(to)){alert('⚠️ เลือกวันสิ้นสุดลาได้เฉพาะวันที่ 16-25 ของเดือนเท่านั้น');toEl?.focus();return;}
-  const fd=new Date(from+'T00:00:00'),td=new Date(to+'T00:00:00');
-  if(td<fd){alert('⚠️ วันสิ้นสุดการลาต้องไม่ก่อนวันเริ่มลา');toEl?.focus();return;}
-  if(fd.getFullYear()!==td.getFullYear()||fd.getMonth()!==td.getMonth()){alert('⚠️ วันเริ่มและวันสิ้นสุดการลาต้องอยู่ในเดือนเดียวกัน (ช่วง 16-25)');return;}
-  const noteVal=noteEl?.value||'';
-  const patch={onLeave:true,leaveFrom:from,leaveTo:to,leaveNote:noteVal,leaveApproval:'pending'};
-  employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
-  currentUser={...currentUser,...patch};
-  saveU();leaveFormOpen=false;_selLeaveAt='';_selLeaveTo='';_selLeaveNote='';renderDashboard();
-  _cacheSet('ske_emp', employees);
-  if(window.fbUpdateEmployeeFields){
-    fbPatchEmployee(currentUser.id,patch);
-  } else if(window.fbSaveEmployees){
-    window.fbSaveEmployees(employees);
-  }
+async function doRequestLeave(){
+  if(denySharedTruckRestrictedAccess()||!currentUser)return;
+  _leaveDraftChanged();
+  const input={from:_selLeaveAt,to:_selLeaveTo||_selLeaveAt,note:_selLeaveNote,requestId:'lv2_'+Date.now()+'_'+Math.random().toString(36).slice(2,9)};
+  try{_leaveTransition(employees.find(e=>e.id===currentUser.id)||currentUser,'request',input,new Date().toISOString());}catch(e){alert(e.message);return;}
+  if(await _leaveRunAction(currentUser.id,'request',input)){leaveFormOpen=false;_selLeaveAt='';_selLeaveTo='';_selLeaveNote='';renderDashboard();}
 }
-function doCancelLeave(){
-  if(denySharedTruckRestrictedAccess())return;
-  if(!currentUser)return;
-  if(!confirm('ยกเลิกการลานี้?'))return;
-  const patch={onLeave:false,leaveReply:null,leaveReplyAt:null};
-  employees=employees.map(e=>e.id===currentUser.id?{...e,...patch}:e);
-  currentUser={...currentUser,...patch};
-  saveU();renderDashboard();
-  _cacheSet('ske_emp', employees);
-  if(window.fbUpdateEmployeeFields){
-    fbPatchEmployee(currentUser.id,patch);
-  } else if(window.fbSaveEmployees){
-    window.fbSaveEmployees(employees);
-  }
+async function doCancelLeave(){
+  if(denySharedTruckRestrictedAccess()||!currentUser)return;
+  const e=employees.find(e=>e.id===currentUser.id)||currentUser;
+  if(!confirm('ยกเลิกคำขอลาที่ยังไม่เริ่มนี้? ประวัติจะยังเก็บไว้'))return;
+  await _leaveRunAction(e.id,'cancel',{expected:_leaveIdentity(e)});
 }
 
 
@@ -10779,83 +10771,17 @@ function buildSummaryHTML(){
 
 // ── แท็บ "ลา" แยกต่างหาก — รวมรายชื่อพนักงานที่แจ้งลาทั้งหมด พร้อมปุ่มอนุมัติ/ไม่อนุมัติ ──
 function buildLeaveHTML(){
-  const isViewer=adminRole==='viewer';
-  // แสดงเฉพาะคำขอที่มีช่วงวันลาคาบเกี่ยวเดือนปัจจุบัน รายการเดือนก่อนยังอยู่ในประวัติแต่ไม่ปนหน้านี้
-  const onLeaveList=employees.filter(e=>e.onLeave&&_leaveOverlapsCurrentMonth(e));
-  const pending=onLeaveList.filter(e=>!e.leaveApproval||e.leaveApproval==='pending').length;
-  const approved=onLeaveList.filter(e=>e.leaveApproval==='approved').length;
-  const monthLabel=_leaveCurrentMonthLabel();
-  // รออนุมัติขึ้นก่อน จากนั้นเรียงวันเริ่มลาใกล้ไปไกล
-  const visibleList=onLeaveList.slice().sort((a,b)=>{
-    const ap=(!a.leaveApproval||a.leaveApproval==='pending')?0:1;
-    const bp=(!b.leaveApproval||b.leaveApproval==='pending')?0:1;
-    if(ap!==bp)return ap-bp;
-    if(!a.leaveFrom&&!b.leaveFrom)return 0;
-    if(!a.leaveFrom)return 1;
-    if(!b.leaveFrom)return -1;
-    return a.leaveFrom<b.leaveFrom?-1:a.leaveFrom>b.leaveFrom?1:0;
-  });
-  let html=`<div class="leave-month-head">
-    <div class="leave-month-title-row">
-      <span class="leave-month-icon">${skeIcon('leave')}</span>
-      <div style="flex:1;min-width:0;">
-        <div class="leave-month-title">รายการลา · ${esc(monthLabel)}</div>
-        <div class="leave-month-sub">แสดงเฉพาะช่วงวันที่คาบเกี่ยวเดือนนี้ · เดือนเก่าอยู่ในประวัติการลา</div>
-      </div>
-      <span class="leave-month-total">${onLeaveList.length} รายการ</span>
-    </div>
-    <div class="leave-month-stats">
-      <span class="leave-month-stat wait"><strong>${pending}</strong> 🕐 รออนุมัติ</span>
-      <span class="leave-month-stat ok"><strong>${approved}</strong> ✅ อนุมัติแล้ว</span>
-    </div>
-  </div>`;
-  if(!visibleList.length){
-    return html+`<div class="leave-admin-empty"><div style="font-size:32px;margin-bottom:8px;">${skeIcon('leave')}</div><div style="font-size:14px;font-weight:900;color:#334155;">ไม่มีรายการลาใน${esc(monthLabel)}</div><div style="font-size:11px;margin-top:4px;">เมื่อพนักงานส่งคำขอลาของเดือนนี้ รายการจะแสดงที่นี่อัตโนมัติ</div></div>`;
-  }
-  html+=`
-  <div class="leave-admin-list">
-    ${visibleList.map(e=>{
-      const pill=leaveApprovalPill(e);
-      const hasReply=!!e.leaveReply;
-      return`<article class="leave-admin-card" style="--leave-accent:${pill.border};">
-        <div class="leave-admin-main">
-          <div class="avatar" style="width:42px;height:42px;font-size:17px;">${avatarImg(e,42)}</div>
-          <div class="leave-admin-info">
-            <div class="leave-admin-name-row">
-              <span class="leave-admin-name">${esc(e.name)}</span>
-            </div>
-            <div class="leave-admin-meta">🚘 ${esc(e.plate||'-')}${phoneLink(e.phone)}${lineLink(e.lineId)}</div>
-            <div class="leave-admin-range">📅 ${fmtLeaveRange(e)}</div>
-            ${e.leaveNote?`<div class="leave-admin-note">${skeIcon('note')} ${esc(e.leaveNote)}</div>`:''}
-          </div>
-          <div class="leave-admin-side">
-            <span class="leave-admin-pill" style="background:${pill.bg};color:${pill.color};border-color:${pill.border};">${pill.text}</span>
-            ${isViewer?'':`<div class="leave-admin-actions">
-              <button class="btn ${e.leaveApproval==='approved'?'btn-green':'btn-gray'}" onclick="setLeaveApproval('${e.id}','approved')">✅ อนุมัติ</button>
-              <button class="btn btn-gray" onclick="setLeaveApproval('${e.id}','rejected')">❌ ไม่อนุมัติ</button>
-            </div>`}
-          </div>
-        </div>
-        <div class="leave-admin-reply">
-          ${isViewer?
-            (hasReply?`<div style="font-size:11px;color:#1E90D6;font-weight:700;">💬 ${esc(e.leaveReply)}<span style="color:#94A3B8;font-weight:400;"> · ${fmt(e.leaveReplyAt)}</span></div>`:'<div style="font-size:10.5px;color:#94A3B8;">ยังไม่มีข้อความถึงพนักงาน</div>')
-          :`
-          <button type="button" style="background:none;border:none;padding:0;width:100%;display:flex;align-items:center;gap:5px;cursor:pointer;color:#1E90D6;font-size:11px;font-weight:800;" onclick="const b=document.getElementById('lrbox_${e.id}');b.classList.toggle('hidden');this.querySelector('.lrarrow').style.transform=b.classList.contains('hidden')?'rotate(0deg)':'rotate(180deg)';">
-            <span>${skeIcon('note')}</span>
-            <span style="flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${hasReply?esc(e.leaveReply):'ส่งข้อความถึงพนักงาน'}</span>
-            ${hasReply?`<span style="color:#94A3B8;font-weight:400;flex-shrink:0;">${fmt(e.leaveReplyAt)}</span>`:''}
-            <span class="lrarrow" style="transition:.2s;flex-shrink:0;">▾</span>
-          </button>
-          <div id="lrbox_${e.id}" class="hidden" style="margin-top:8px;">
-            <textarea class="inp" id="lr_${e.id}" rows="2" placeholder="พิมพ์ข้อความแจ้งพนักงาน..." style="font-size:12px;">${esc(e.leaveReply||'')}</textarea>
-            <button class="btn btn-blue btn-sm btn-full" style="margin-top:6px;" onclick="saveLeaveReply('${e.id}')">💬 ${hasReply?'อัปเดตข้อความ':'ส่งข้อความ'}</button>
-          </div>`}
-        </div>
-      </article>`;
-    }).join('')}
-  </div>
-  `;
-  return html;
+  const records=employees.filter(e=>_leaveStage(e)!=='none');
+  const current=records.filter(e=>_leaveOverlapsCurrentMonth(e)||_leaveStage(e)==='active');
+  const groups=[['pending','รออนุมัติคำขอ'],['ready','อนุมัติแล้ว · รอผู้ดูแลเริ่มลา'],['active','กำลังลาจริง']];
+  const counts=Object.fromEntries(groups.map(([key])=>[key,current.filter(e=>_leaveStage(e)===key).length]));
+  const ended=current.filter(e=>['ended','cancelled','rejected'].includes(_leaveStage(e)));
+  const future=records.filter(e=>!current.includes(e)&&['pending','ready'].includes(_leaveStage(e))&&e.leaveFrom>_leaveCurrentMonthBounds().end);
+  return `<div class="lv-page"><header class="lv-page-head"><div class="lv-heading"><span class="lv-heading-icon">${skeIcon('leave')}</span><div><h2>จัดการวันลา</h2><p>${esc(_leaveCurrentMonthLabel())} · แยกคำขอออกจากการลาจริง</p></div></div><div class="lv-rule">อนุมัติคำขอ ≠ เริ่มลา<br><b>สถานะเปลี่ยนเมื่อผู้ดูแลยืนยันเท่านั้น</b></div></header><div class="lv-stats">${groups.map(([key,title])=>`<div class="lv-stat lv-${key}"><strong>${counts[key]}</strong><span>${title}</span></div>`).join('')}</div>
+    ${groups.map(([key,title])=>{const rows=current.filter(e=>_leaveStage(e)===key).sort((a,b)=>(a.leaveFrom||'').localeCompare(b.leaveFrom||''));return rows.length?`<section class="lv-group"><h3>${title} <span>${rows.length}</span></h3>${rows.map(renderAdminLeaveCard).join('')}</section>`:'';}).join('')}
+    ${!Object.values(counts).some(Boolean)?'<div class="lv-empty">ไม่มีคำขอที่รอดำเนินการหรือกำลังลาในเดือนนี้</div>':''}
+    ${future.length?`<details class="lv-archive"><summary>คำขอเดือนถัดไป (${future.length})</summary>${future.map(renderAdminLeaveCard).join('')}</details>`:''}
+    ${ended.length?`<details class="lv-archive"><summary>จบแล้ว / ยกเลิก / ไม่อนุมัติ เดือนนี้ (${ended.length})</summary>${ended.map(renderAdminLeaveCard).join('')}</details>`:''}<p class="lv-footnote">รายการเก่าที่ไม่มีเวลาเริ่มจริงจะไม่ถูกนับว่า “กำลังลา” อัตโนมัติ ประวัติเดิมยังเก็บไว้</p></div>`;
 }
 
 // ── ตัวเลขแจ้งเตือนบนแท็บ "ลา" — จำนวนพนักงานที่กำลังลาอยู่ตอนนี้ ──
@@ -10868,16 +10794,8 @@ function updateLeaveBadge(){
 }
 
 // ถ้าเปิดแอปค้างข้ามเดือน ให้หน้าลาและตัวเลขแจ้งเตือนเปลี่ยนเดือนได้เองโดยไม่ต้องปิดแอป
-let _leaveAdminRenderedMonth=_leaveCurrentMonthBounds().start;
-setInterval(()=>{
-  const monthKey=_leaveCurrentMonthBounds().start;
-  if(monthKey===_leaveAdminRenderedMonth)return;
-  _leaveAdminRenderedMonth=monthKey;
-  const panel=document.getElementById('adminLeavePanel');
-  const content=document.getElementById('adminLeaveContent');
-  if(panel&&content&&!panel.classList.contains('hidden'))content.innerHTML=buildLeaveHTML();
-  updateLeaveBadge();
-},60*1000);
+setInterval(_refreshLeaveCalendar,30000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')_refreshLeaveCalendar();});
 
 function statusTimeShort(value){
   if(!value)return'ไม่ระบุ';
@@ -11970,95 +11888,19 @@ function switchAdminTab(t){
 
 // ── ประวัติการลา — แยกเดือน เก็บสูงสุด 1 ปีปฏิทิน ──────────────────────────
 function renderLeaveHistory(){
-  const el=document.getElementById('leaveHistoryContent');
-  if(!el)return;
-
-  // ลบประวัติที่เกินปีก่อนหน้า
-  const curYear=new Date().getFullYear();
-  const before=leaveLogs.length;
-  leaveLogs=leaveLogs.filter(l=>l.year>=curYear-1);
-  if(leaveLogs.length<before)saveLeaveLogs();
-
-  if(!leaveLogs.length){
-    el.innerHTML='<div class="empty-state"><div class="empty-icon">🌴</div><div class="empty-text">ยังไม่มีประวัติการลา<br><span style="font-size:11px;color:#aaa;">เมื่ออนุมัติการลาจะถูกเก็บไว้ที่นี่</span></div></div>';
-    return;
-  }
-
-  const MONTH_TH=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-  // เฉพาะผู้ดูแล (super) เท่านั้นที่ลบประวัติการลาได้ — แอดมิน (viewer) ดูได้อย่างเดียว
-  const canDel=adminRole!=='viewer';
-
-  // ── สรุปรายคน (เพื่อประเมินงาน) ──
-  const byEmp={};
-  leaveLogs.forEach(l=>{
-    if(!byEmp[l.empId])byEmp[l.empId]={name:l.empName,plate:l.plate,totalDays:0,count:0,months:{}};
-    byEmp[l.empId].totalDays+=(l.days||1);
-    byEmp[l.empId].count++;
-    const mk=`${l.year}-${String(l.month).padStart(2,'0')}`;
-    byEmp[l.empId].months[mk]=(byEmp[l.empId].months[mk]||0)+(l.days||1);
-  });
-  const empArr=Object.values(byEmp).sort((a,b)=>b.totalDays-a.totalDays);
-
-  // ── แบ่งตามเดือน ──
+  const el=document.getElementById('leaveHistoryContent');if(!el)return;
+  // Retain old records as planned leave; never manufacture actual start/end dates.
+  const modernKeys=new Set((leaveLogs||[]).filter(l=>l.leaveFlowVersion===2).map(l=>[l.empId,l.leaveFrom,l.leaveTo||l.leaveFrom].join('|')));
+  const rows=(leaveLogs||[]).filter(l=>l.leaveFlowVersion===2||!modernKeys.has([l.empId,l.leaveFrom,l.leaveTo||l.leaveFrom].join('|')));
   const byMonth={};
-  leaveLogs.forEach(l=>{
-    const mk=`${l.year}-${String(l.month).padStart(2,'0')}`;
-    (byMonth[mk]=byMonth[mk]||[]).push(l);
-  });
-  const monthKeys=Object.keys(byMonth).sort().reverse();
-
-  let html=`
-  <!-- สรุปรายคน -->
-  <div class="card" style="margin-bottom:14px;">
-    <div style="font-size:14px;font-weight:800;color:#6C3FE8;margin-bottom:10px;">📊 สรุปรายบุคคล (ประเมินงาน)</div>
-    ${empArr.map(e=>{
-      const bar=Math.min(100,Math.round(e.totalDays/30*100));
-      const color=e.totalDays>=10?'#EF4444':e.totalDays>=5?'#F59E0B':'#10B981';
-      return`<div style="margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
-          <div>
-            <span style="font-size:13px;font-weight:700;color:#1a1a2e;">${esc(e.name)}</span>
-            <span style="font-size:10.5px;color:#888;margin-left:6px;">🚛 ${esc(e.plate||'-')}</span>
-          </div>
-          <span style="font-size:12px;font-weight:800;color:${color};">${e.totalDays} วัน (${e.count} ครั้ง)</span>
-        </div>
-        <div style="background:#F1F5F9;border-radius:6px;height:8px;overflow:hidden;">
-          <div style="width:${bar}%;height:100%;background:${color};border-radius:6px;transition:.3s;"></div>
-        </div>
-      </div>`;
-    }).join('')}
-  </div>
-
-  <!-- ประวัติแยกเดือน -->
-  ${monthKeys.map(mk=>{
-    const [yr,mo]=mk.split('-');
-    const items=byMonth[mk];
-    const totalDays=items.reduce((s,l)=>s+(l.days||1),0);
-    return`<div style="margin-bottom:12px;">
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#F5F3FF;border:1.5px solid #C4B5FD;border-radius:12px;margin-bottom:8px;">
-        <span style="font-size:13px;font-weight:800;color:#6C3FE8;">📅 ${MONTH_TH[parseInt(mo)]} ${parseInt(yr)+543}</span>
-        <span style="font-size:10px;background:#C4B5FD;color:#1a1a2e;border-radius:10px;padding:1px 7px;font-weight:700;">${items.length} ครั้ง · ${totalDays} วัน</span>
-      </div>
-      ${items.map(l=>`<div class="card" style="margin-bottom:6px;padding:10px 12px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;color:#1a1a2e;">${esc(l.empName)}</div>
-            <div style="font-size:11px;color:#888;">🚛 ${esc(l.plate||'-')}</div>
-            <div style="font-size:12px;color:#475569;margin-top:3px;">📅 ${l.leaveFrom||'-'}${l.leaveTo&&l.leaveTo!==l.leaveFrom?' → '+l.leaveTo:''}</div>
-            ${l.leaveNote?`<div style="font-size:12px;color:#666;margin-top:2px;">📋 ${esc(l.leaveNote)}</div>`:''}
-            ${l.leaveReply?`<div style="font-size:11.5px;color:#1E90D6;margin-top:4px;background:#EFF6FF;border-radius:8px;padding:5px 8px;">💬 ${esc(l.leaveReply)}</div>`:''}
-          </div>
-          <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:14px;font-weight:900;color:#6C3FE8;">${l.days||1}<span style="font-size:10px;font-weight:400;color:#888;"> วัน</span></div>
-            <div style="font-size:9.5px;color:#aaa;margin-top:2px;">✅ ${l.approvedAt?new Date(l.approvedAt).toLocaleDateString('th-TH',{day:'numeric',month:'short'}):'-'}</div>
-            ${canDel?`<button class="btn btn-red btn-sm" style="margin-top:8px;padding:5px 10px;font-size:10.5px;white-space:nowrap;" onclick="deleteLeaveLog('${esc(l.id)}')">🗑️ ลบ</button>`:''}
-          </div>
-        </div>
-      </div>`).join('')}
-    </div>`;
-  }).join('')}`;
-
-  el.innerHTML=html;
+  rows.forEach(l=>{const day=l.actualStartedAt?_leaveDay(l.actualStartedAt):l.leaveFrom;const key=_leaveValidDay(day)?day.slice(0,7):'unknown';(byMonth[key]??=[]).push(l);});
+  const completed=rows.filter(l=>l.leaveFlowVersion===2&&l.actualStartedAt&&l.actualEndedAt&&l.state==='ended');
+  el.innerHTML=`<div class="lv-page"><header class="lv-page-head"><div class="lv-heading"><div><h2>ประวัติการลา</h2><p>แยกวันลาที่ขอไว้กับวันที่ผู้ดูแลยืนยันจริง</p></div></div><div class="lv-rule"><b>${completed.length} ครั้ง · ${completed.reduce((n,l)=>n+(Number(l.days)||0),0)} วัน</b><br>นับเฉพาะรายการที่เริ่มและจบจริงแล้ว</div></header>
+    ${!rows.length?'<div class="lv-empty">ยังไม่มีประวัติการลา</div>':''}
+    ${Object.keys(byMonth).sort().reverse().map(key=>`<details class="lv-archive" ${key===_leaveDay().slice(0,7)?'open':''}><summary>${key==='unknown'?'ไม่ระบุเดือน':esc(_leaveCurrentMonthLabel(new Date(key+'-01T12:00:00+07:00')))} · ${byMonth[key].length} รายการ</summary>${byMonth[key].sort((a,b)=>(b.actualStartedAt||b.leaveFrom||'').localeCompare(a.actualStartedAt||a.leaveFrom||'')).map(l=>{
+      const modern=l.leaveFlowVersion===2;const state=({pending:'รออนุมัติ',ready:'อนุมัติแล้ว · ยังไม่เริ่ม',active:'กำลังลาจริง',ended:'กลับมาทำงานแล้ว',cancelled:'ยกเลิก',rejected:'ไม่อนุมัติ'})[l.state]||'รายการเดิม · วันลาที่ขอไว้';
+      return `<article class="lv-card" style="--lv-color:${modern?'#2563EB':'#94A3B8'}"><div class="lv-card-head"><div class="lv-person"><b>${esc(l.empName||'-')}</b><small>${esc(l.plate||'-')}</small></div><span class="lv-pill">${state}</span></div><div class="lv-dates"><div><small>วันที่ส่งคำขอ</small><strong>${esc(_leaveTimeLabel(l.requestedAt))}</strong></div><div><small>วันลาที่ขอไว้</small><strong>${esc(fmtLeaveRange(l))}</strong></div></div>${modern&&l.actualStartedAt?`<div class="lv-actual"><small>เริ่มลาจริง</small><strong>${esc(_leaveTimeLabel(l.actualStartedAt))}</strong><small>กลับมาทำงานจริง</small><strong>${l.actualEndedAt?esc(_leaveTimeLabel(l.actualEndedAt)):'ยังไม่ยืนยันกลับ'}</strong>${l.actualEndedAt?`<p>รวม ${Number(l.days)||0} วันปฏิทิน</p>`:''}</div>`:'<p class="lv-footnote">ยังไม่มีบันทึกเวลาเริ่มลาจริง จึงไม่รวมในยอดวันลาจริง</p>'}${l.leaveNote?`<p class="lv-note">${esc(l.leaveNote)}</p>`:''}${adminRole==='super'?`<button class="btn btn-gray btn-sm" onclick="deleteLeaveLog('${esc(l.id)}')">ลบประวัตินี้</button>`:''}</article>`;
+    }).join('')}</details>`).join('')}</div>`;
 }
 
 // ── ลบประวัติการลา 1 รายการ (เฉพาะผู้ดูแล/super เท่านั้น) ──────────────────────
@@ -13393,10 +13235,11 @@ function renderAdminEmpList(){
         <div><div class="inp-label">หมายเหตุ</div><textarea class="inp" id="aen2_${e.id}" rows="2">${esc(e.note||'')}</textarea></div>
         <div style="border-top:1px solid #E8EAF0;padding-top:11px;">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#475569;cursor:pointer;">
-            <input type="checkbox" id="aeleave_${e.id}" ${e.onLeave?'checked':''} onchange="toggleAEditLeave('${e.id}')" style="width:18px;height:18px;flex-shrink:0;">
+            <input type="checkbox" id="aeleave_${e.id}" ${e.onLeave?'checked':''} disabled style="width:18px;height:18px;flex-shrink:0;">
             <span class="ic" style="vertical-align:-.14em">${skeIcon('leave')}</span> อยู่ระหว่างลา / แจ้งลา
           </label>
-          <div id="aeleavebox_${e.id}" class="${e.onLeave?'':'hidden'}" style="margin-top:10px;display:flex;flex-direction:column;gap:9px;">
+          <div style="font-size:11px;color:#64748B;margin-top:6px;">จัดการคำขอและยืนยันเริ่ม/จบลาที่เมนู “ลา” เท่านั้น การแก้สถานะรถจะไม่เปลี่ยนวันลา</div>
+          <div id="aeleavebox_${e.id}" class="hidden" style="margin-top:10px;display:flex;flex-direction:column;gap:9px;">
             <div><div class="inp-label">ลาตั้งแต่วันที่</div><input type="date" class="inp" id="aeleavefrom_${e.id}" value="${e.leaveFrom||''}"></div>
             <div><div class="inp-label">ถึงวันที่</div><input type="date" class="inp" id="aeleaveto_${e.id}" value="${e.leaveTo||''}"></div>
             <div><div class="inp-label">หมายเหตุการลา</div><textarea class="inp" id="aeleavenote_${e.id}" rows="2">${esc(e.leaveNote||'')}</textarea></div>
@@ -13599,13 +13442,7 @@ function doSaveAEdit(id){
       routeDeviation:status==='traveling'&&prev.status==='traveling'?(prev.routeDeviation||null):null,
       ...clearJobLinkWhenLeavingGotJob(status)
     };
-    updated.onLeave=onLeave;
-    if(onLeave){
-      updated.leaveFrom=leaveFromVal||prev.leaveFrom||null;
-      updated.leaveTo=leaveToVal||leaveFromVal||prev.leaveTo||null;
-      updated.leaveNote=leaveNoteVal;
-      if(!prev.onLeave)updated.leaveApproval='pending';
-    }
+    // Leave lifecycle changes only through the dedicated, confirmed leave actions.
     if(newPin.length===4&&/^\d{4}$/.test(newPin))updated.pin=newPin;
     recordRunLogIfNeeded(prev,status,note,id,plate,name);
     recordRouteStatusTransition(prev,status,prev.phoneLocation,note,'admin-status',prov);
