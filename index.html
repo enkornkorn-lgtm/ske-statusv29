@@ -755,7 +755,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.64L');
+console.log('[SKE TRUCK] app version: v3.2.65S');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -921,7 +921,7 @@ console.log('[SKE TRUCK] app version: v3.2.64L');
     const oldOps = oldPayload && oldPayload.__skeRecordOps === 1 ? oldPayload.ops : [];
     ob[key] = {
       payload:{ __skeRecordOps:1, ops:_coalesceRecordOps([...(oldOps || []), ...incoming]) },
-      ts:Date.now()
+      ts:ob[key]?.ts || Date.now()
     };
     _obSaveAll(ob);
     _obUpdateIndicator();
@@ -948,7 +948,7 @@ console.log('[SKE TRUCK] app version: v3.2.64L');
       if (Object.keys(patch).length) remaining.push({ ...cur, patch });
     });
     if (remaining.length) {
-      ob[key] = { payload:{ __skeRecordOps:1, ops:remaining }, ts:Date.now() };
+      ob[key] = { payload:{ __skeRecordOps:1, ops:remaining }, ts:ob[key]?.ts || Date.now() };
       _obSaveAll(ob);
       _obUpdateIndicator();
     } else {
@@ -969,21 +969,19 @@ console.log('[SKE TRUCK] app version: v3.2.64L');
     return true;
   }
   function _employeeSnapshotView(data) {
-    // Always consume the server snapshot. Only overlay this device's pending fields;
-    // a failed write for one person must never freeze the entire fleet.
+    // Current status always comes from Firebase, never an unsent local operation.
     _setRecordShadow('employees', data);
     window._employeeListSynced = true;
-    const pending = _obLoad().employees?.payload;
-    const ops = pending?.__skeRecordOps === 1 ? _coalesceRecordOps(pending.ops) : [];
-    const byId = new Map(ops.filter(op => !op.delete).map(op => [op.id, op]));
-    return data.map(row => {
-      const op = byId.get(String(row.id));
-      return op && _employeePatchAllowed(row, op) ? { ...row, ...op.patch, id:row.id } : row;
-    });
+    return data;
   }
   async function _executeRecordOps(path, ops) {
     const cleanOps = _coalesceRecordOps(ops);
     if (!cleanOps.length) return [];
+    // Existing-account status updates use the explicit, revision-checked writer below.
+    // A timer or old outbox must never silently replay a state-changing operation.
+    if(path==='employees' && cleanOps.some(op=>!op.create && _isEmployeeStatusPatch(op.patch))){
+      throw new Error('สถานะค้างต้องยืนยันใหม่ กรุณาเปิดแก้ไขสถานะแล้วกดบันทึก');
+    }
     // อ่านครั้งเดียวเพื่อจับคู่ id -> Firebase key ที่แท้จริง รองรับข้อมูลเก่าที่เป็น array
     // และข้อมูลใหม่ที่ใช้ deterministic key โดยไม่ต้องอ่านซ้ำทีละรายการ
     const snap = await _withTimeout(get(ref(db, path)), SKE_WRITE_TIMEOUT_MS, 'timeout:' + path + '-keys');
@@ -1028,7 +1026,13 @@ console.log('[SKE TRUCK] app version: v3.2.64L');
     const shadow = _recordShadows[path] || new Map();
     results.forEach(({ op, value }) => {
       if (op.delete || !value) shadow.delete(op.id);
-      else shadow.set(op.id, _cloneRecord(value));
+      else {
+        const newer=shadow.get(op.id);
+        if(path==='employees'&&newer&&((Number(newer.statusRevision)||0)>(Number(value.statusRevision)||0)
+          ||((Number(newer.statusRevision)||0)===(Number(value.statusRevision)||0)
+            &&Date.parse(newer.updatedAt||'')>Date.parse(value.updatedAt||''))))return;
+        shadow.set(op.id, _cloneRecord(value));
+      }
     });
     _recordShadows[path] = shadow;
     return results;
@@ -1078,14 +1082,18 @@ console.log('[SKE TRUCK] app version: v3.2.64L');
       const entry = ob[key];
       if (!entry) return;
       // งานค้างเก่าเกินไป — ห้ามส่ง (payload ทั้งชุด ณ เวลานั้นจะไปทับข้อมูลใหม่ของเครื่องอื่น) ทิ้งแล้วปลดล็อกรับข้อมูลใหม่
-      if (Date.now() - (entry.ts || 0) > SKE_OUTBOX_MAX_AGE_MS) {
+      if (key !== 'employees' && Date.now() - (entry.ts || 0) > SKE_OUTBOX_MAX_AGE_MS) {
         console.warn('[SKE outbox] งานค้าง "' + key + '" หมดอายุ — ทิ้ง ไม่ส่งซ้ำ');
         _obClear(key);
         return;
       }
       if (_recordWriteBusy[key]) return;
       let p = null;
-      if (key === 'employees' && window.fbSaveEmployees) p = window.fbSaveEmployees(entry.payload);
+      if (key === 'employees' && window.fbSaveEmployees) {
+        // Even pre-recordOps array outboxes are drafts, never fresh user status commands.
+        const legacy=entry.payload?.__skeRecordOps===1?entry.payload:{__skeRecordOps:1,ops:_buildRecordOps('employees',Array.isArray(entry.payload)?entry.payload:[],false)};
+        p=window.fbSaveEmployees(_reviewOldEmployeeStatusOps(legacy));
+      }
       else if (key === 'vehicles' && window.fbSaveVehicles) p = window.fbSaveVehicles(entry.payload);
       else if (key === 'repairs' && window.fbSaveRepairs) p = window.fbSaveRepairs(entry.payload);
       else if (key === 'fluidLogs' && window.fbSaveFluidLogs) p = window.fbSaveFluidLogs(entry.payload);
@@ -1211,17 +1219,149 @@ console.log('[SKE TRUCK] app version: v3.2.64L');
   // บันทึกเฉพาะพนักงานที่เพิ่ม/แก้/ลบ โดยเทียบกับ shadow ล่าสุดของเครื่อง
   window.fbSaveEmployees = function(emps) {
     if (!window._employeeListSynced) return Promise.reject(new Error('ยังโหลดรายชื่อจากส่วนกลางไม่ครบ กรุณารอสักครู่'));
+    if(emps?.__skeRecordOps===1){
+      return _saveRecordList('employees','employees',_reviewOldEmployeeStatusOps(emps),emp=>emp&&!_isEmployeeDeleted(emp.id));
+    }
+    const ops=_buildRecordOps('employees',(Array.isArray(emps)?emps:[]).filter(e=>e&&!_isEmployeeDeleted(e.id)),false);
+    const statusOps=ops.filter(op=>!op.create&&_isEmployeeStatusPatch(op.patch));
+    if(statusOps.length){
+      const other=ops.filter(op=>!statusOps.includes(op));
+      return Promise.all([
+        ...statusOps.map(op=>_commitEmployeeStatus(op.id,op.patch,{source:'admin-edit'})),
+        _queueRecordOps('employees','employees',other)
+      ]);
+    }
     return _saveRecordList('employees', 'employees', emps, emp => emp && !_isEmployeeDeleted(emp.id));
   };
 
   // อัพเดทเฉพาะ "ของพนักงานคนเดียว" (ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์มาก่อนแล้วแก้เฉพาะฟิลด์ที่เปลี่ยน)
   // ป้องกันปัญหาเขียนทับทั้งรายชื่อแล้วทำสถานะของพนักงานคนอื่นที่เพิ่งอัพเดทไปหายโดยไม่ได้ตั้งใจ
   // ครอบด้วย timeout กันเคสเน็ตช้า/หลุดกลางทางแล้วค้างรอไม่มีกำหนด (จุดที่ .catch fallback ของทุกจุดเรียกจะยังทำงานได้)
-  window.fbUpdateEmployeeFields = async function(empId, patch) {
+  window.fbUpdateEmployeeFields = async function(empId, patch, options={}) {
     if (_isEmployeeDeleted(empId)) throw new Error('employee account was deleted');
+    if(_isEmployeeStatusPatch(patch))return _commitEmployeeStatus(empId,patch,options);
     await _patchRecord('employees', 'employees', empId, patch);
-    employees = (employees || []).map(e => e && e.id === empId ? { ...e, ...patch } : e);
-    _skeCacheSet('ske_emp', employees);
+    // onValue is authoritative. Do not reapply an older GPS/profile patch after its acknowledgement.
+  };
+
+  // Preserve unconfirmed legacy status as a local draft for review, not a replayable command.
+  function _reviewOldEmployeeStatusOps(payload){
+    const safe=[],review=[];
+    _coalesceRecordOps(payload.ops).forEach(op=>{
+      if(!op.create&&!op.delete&&_isEmployeeStatusPatch(op.patch))review.push(op);
+      else safe.push(op);
+    });
+    if(review.length){
+      let drafts={};
+      try{drafts=JSON.parse(localStorage.getItem('ske_status_review_v1')||'{}')||{};}catch(_){}
+      Object.assign(drafts,window._skeStatusReview||{});
+      review.forEach(op=>{drafts[op.id]={patch:op.patch,reason:'สถานะเดิมยังไม่ยืนยัน กรุณาเลือกและบันทึกใหม่',savedAt:Date.now()};});
+      window._skeStatusReview=drafts;
+      try{
+        localStorage.setItem('ske_status_review_v1',JSON.stringify(drafts));
+        _obAckRecordOps('employees',review);
+      }catch(_){/* Keep original durable outbox if draft storage is full; never execute these ops. */}
+      if(typeof showDocUploadToast==='function'&&!window._skeStatusReviewNotified){
+        window._skeStatusReviewNotified=true;
+        showDocUploadToast('⚠️ พบสถานะเก่าที่ยังไม่ยืนยัน เก็บเป็นร่างไว้แล้ว กรุณาเปิดแก้ไขสถานะและเลือกใหม่',false);
+      }
+    }
+    return {__skeRecordOps:1,ops:safe};
+  }
+  const _statusWrites=new Map();
+  function _statusWriteError(code,message){const e=new Error(message);e.code=code;return e;}
+  function _restoreConfirmedEmployee(empId){
+    const row=_recordShadows.employees?.get(String(empId));
+    if(!row)return;
+    employees=(employees||[]).map(e=>String(e.id)===String(empId)?{...row}:e);
+    if(currentUser&&String(currentUser.id)===String(empId)){currentUser={...row};saveU();}
+    _skeCacheSet('ske_emp',employees);
+  }
+  function _acceptStatusAcknowledgement(row){
+    if(!row)return;
+    const id=String(row.id),shadow=_recordShadows.employees?.get(id);
+    // A later realtime snapshot wins over an older transaction response.
+    if(shadow&&((Number(shadow.statusRevision)||0)>(Number(row.statusRevision)||0)
+      ||((Number(shadow.statusRevision)||0)===(Number(row.statusRevision)||0)
+        &&Date.parse(shadow.updatedAt||'')>Date.parse(row.updatedAt||'')))){
+      _restoreConfirmedEmployee(id);return;
+    }
+    const liveGps=shadow?.phoneLocation;
+    const merged={...row};
+    if(liveGps&&Date.parse(liveGps.capturedAt||'')>(Date.parse(row.phoneLocation?.capturedAt||'')||0))merged.phoneLocation=liveGps;
+    (_recordShadows.employees||=new Map()).set(id,_cloneRecord(merged));
+    _restoreConfirmedEmployee(id);
+  }
+  async function _commitEmployeeStatus(empId,patch,options={}){
+    const id=String(empId||'');
+    if(_statusWrites.has(id))throw _statusWriteError('status-pending','รายการก่อนหน้ายังรอส่วนกลางยืนยัน กรุณารอหรือตรวจการเชื่อมต่อ');
+    if(!window._employeeListSynced||!window._fbConnected||navigator.onLine===false){
+      _restoreConfirmedEmployee(id);
+      throw _statusWriteError('status-offline','ยังเชื่อมต่อส่วนกลางไม่ได้ สถานะยังไม่เปลี่ยน กรุณาต่ออินเทอร์เน็ตแล้วกดบันทึกใหม่');
+    }
+    const base=options.expected||_recordShadows.employees?.get(id);
+    if(!base||_isEmployeeDeleted(id))throw _statusWriteError('status-missing','ไม่พบสถานะล่าสุด กรุณารีเฟรชก่อนบันทึก');
+    patch={...patch,status:patch.status??base.status};
+    const expected=_skeStatusFingerprint(base);
+    const source=options.source||(adminMode?'admin-edit':'employee');
+    const actor=adminMode?'admin':String(currentUser?.id||'');
+    const requestId='st_'+Date.now()+'_'+Math.random().toString(36).slice(2,10);
+    const ownsSession=()=>adminMode?actor==='admin'&&adminRole==='super':actor===id&&String(currentUser?.id||'')===id;
+    if(!ownsSession())throw _statusWriteError('status-denied','บัญชีนี้ไม่มีสิทธิ์แก้สถานะ กรุณาเข้าใช้งานใหม่');
+    const task=(async()=>{
+      const snap=await _withTimeout(get(ref(db,'employees')),SKE_WRITE_TIMEOUT_MS,'โหลดสถานะล่าสุดไม่สำเร็จ');
+      let key=null;snap.forEach(child=>{if(String(child.val()?.id||'')===id)key=child.key;return false;});
+      if(key===null)throw _statusWriteError('status-missing','ไม่พบรายชื่อในส่วนกลาง');
+      // Use Firebase's clock offset, not an incorrectly set phone clock.
+      const offsetSnap=await _withTimeout(get(ref(db,'.info/serverTimeOffset')),8000,'ตรวจเวลาส่วนกลางไม่สำเร็จ');
+      const rawOffset=offsetSnap.val(),offset=Number(rawOffset);
+      if(rawOffset===null||!Number.isFinite(offset))throw new Error('ยังตรวจเวลาส่วนกลางไม่ได้');
+      const at=new Date(Date.now()+offset).toISOString();
+      const tx=await runTransaction(ref(db,'employees/'+key),current=>{
+        if(!ownsSession()||!current||String(current.id)!==id)return;
+        if(current.lastStatusChange?.id===requestId)return current;
+        if(_skeStatusFingerprint(current)!==expected)return;
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,version:'v3.2.65S'};
+        const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
+        return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
+          ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
+          statusRevision:(Number(current.statusRevision)||0)+1,lastStatusChange:event,statusHistory:history.concat(event).slice(-20)};
+      },{applyLocally:false});
+      if(!tx.committed){
+        if(tx.snapshot?.val())_acceptStatusAcknowledgement(tx.snapshot.val());
+        throw _statusWriteError('status-conflict','มีสถานะใหม่จากอีกเครื่องแล้ว กรุณาตรวจสถานะล่าสุดและกดเลือกใหม่');
+      }
+      const saved=tx.snapshot.val();_acceptStatusAcknowledgement(saved);
+      const staleOps=_obLoad().employees?.payload?.ops||[];
+      _obAckRecordOps('employees',staleOps.filter(op=>String(op.id)===id&&!op.create&&_isEmployeeStatusPatch(op.patch)));
+      try{
+        const drafts=JSON.parse(localStorage.getItem('ske_status_review_v1')||'{}');delete drafts[id];
+        localStorage.setItem('ske_status_review_v1',JSON.stringify(drafts));
+        if(window._skeStatusReview)delete window._skeStatusReview[id];
+      }catch(_){}
+      return saved;
+    })();
+    _statusWrites.set(id,task);
+    task.then(()=>_statusWrites.delete(id),()=>{_statusWrites.delete(id);_restoreConfirmedEmployee(id);});
+    return _withTimeout(task,60000,'ยังรอส่วนกลางยืนยันสถานะ กรุณาเปิดแอปไว้และอย่ากดซ้ำ');
+  }
+
+  window.fbFinishStatusJobs=async function(plan,at,statusChangeId){
+    const snap=await _withTimeout(get(ref(db,'jobPlan')),SKE_WRITE_TIMEOUT_MS,'ยังตรวจแผนงานไม่ได้');
+    const keys=new Map();snap.forEach(c=>{const r=c.val();if(r?.id)keys.set(String(r.id),c.key);return false;});
+    for(const change of plan.changes){
+      const key=keys.get(String(change.id));if(key==null)throw new Error('แถวงานถูกเปลี่ยนหรือลบแล้ว');
+      const tx=await _withTimeout(runTransaction(ref(db,'jobPlan/'+key),current=>{
+        if(!current||String(current.id)!==String(change.id)||String(current.empId)!==String(change.empId))return;
+        if(current.statusChangeId===statusChangeId&&current.assignmentState===change.state)return current;
+        if(!current.dispatched||(current.assignmentState||'')!==change.expectedState)return;
+        return {...current,assignmentState:change.state,statusChangeId,
+          ...(change.state==='completed'?{completedAt:at}:{activatedAt:at})};
+      },{applyLocally:false}),SKE_WRITE_TIMEOUT_MS,'แผนงานยังรอยืนยัน');
+      if(!tx.committed)throw new Error('แผนงานถูกเปลี่ยนจากอีกเครื่อง กรุณาตรวจแถวงาน');
+      const saved=tx.snapshot.val();jobPlanRows=jobPlanRows.map(r=>r.id===saved.id?saved:r);
+    }
+    _skeCacheSet('ske_jobplan',jobPlanRows);
   };
 
   // ตั้ง PIN แล้วอ่านกลับจาก Firebase เพื่อยืนยันว่าเครื่องพนักงานเครื่องอื่นจะได้รหัสใหม่จริง
@@ -4184,7 +4324,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.64L</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.65S</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4192,7 +4332,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.64L</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.65S</div>
       </div>
     </div>
 
@@ -4566,7 +4706,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.64L</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.65S</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5242,7 +5382,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.64L';
+const SKE_APP_VERSION='v3.2.65S';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5347,15 +5487,21 @@ function _cacheSet(key,value){
   catch(e){console.error('[SKE] พื้นที่เก็บในเครื่องเต็ม:',key);return false;}
 }
 
-// Retry only this person's patch through the outbox; never fall back to a full roster write.
-function fbPatchEmployee(empId,patch){
+// Route this person's status to the confirmed writer; never fall back to a full roster write.
+function fbPatchEmployee(empId,patch,options){
   if(window.skeIsEmployeeDeleted&&window.skeIsEmployeeDeleted(empId)){
     return Promise.reject(new Error('employee account was deleted'));
   }
   if(window.fbUpdateEmployeeFields){
-    return window.fbUpdateEmployeeFields(empId,patch);
+    return window.fbUpdateEmployeeFields(empId,patch,options);
   }
   return Promise.reject(new Error('Firebase employee writer is not ready'));
+}
+function _skeStatusFingerprint(e){
+  return JSON.stringify([e?.statusRevision||0,e?.status||'',e?.updatedAt||'',e?.province||'',e?.note||'',e?.currentJobPlanId||'']);
+}
+function _isEmployeeStatusPatch(patch){
+  return Object.prototype.hasOwnProperty.call(patch||{},'status')||Object.prototype.hasOwnProperty.call(patch||{},'updatedAt');
 }
 
 // ══ คลังรูปฝั่งแอป ══
@@ -11201,12 +11347,23 @@ function renderStandbyByProv(){
 }
 
 
+function _prepareJobCompletion(emp){
+  const current=getCurrentEmployeeJobRow(emp);
+  const next=getOpenEmployeeJobRows(emp.id).filter(r=>r.id!==current?.id&&(r.assignmentState==='queued'||!!current)).sort(sortEmployeeJobRows)[0]||null;
+  const changes=[];
+  if(current)changes.push({id:current.id,empId:emp.id,expectedState:current.assignmentState||'',state:'completed'});
+  if(next)changes.push({id:next.id,empId:emp.id,expectedState:next.assignmentState||'',state:'active'});
+  return {next,changes};
+}
+let _statusSaving=false,_statusFormExpected=null;
 function openStatusModal(){
+  if(_statusSaving)return;
   if(!currentUser)return;
   const me=employees.find(e=>e.id===currentUser.id)||currentUser;
   if(!me)return;
   _selStatus=me.status;
   _selProv=me.province||'';
+  _statusFormExpected=JSON.parse(JSON.stringify(me));
   closeStatusModal(false);
   editOpen=true; // สำคัญ: กันไม่ให้ renderDashboard (ที่ทำงานพื้นหลังตอนมีข้อมูลอัพเดทจากคนอื่น) มาทับค่าที่กำลังกรอกอยู่ในฟอร์มนี้
   const canFinishJob=Boolean(getCurrentEmployeeJobRow(me))||EMPLOYEE_FINISHABLE_STATUSES.has(me.status);
@@ -11244,12 +11401,14 @@ function openStatusModal(){
       <div class="inp-label" style="margin-top:10px;">หมายเหตุ</div>
       <textarea id="noteInp" rows="2" class="inp" style="width:100%;" placeholder="หมายเหตุ (ไม่บังคับ)">${esc(me.note||'')}</textarea>
       <div style="font-size:10.5px;color:#64748B;line-height:1.45;margin-top:7px;">📍 เมื่อกดบันทึก ระบบจะขอตำแหน่งจากโทรศัพท์ และติดตามเป็นระยะขณะที่เปิดแอป (หากอนุญาตแล้ว)</div>
+      <div id="statusSaveError" hidden role="alert" style="margin-top:8px;color:#B91C1C;font-size:12px;line-height:1.5;"></div>
       <button class="btn btn-blue btn-full" style="margin-top:12px;" onclick="doSave()">✓ บันทึกสถานะ</button>
     </div>`;
   modal.addEventListener('click',()=>closeStatusModal());
   document.body.appendChild(modal);
 }
 function closeStatusModal(reset=true){
+  if(_statusSaving)return;
   const m=document.getElementById('statusEditModal');
   if(m)m.remove();
   if(reset){editOpen=false;}
@@ -11284,6 +11443,7 @@ function closeEmployeeStatusSavedPopup(){
 function toggleEdit(){openStatusModal();}
 
 function selStat(id){
+  if(_statusSaving)return;
   // อ่านค่าจังหวัดจาก dropdown ก่อน re-render เพื่อไม่ให้หาย
   const curSel=document.getElementById('provSel');
   if(curSel)_selProv=curSel.value;
@@ -11319,136 +11479,85 @@ function clearJobLinkWhenLeavingGotJob(status){
 }
 
 async function doSave(){
-  // อ่านสถานะที่กำลังเลือกอยู่จริงจากปุ่มที่ถูกไฮไลต์บนจอเป็นหลัก ไม่พึ่งตัวแปร _selStatus เพียงอย่างเดียว
-  // (กันกรณีข้อมูลพื้นหลังอัพเดทมาทับตัวแปรระหว่างที่ฟอร์มเปิดค้างอยู่ ทำให้บันทึกสถานะ/จังหวัดผิดไปจากที่เห็นบนจอจริง)
-  const selectedBtn=document.querySelector('#statusEditModal .status-opt.sel');
-  if(selectedBtn?.id)_selStatus=selectedBtn.id.replace('sopt_','');
-  const note=document.getElementById('noteInp')?.value||'';
-  const provSel=document.getElementById('provSel');
+  if(_statusSaving||!currentUser)return;
+  const modal=document.getElementById('statusEditModal');
+  const selectedBtn=modal?.querySelector('.status-opt.sel');
+  const selectedStatus=selectedBtn?.id?.replace('sopt_','')||_selStatus;
   const empId=currentUser.id;
   const prev=employees.find(e=>e.id===empId);
-  // รองรับขั้นตอนเดิม: ถ้ากำลังไหลกลับแล้วเลือก "สแตนบายว่างงาน"
-  // ให้ถือว่าเป็นการปิดงานปัจจุบันเช่นเดียวกับปุ่ม "จบงาน"
-  const isFinishAction=_selStatus==='finish_job'||(_selStatus==='done'&&prev?.status==='returning');
-  // พนักงานตำแหน่งออฟฟิศ (เช่นแอดมิน) หรือไม่มีทะเบียนรถผูกอยู่ ไม่ต้องเลือกจังหวัดสแตนบาย
-  const isOffice=!canSelfUpdateVehicleStatus(currentUser?.position);
-  if(isOffice&&_selStatus==='standby'){
-    alert('⚠️ ตำแหน่งนี้ไม่สามารถเลือกสถานะ "สแตนบายรอขึ้นงาน" ได้');
-    return;
-  }
-  const needProv=!isOffice&&(_selStatus==='standby'||_selStatus==='traveling'||_selStatus==='returning'||_selStatus==='done'||isFinishAction);
+  if(!prev)return;
+  const expected=JSON.parse(JSON.stringify(_statusFormExpected||prev));
+  const note=String(document.getElementById('noteInp')?.value||'');
+  const isFinishAction=selectedStatus==='finish_job'||(selectedStatus==='done'&&prev.status==='returning');
+  const isOffice=!canSelfUpdateVehicleStatus(currentUser.position);
+  if(![...STATUSES,FINISH_JOB_STATUS].some(s=>s.id===selectedStatus))return;
+  if(isOffice&&selectedStatus==='standby'){alert('ตำแหน่งนี้ไม่สามารถเลือกสแตนบายรอขึ้นงานได้');return;}
+  const needProv=!isOffice&&(['standby','traveling','returning','done'].includes(selectedStatus)||isFinishAction);
+  const provSel=document.getElementById('provSel');
   const prov=needProv?String((provSel?provSel.value:_selProv)||'').trim():'';
-  if(needProv&&!prov){
-    alert('⚠️ กรุณาเลือกจังหวัดก่อนบันทึกสถานะ');
-    if(provSel){provSel.focus();provSel.style.borderColor='#DC2626';provSel.style.boxShadow='0 0 0 2px #FCA5A5';}
-    return;
-  }
-  if(needProv&&!isValidProvince(prov)){
-    alert('⚠️ ไม่พบจังหวัดนี้ในรายชื่อ กรุณาเลือกจากรายการที่พิมพ์ขึ้นมา (พิมพ์แล้วแตะเลือกจากลิสต์)');
-    if(provSel){provSel.focus();provSel.style.borderColor='#DC2626';provSel.style.boxShadow='0 0 0 2px #FCA5A5';}
-    return;
-  }
-  const saveBtn=document.querySelector('#statusEditModal .btn-blue');
-  if(saveBtn){
-    if(saveBtn.disabled)return;
-    saveBtn.disabled=true;
-    saveBtn.textContent='📍 กำลังตรวจตำแหน่งและบันทึก...';
-  }
-  // พยายามอ่าน GPS ทุกครั้งที่บันทึกสถานะ แต่หากผู้ใช้ไม่อนุญาต/หา GPS ไม่ทัน
-  // ยังบันทึกสถานะเดิมได้ตามปกติ ไม่บังคับให้พนักงานติดค้างอยู่ในฟอร์ม
-  const phoneLocation=await getEmployeePhoneLocationForSave();
-  const now=new Date().toISOString();
-  // บันทึก standbyAt เมื่อเปลี่ยนมาเป็น standby ครั้งแรก
-  const standbyAt=(_selStatus==='standby'&&prev?.status!=='standby')?now:(prev?.standbyAt||null);
-  // "จบงาน" เป็นคำสั่งเปลี่ยนผ่าน:
-  // ปิดแถวงานเดิม แล้วเลื่อนงาน queued แรกขึ้นเป็น "ได้งานแล้ว" อัตโนมัติ
-  // หากไม่มีงาน queued จะบันทึกสถานะปลายทางเป็น "สแตนบายว่างงาน"
-  const promotedJob=isFinishAction?await finishCurrentJobAndPromoteNext(prev):null;
-  const finalStatus=isFinishAction?'done':_selStatus;
-  // ต้นทางล็อกตอนกด "กำลังขึ้นงาน" ส่วนปลายทางล็อกจากจังหวัดที่เลือกตอน "ออกเดินทาง"
-  const routeStatusFields=_skeRouteStatusFields(prev,finalStatus,phoneLocation,prov,now);
-  const patch=promotedJob?{
-    status:'got_job',
-    province:'',
-    note:buildJobNoteText(promotedJob),
-    updatedAt:now,
-    standbyAt:null,
-    jobWorkDate:promotedJob.workDate||'',
-    currentJobPlanId:promotedJob.id,
-    previousStatus:'done',
-    previousProvince:prov,
-    previousNote:note,
-    previousStandbyAt:null,
-    ...routeStatusFields,
-    ...(phoneLocation?{phoneLocation}:{})
-  }:{
-    status:finalStatus,
-    province:prov,
-    note,
-    updatedAt:now,
-    standbyAt:finalStatus==='standby'?standbyAt:null,
-    ...routeStatusFields,
-    ...(phoneLocation?{phoneLocation}:{}),
-    ...clearJobLinkWhenLeavingGotJob(finalStatus)
-  };
-  if(phoneLocation){
-    _skePhoneGpsLastSentAt=Date.now();
-    _skePhoneGpsLastSentCoords={lat:phoneLocation.lat,lng:phoneLocation.lng};
-    if(_skePhonePlaceNeedsResolve(phoneLocation)){
-      setTimeout(()=>queueEmployeePhonePlaceLookup(empId,phoneLocation),0);
-    }
-  }
-  recordRunLogIfNeeded(prev,finalStatus,note,empId,prev?.plate||currentUser.plate,prev?.name||currentUser.name);
-  recordRouteStatusTransition(prev,finalStatus,phoneLocation,note,'employee-status',prov);
-  patch.routeDeviation=patch.status==='traveling'&&phoneLocation
-    ?_skeEvaluateRouteDeviation({...prev,...patch},phoneLocation,Date.now())
-    :null;
-  if(patch.status==='traveling'&&phoneLocation)_skeUpdateRouteDeviationEvent(empId,patch.routeDeviation,phoneLocation);
-  const reapplySavedPatch=()=>{
-    employees=(employees||[]).map(e=>e&&e.id===empId?{...e,...patch}:e);
-    if(currentUser?.id===empId)currentUser={...currentUser,...patch};
-    _cacheSet('ske_emp',employees);
-    saveU();
-  };
-  reapplySavedPatch();
-
-  // เริ่มเขียนก่อนปิด modal/renderDashboard เพื่อให้ outbox ถูกสร้างแบบ synchronous
-  // แล้ว onValue ที่ถูกเข้าคิวด้วยจังหวัดเก่าจะไม่สามารถย้อนมาทับค่าที่ผู้ใช้เพิ่งเลือกได้
-  let savePromise;
-  if(window.fbUpdateEmployeeFields){
-    savePromise=fbPatchEmployee(empId,patch);
-  }else if(window.fbSaveEmployees){
-    savePromise=window.fbSaveEmployees(employees);
-  }else{
-    savePromise=Promise.reject(new Error('Firebase employee writer is not ready'));
-  }
-
-  editOpen=false;closeStatusModal(false);renderDashboard();
-  // รอผลการบันทึกจริงก่อนแจ้งผล — เดิมยิงแบบไม่รอผลแล้วโชว์ "บันทึกสำเร็จ" ทันที
-  // ทำให้เน็ตสะดุดแล้วพนักงานเห็น "สำเร็จ" ทั้งที่ยังไม่ถึงเซิร์ฟเวอร์จริง ต้องกดซ้ำหลายรอบกว่าจะติด
+  if(needProv&&!isValidProvince(prov)){alert('กรุณาเลือกจังหวัดจากรายการก่อนบันทึก');provSel?.focus();return;}
+  const saveBtn=modal?.querySelector('.btn-blue');
+  const controls=Array.from(modal?.querySelectorAll('button,input,select,textarea')||[]).map(el=>[el,el.disabled]);
+  _statusSaving=true;
+  controls.forEach(([el])=>{el.disabled=true;});
+  if(saveBtn)saveBtn.textContent='กำลังตรวจตำแหน่งและยืนยันกับส่วนกลาง...';
+  const errorEl=document.getElementById('statusSaveError');
+  if(errorEl){errorEl.textContent='';errorEl.hidden=true;}
   try{
-    await savePromise;
-    // ย้ำ state/cache หลัง transaction สำเร็จ เผื่อ callback เก่าถูกเข้าคิวก่อนหน้า
-    reapplySavedPatch();
-    renderDashboard();
-    if(promotedJob){
-      showDocUploadToast('✅ จบงานเดิมแล้ว — ระบบเลื่อนงานถัดไปขึ้นเป็น "ได้งานแล้ว" อัตโนมัติ',true);
-    }else if(isFinishAction){
-      showDocUploadToast('✅ จบงานแล้ว — ไม่มีงานถัดไป ระบบเปลี่ยนเป็น "สแตนบายว่างงาน" อัตโนมัติ',true);
-    }else{
-      showEmployeeStatusSavedPopup();
+    // Freeze the submitted form before any await. GPS failure never blocks a status save.
+    const phoneLocation=await getEmployeePhoneLocationForSave().catch(()=>null);
+    if(currentUser?.id!==empId||adminMode)throw new Error('บัญชีผู้ใช้งานเปลี่ยนแล้ว กรุณาเปิดแก้ไขสถานะใหม่');
+    const now=new Date().toISOString();
+    const finishPlan=isFinishAction?_prepareJobCompletion(prev):null;
+    const next=finishPlan?.next||null;
+    const finalStatus=isFinishAction?'done':selectedStatus;
+    const routeFields=_skeRouteStatusFields(prev,finalStatus,phoneLocation,prov,now);
+    const patch=next?{
+      status:'got_job',province:'',note:buildJobNoteText(next),updatedAt:now,standbyAt:null,
+      jobWorkDate:next.workDate||'',currentJobPlanId:next.id,
+      previousStatus:'done',previousProvince:prov,previousNote:note,previousStandbyAt:null,
+      ...routeFields,...(phoneLocation?{phoneLocation}:{})
+    }:{
+      status:finalStatus,province:prov,note,updatedAt:now,
+      standbyAt:finalStatus==='standby'?(prev.status==='standby'?prev.standbyAt||now:now):null,
+      ...routeFields,...(phoneLocation?{phoneLocation}:{}),...clearJobLinkWhenLeavingGotJob(finalStatus)
+    };
+    patch.routeDeviation=patch.status==='traveling'&&phoneLocation?_skeEvaluateRouteDeviation({...prev,...patch},phoneLocation,Date.now()):null;
+    // No optimistic status and no general outbox retry. The server must acknowledge this exact intent.
+    const saved=await fbPatchEmployee(empId,patch,{expected,source:isFinishAction?'employee-finish':'employee'});
+    let jobWarning='';
+    if(finishPlan?.changes.length){
+      try{await window.fbFinishStatusJobs(finishPlan,saved.updatedAt,saved.lastStatusChange?.id||'');}
+      catch(e){console.warn('status saved; job completion not confirmed',e);jobWarning='สถานะบันทึกแล้ว แต่แผนงานยังยืนยันไม่ครบ กรุณาให้ผู้ดูแลตรวจแถวงานก่อนจ่ายซ้ำ';}
     }
+    // Secondary history/GPS operations must not turn a successful status save into a false failure.
+    try{
+      recordRunLogIfNeeded(prev,finalStatus,note,empId,prev.plate,prev.name);
+      recordRouteStatusTransition(prev,finalStatus,phoneLocation,note,'employee-status',prov);
+      if(phoneLocation){
+        _skePhoneGpsLastSentAt=Date.now();_skePhoneGpsLastSentCoords={lat:phoneLocation.lat,lng:phoneLocation.lng};
+        if(_skePhonePlaceNeedsResolve(phoneLocation))queueEmployeePhonePlaceLookup(empId,phoneLocation);
+      }
+    }catch(e){console.warn('status history follow-up',e);}
+    _statusSaving=false;editOpen=false;closeStatusModal(false);renderDashboard();
+    if(jobWarning)showDocUploadToast('⚠️ '+jobWarning,false);
+    else if(next)showDocUploadToast('✅ จบงานเดิมแล้ว — งานถัดไปเป็น “ได้งานแล้ว”',true);
+    else if(isFinishAction)showDocUploadToast('✅ จบงานแล้ว — เปลี่ยนเป็นสแตนบายว่างงาน',true);
+    else showEmployeeStatusSavedPopup();
+    startAlertTimer();
   }catch(e){
-    // เน็ตช้า/หลุด — ข้อมูลถูกคิวไว้ใน outbox แล้ว (ระบบส่งซ้ำอัตโนมัติทุก 8 วิ) ไม่ต้องให้กดซ้ำ กันสถานะซ้อนกัน
-    reapplySavedPatch();
-    renderDashboard();
-    console.warn('doSave: บันทึกไม่สำเร็จในทันที รอคิวส่งซ้ำอัตโนมัติ',e);
-    showDocUploadToast(window._skeOutboxDurable===false
-      ?'⚠️ ยังไม่ถึงส่วนกลาง และพื้นที่เครื่องเต็ม กรุณาเปิดแอปไว้จนบันทึกสำเร็จ หากปิดแอปต้องตรวจและส่งสถานะใหม่'
-      :'⚠️ ยังบันทึกส่วนกลางไม่สำเร็จ ระบบกำลังลองส่งซ้ำ กรุณาตรวจว่าสถานะตรงกับส่วนกลางก่อนปิดแอป',false);
+    console.warn('status save not confirmed',e);
+    const message=e?.message||'ยังยืนยันสถานะไม่ได้ กรุณาตรวจการเชื่อมต่อแล้วลองใหม่';
+    if(errorEl){errorEl.textContent='⚠️ '+message;errorEl.hidden=false;}
+    showDocUploadToast('⚠️ '+message,false);
+    // Keep the entered form for retry; refresh its expected revision, not its selected values.
+    const latest=employees.find(e=>e.id===empId);
+    if(latest)_statusFormExpected=JSON.parse(JSON.stringify(latest));
+  }finally{
+    _statusSaving=false;
+    controls.forEach(([el,disabled])=>{el.disabled=disabled;});
+    if(saveBtn)saveBtn.textContent='✓ บันทึกสถานะ';
   }
-  // reset timer หลังอัพเดทสถานะ
-  startAlertTimer();
 }
 
 // ══ Export บันทึกเที่ยววิ่งเป็น CSV (สำหรับแอดมินเก็บถาวรก่อนข้อมูลถูกลบอัตโนมัติตามอายุ 3 เดือน) ══
@@ -12245,15 +12354,15 @@ async function finishCurrentJobAndPromoteNext(emp){
 
 // บันทึกแผนงาน — ถ้าระบุ changedRowIds จะ transaction เฉพาะแถวเหล่านั้น
 // ถ้าไม่ระบุ ระบบจะเทียบ shadow แล้วส่งเฉพาะแถว/ฟิลด์ที่เปลี่ยน ไม่เขียนแผนงานทั้งก้อน
-async function saveJobPlan(changedRowIds){
+async function saveJobPlan(changedRowIds,strict=false){
   _cacheSet('ske_jobplan',jobPlanRows);
-  if(!window.fbSaveJobPlan)return;
+  if(!window.fbSaveJobPlan){if(strict)throw new Error('ยังเชื่อมต่อแผนงานส่วนกลางไม่ได้');return;}
   const ids=changedRowIds?(Array.isArray(changedRowIds)?changedRowIds:[changedRowIds]):null;
   if(ids&&ids.length&&window.fbSaveJobPlanRows){
     const changedRows=ids.map(rid=>jobPlanRows.find(r=>r.id===rid)).filter(Boolean);
-    if(changedRows.length)return window.fbSaveJobPlanRows(changedRows).catch(()=>{});
+    if(changedRows.length)return window.fbSaveJobPlanRows(changedRows).catch(e=>{if(strict)throw e;});
   }
-  return window.fbSaveJobPlan(jobPlanRows).catch(()=>{});
+  return window.fbSaveJobPlan(jobPlanRows).catch(e=>{if(strict)throw e;});
 }
 
 function renderJobPlanRowTR(row){
@@ -12377,9 +12486,7 @@ function renderJobPlan(){
       <div class="acc-body hidden" style="padding:12px;">${bodyHtml}</div>
     </div>`;
   }).join('');
-  // งานที่เคยจ่ายจากเวอร์ชันเก่าอาจยังติดสถานะ queued (มีรูปนาฬิกาทราย)
-  // ให้ผู้ดูแลตัวจริงซ่อมรายการค้างเหล่านี้อัตโนมัติ แล้วพนักงานจะเป็น "ได้งานแล้ว" ตามกติกาใหม่
-  scheduleLegacyQueuedDispatchRepair();
+  // Never change employee status while merely viewing or refreshing a work plan.
 }
 
 // เติมเส้นทางที่ "ขาดหายไป" ให้ตรงกับเทมเพลตล่าสุด — ใช้เมื่อแก้ไข/เพิ่มเทมเพลตทีหลัง จากที่วันนั้นถูกสร้างไปแล้ว
@@ -12502,6 +12609,9 @@ function confirmCopyRouteToDate(){
 }
 
 async function delJobPlanRow(id){
+  if(window._jobStatusActionBusy){alert('กรุณารอรายการก่อนหน้ายืนยันก่อน');return;}
+  window._jobStatusActionBusy=true;
+  try{
   const row=jobPlanRows.find(r=>r.id===id);
   if(!row)return;
   if(!confirm('ลบเส้นทางนี้?'))return;
@@ -12521,6 +12631,15 @@ async function delJobPlanRow(id){
     jobPlanRows=jobPlanRows.concat([row]);
     console.error('delete job plan row failed',e);
     alert('❌ ลบเส้นทางไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
+    renderJobPlan();
+  }
+
+  }catch(e){
+    console.warn('job/status confirmation failed',e);
+    alert('รายการยังยืนยันไม่ครบ กรุณาตรวจสถานะและแผนงานก่อนทำซ้ำ: '+(e.message||e));
+  }finally{
+    window._jobStatusActionBusy=false;
+
     renderJobPlan();
   }
 }
@@ -12572,6 +12691,7 @@ async function syncJobNoteToEmployee(row,options={}){
     previousStandbyAt:prevStandbyAt,
     updatedAt:new Date().toISOString()
   };
+  await fbPatchEmployee(row.empId,patch,{expected:emp,source:'admin-dispatch'});
   jobPlanRows=jobPlanRows.map(r=>r.id===row.id?{
     ...r,
     assignmentState:'active',
@@ -12584,9 +12704,6 @@ async function syncJobNoteToEmployee(row,options={}){
     previousEmployeeStandbyAt:prevStandbyAt
   }:r);
   _cacheSet('ske_jobplan',jobPlanRows);
-  employees=employees.map(e=>e.id===row.empId?{...e,...patch}:e);
-  _cacheSet('ske_emp',employees);
-  try{ await fbPatchEmployee(row.empId,patch); }catch(e){console.warn('sync job note error',e);}
   const dash=document.getElementById('dashboard');
   if(dash&&!dash.classList.contains('hidden'))renderDashboard();
   return{assignmentState:'active',currentJobPlanId:row.id};
@@ -12597,41 +12714,11 @@ async function syncJobNoteToEmployee(row,options={}){
 let _legacyQueuedDispatchRepairScheduled=false;
 let _legacyQueuedDispatchRepairRunning=false;
 function scheduleLegacyQueuedDispatchRepair(){
-  if(_legacyQueuedDispatchRepairScheduled||_legacyQueuedDispatchRepairRunning)return;
-  if(!adminMode||adminRole!=='super')return;
-  const hasQueued=(jobPlanRows||[]).some(r=>r&&r.dispatched&&r.assignmentState==='queued'&&r.empId&&r.workDate&&!isPastWorkDate(r.workDate)&&!isCancelledJobPlanRow(r));
-  if(!hasQueued)return;
-  _legacyQueuedDispatchRepairScheduled=true;
-  setTimeout(async()=>{
-    _legacyQueuedDispatchRepairScheduled=false;
-    await repairLegacyQueuedDispatches();
-  },120);
+  // Rendering and realtime refresh are read-only. Only an explicit dispatch/finish changes status.
 }
 async function repairLegacyQueuedDispatches(){
-  if(_legacyQueuedDispatchRepairRunning||!adminMode||adminRole!=='super')return;
-  const queuedRows=(jobPlanRows||[])
-    .filter(r=>r&&r.dispatched&&r.assignmentState==='queued'&&r.empId&&r.workDate&&!isPastWorkDate(r.workDate)&&!isCancelledJobPlanRow(r))
-    .sort(sortEmployeeJobRows);
-  if(!queuedRows.length)return;
-  _legacyQueuedDispatchRepairRunning=true;
-  const repairedIds=[];
-  try{
-    for(const queuedRow of queuedRows){
-      const latest=jobPlanRows.find(r=>r.id===queuedRow.id);
-      if(!latest||latest.assignmentState!=='queued'||!latest.dispatched||!latest.empId)continue;
-      const result=await syncJobNoteToEmployee(latest,{forceActivate:true});
-      if(result?.assignmentState==='active')repairedIds.push(latest.id);
-    }
-    if(repairedIds.length){
-      await saveJobPlan(repairedIds);
-      renderJobPlan();
-      showDocUploadToast(`✅ แก้งานค้าง ${repairedIds.length} รายการแล้ว — พนักงานเปลี่ยนเป็น "ได้งานแล้ว"`,true);
-    }
-  }catch(e){
-    console.warn('[SKE job plan] repair queued dispatch error',e);
-  }finally{
-    _legacyQueuedDispatchRepairRunning=false;
-  }
+  // Legacy API retained for old references; never auto-activate already dispatched work.
+  return {repaired:0};
 }
 
 // คืนสถานะพนักงานเมื่อถูกถอด/สลับออกจากแถวหนึ่ง (เฉพาะกรณีที่เคยจ่ายงานไปแล้วจริง) — แต่ก่อนคืนสถานะ เช็คก่อนว่า "ยังมีงานอื่นค้างอยู่ไหม"
@@ -12649,7 +12736,7 @@ async function revertJobAssignment(empId,excludeRowId){
   if(otherRow){
     jobPlanRows=jobPlanRows.map(r=>r.id===otherRow.id?{...r,assignmentState:'active',activatedAt:new Date().toISOString()}:r);
     await syncJobNoteToEmployee(jobPlanRows.find(r=>r.id===otherRow.id),{forceActivate:true,excludeRowId});
-    await saveJobPlan(otherRow.id);
+    await saveJobPlan(otherRow.id,true);
     return;
   }
   // ใช้ภาพสถานะที่บันทึกไว้กับแถวงานก่อน หากเป็นข้อมูลรุ่นเก่าค่อยย้อนมาใช้ค่าที่พนักงาน
@@ -12670,16 +12757,18 @@ async function revertJobAssignment(empId,excludeRowId){
     previousStandbyAt:null,
     updatedAt:new Date().toISOString()
   };
-  employees=employees.map(e=>e.id===empId?{...e,...patch}:e);
-  _cacheSet('ske_emp',employees);
-  try{ await fbPatchEmployee(empId,patch); }catch(e){console.warn('revert job error',e);}
+  await fbPatchEmployee(empId,patch,{expected:emp,source:'admin-reassign'});
 }
 
 // เลือก/สลับ/ล้างชื่อในแผนร่างยังไม่แตะสถานะ จนกว่าจะกด "จ่ายงาน"
 // แต่ถ้าแถวถูกจ่ายแล้ว การเปลี่ยนชื่อจะคืนคนเดิมสู่สถานะก่อนรับงาน และส่ง "ได้งานแล้ว" ให้คนใหม่ทันที
 async function onJobPlanEmpChange(id,empId){
+  if(window._jobStatusActionBusy){alert('กรุณารอรายการก่อนหน้ายืนยันก่อน');return;}
+  window._jobStatusActionBusy=true;
+  try{
   const row=jobPlanRows.find(r=>r.id===id);
   if(!row)return;
+  if(row.empId===empId)return;
   const prevEmpId=row.empId;
   const wasDispatched=row.dispatched;
   if(!empId){
@@ -12693,7 +12782,7 @@ async function onJobPlanEmpChange(id,empId){
       previousEmployeeStatus:null,previousEmployeeProvince:null,
       previousEmployeeNote:null,previousEmployeeStandbyAt:null
     }:r);
-    await saveJobPlan(id);renderJobPlan();
+    await saveJobPlan(id,true);renderJobPlan();
     return;
   }
   const emp=employees.find(e=>e.id===empId);
@@ -12711,7 +12800,7 @@ async function onJobPlanEmpChange(id,empId){
     previousEmployeeStatus:null,previousEmployeeProvince:null,
     previousEmployeeNote:null,previousEmployeeStandbyAt:null
   }:r);
-  await saveJobPlan(id);
+  await saveJobPlan(id,true);
   renderJobPlan();
   if(wasDispatched){
     if(isPastWorkDate(row.workDate)){
@@ -12719,9 +12808,18 @@ async function onJobPlanEmpChange(id,empId){
     }else{
       const result=await syncJobNoteToEmployee(jobPlanRows.find(r=>r.id===id),{forceActivate:true});
       jobPlanRows=jobPlanRows.map(r=>r.id===id?{...r,assignmentState:result?.assignmentState||r.assignmentState}:r);
-      await saveJobPlan(id);
+      await saveJobPlan(id,true);
       showDocUploadToast(`✅ คืนสถานะเดิมให้คนเก่า และส่งงานนี้ให้ "${emp.name}" เป็น "ได้งานแล้ว" แล้ว`,true);
     }
+  }
+
+  }catch(e){
+    console.warn('job/status confirmation failed',e);
+    alert('รายการยังยืนยันไม่ครบ กรุณาตรวจสถานะและแผนงานก่อนทำซ้ำ: '+(e.message||e));
+  }finally{
+    window._jobStatusActionBusy=false;
+
+    renderJobPlan();
   }
 }
 
@@ -12756,6 +12854,9 @@ function exportJobPlanCSV(){
 // จ่ายงานเฉพาะเส้นทางเดียว (แยกจากปุ่มจ่ายงานรวมทั้งวัน) — ใช้เวลาเพิ่มเส้นทางใหม่เข้าไปในวันที่จ่ายงานไปแล้วบางส่วน
 // กันปัญหาเดิม: ถ้าใช้ปุ่ม "จ่ายงานวันนี้" ซ้ำทั้งวัน อาจไปกระทบคนที่จ่ายไปแล้วโดยไม่ตั้งใจ จ่ายทีละเส้นจึงชัดเจนและปลอดภัยกว่า
 async function dispatchJobPlanRow(rowId){
+  if(window._jobStatusActionBusy){alert('กรุณารอรายการก่อนหน้ายืนยันก่อน');return;}
+  window._jobStatusActionBusy=true;
+  try{
   const row=jobPlanRows.find(r=>r.id===rowId);
   if(!row)return;
   if(row.dispatched){alert('เส้นทางนี้จ่ายงานไปแล้ว');return;}
@@ -12773,14 +12874,26 @@ async function dispatchJobPlanRow(rowId){
     dispatchedAt:new Date().toISOString(),
     ...(result?.assignmentState?{assignmentState:result.assignmentState}:{})
   }:r);
-  await saveJobPlan(rowId);
+  await saveJobPlan(rowId,true);
   renderJobPlan();
   showDocUploadToast(isPast
     ?`✅ บันทึกข้อมูล "${row.empName}" ไว้แล้ว (ไม่ได้แจ้งเตือน เพราะวันที่ผ่านไปแล้ว)`
     :`✅ จ่ายงานให้ "${row.empName}" แล้ว — สถานะเปลี่ยนเป็น "ได้งานแล้ว"`,true);
+
+  }catch(e){
+    console.warn('job/status confirmation failed',e);
+    alert('รายการยังยืนยันไม่ครบ กรุณาตรวจสถานะและแผนงานก่อนทำซ้ำ: '+(e.message||e));
+  }finally{
+    window._jobStatusActionBusy=false;
+
+    renderJobPlan();
+  }
 }
 
 async function dispatchJobPlan(date){
+  if(window._jobStatusActionBusy){alert('กรุณารอรายการก่อนหน้ายืนยันก่อน');return;}
+  window._jobStatusActionBusy=true;
+  try{
   const assigned=jobPlanRows.filter(r=>r.workDate===date&&r.empId&&!r.dispatched);
   if(!assigned.length){alert('⚠️ วันนี้ยังไม่มีเส้นทางที่มอบหมายพนักงานไว้ (หรือจ่ายงานไปครบหมดแล้ว)');return;}
   const ready=assigned.filter(r=>r.route&&r.standbyTime);
@@ -12801,14 +12914,24 @@ async function dispatchJobPlan(date){
       dispatchedAt:new Date().toISOString(),
       ...(result?.assignmentState?{assignmentState:result.assignmentState}:{})
     }:r);
+    await saveJobPlan(row.id,true);
     dispatchedIds.push(row.id);
   }
-  await saveJobPlan(dispatchedIds);
+
   renderJobPlan();
   hideDocUploadPopup();
   alert(isPast
     ?`✅ บันทึกข้อมูลวันที่ ${dateLabel} ไว้แล้ว ${ready.length} รายการ (ไม่ได้แจ้งเตือนพนักงาน เพราะวันที่ผ่านไปแล้ว)`
     :`✅ จ่ายงานวันที่ ${dateLabel} เรียบร้อยแล้ว ${ready.length} รายการ — ทุกคนเปลี่ยนเป็น "ได้งานแล้ว"`);
+
+  }catch(e){
+    console.warn('job/status confirmation failed',e);
+    alert('รายการยังยืนยันไม่ครบ กรุณาตรวจสถานะและแผนงานก่อนทำซ้ำ: '+(e.message||e));
+  }finally{
+    window._jobStatusActionBusy=false;
+    hideDocUploadPopup();
+    renderJobPlan();
+  }
 }
 
 // ══ เส้นทางหลักประจำสัปดาห์ (route templates) ══
@@ -13164,7 +13287,7 @@ function _sdDoneHtml(){
   </div>`;
 }
 
-let _aSel={};
+let _aSel={},_aEditExpected={};
 function renderAdminEmpList(){
   const el=document.getElementById('adminEmpList');
   const q=(window.adminSearchQuery||'').toLowerCase().trim();
@@ -13258,7 +13381,7 @@ function renderAdminEmpList(){
   }).join('');
 }
 
-function openAEdit(id){document.getElementById('aef_'+id).classList.remove('hidden');document.getElementById('aef_'+id).style.display='flex';}
+function openAEdit(id){_aEditExpected[id]=JSON.parse(JSON.stringify(employees.find(e=>e.id===id)||{}));document.getElementById('aef_'+id).classList.remove('hidden');document.getElementById('aef_'+id).style.display='flex';}
 // ── ผู้ดูแลเปลี่ยน/ลบรูปโปรไฟล์ของพนักงานคนอื่นได้จากแผงแก้ไข ──
 async function handleAdminAvatarChange(input,id){
   const file=input.files&&input.files[0];
@@ -13391,7 +13514,8 @@ function aSelStat(eid,sid){
 function aOnPositionChange(eid){
   aSelStat(eid,_aSel[eid]||'standby');
 }
-function doSaveAEdit(id){
+async function doSaveAEdit(id){
+  if(window._adminStatusSaving)return;
   const name=document.getElementById('aen_'+id).value.trim();
   const position=document.getElementById('aepos_'+id)?.value.trim()||'';
   const plate=document.getElementById('aep_'+id).value.trim().toUpperCase();
@@ -13431,29 +13555,31 @@ function doSaveAEdit(id){
   const leaveToVal=document.getElementById('aeleaveto_'+id)?.value||'';
   const leaveNoteVal=document.getElementById('aeleavenote_'+id)?.value||'';
   const now=new Date().toISOString();
-  employees=employees.map(e=>{
-    if(e.id!==id)return e;
-    const prev=e;
+  const prev=employees.find(e=>e.id===id);
+  if(!prev)return;
+  const expected=_aEditExpected[id]||prev;
+  window._adminStatusSaving=true;
+  try{
     const standbyAt=(status==='standby'&&prev.status!=='standby')?now:(status==='standby'?prev.standbyAt||now:null);
     const routeStatusFields=_skeRouteStatusFields(prev,status,prev.phoneLocation,prov,now);
     const updated={
-      ...e,name,position,plate,phone,lineId,note,status,province:prov,updatedAt:now,standbyAt,
+      name,position,plate,phone,lineId,note,status,province:prov,updatedAt:now,standbyAt,
       ...routeStatusFields,
       routeDeviation:status==='traveling'&&prev.status==='traveling'?(prev.routeDeviation||null):null,
       ...clearJobLinkWhenLeavingGotJob(status)
     };
     // Leave lifecycle changes only through the dedicated, confirmed leave actions.
     if(newPin.length===4&&/^\d{4}$/.test(newPin))updated.pin=newPin;
-    recordRunLogIfNeeded(prev,status,note,id,plate,name);
-    recordRouteStatusTransition(prev,status,prev.phoneLocation,note,'admin-status',prov);
-    return updated;
-  });
-  if(currentUser?.id===id){
-    const fresh=employees.find(e=>e.id===id);
-    if(fresh)currentUser={...currentUser,...fresh};
-    saveU();
-  }
-  saveE();renderAdminEmpList();
+    await fbPatchEmployee(id,updated,{expected,source:'admin-edit'});
+    try{
+      recordRunLogIfNeeded(prev,status,note,id,plate,name);
+      recordRouteStatusTransition(prev,status,prev.phoneLocation,note,'admin-status',prov);
+    }catch(e){console.warn('admin status history',e);}
+    renderAdminEmpList();showDocUploadToast('✅ ส่วนกลางยืนยันการบันทึกแล้ว',true);
+  }catch(e){
+    _aEditExpected[id]=employees.find(e=>e.id===id)||prev;
+    alert('ยังยืนยันการบันทึกไม่ได้: '+(e.message||e));
+  }finally{window._adminStatusSaving=false;}
 }
 let _pendingDeleteEmployeeId=null;
 function closeDeleteEmployeePopup(){
