@@ -48,7 +48,7 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-  import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app-check.js";
+  import { initializeAppCheck, ReCaptchaV3Provider, onTokenChanged, getToken as getAppCheckToken } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app-check.js";
   import { getDatabase, ref, set, onValue, get, update, remove, runTransaction, goOffline, goOnline } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
   import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging.js";
 
@@ -131,8 +131,8 @@
   let _handoffEverConnected = false;
   let _lastTransportRestartAt = 0;
 
-  const HANDOFF_GRACE_MS = 6000;
-  const TRANSPORT_RESTART_COOLDOWN_MS = 15000;
+  const HANDOFF_GRACE_MS = 30000;
+  const TRANSPORT_RESTART_COOLDOWN_MS = 60000;
   const TRANSPORT_VERIFY_MS = 9000;
   const RELOAD_LOCK_KEY = 'ske_rtdb_client_reload_lock_v322';
   const RELOAD_LOCK_MS = 45000;
@@ -264,35 +264,7 @@
   }
 
   async function _runHandoffRecovery(source){
-    if (_handoffRunning) return;
-    if (navigator.onLine === false || window._fbConnected === true) return;
-    if (document.visibilityState !== 'visible') return;
-
-    _handoffRunning = true;
-    _reconnecting = true;
-    if (typeof window._setReconnecting === 'function') window._setReconnecting(true);
-    try {
-      const reachable = await _probeFirebaseRest();
-      if (!reachable || navigator.onLine === false || window._fbConnected === true) return;
-
-      if (typeof window._skeDebugLog === 'function') {
-        window._skeDebugLog('Network handoff', source + ' — REST ถึง Firebase แต่ RTDB client เดิมยังไม่กลับ');
-      }
-
-      const restarted = await _restartFirebaseTransport(source);
-      if (restarted) return;
-
-      const stillReachable = await _probeFirebaseRest();
-      if (stillReachable && navigator.onLine !== false && window._fbConnected !== true) {
-        await _reloadWithFreshClient('auto-' + source);
-      }
-    } catch (e) {
-      console.error('handoff V3.2.2 error', e);
-    } finally {
-      _handoffRunning = false;
-      _reconnecting = false;
-      if (typeof window._setReconnecting === 'function') window._setReconnecting(false);
-    }
+    return _runConnectionRecovery(source,false);
   }
 
   function _scheduleHandoffRecovery(source){
@@ -321,6 +293,77 @@
 
   // ปุ่มแถบแดง: probe → restart transport → reload เป็นทางเลือกสุดท้าย
   let _reconnecting = false;
+  // A Firebase disconnect is not proof that the phone has no internet.
+  let _connectionIssue = '';
+  let _lastRecoveryAttemptAt = 0;
+  function _setConnectionIssue(issue) {
+    _connectionIssue = issue || '';
+    window._skeConnectionIssue = _connectionIssue;
+    window._refreshConnectionBanner?.();
+  }
+  function _observeConnectionError(error) {
+    const code=String(error?.code||'').toLowerCase();
+    if(code.includes('permission')||code.includes('appcheck')||code.includes('app-check')){
+      _setConnectionIssue(code.includes('throttl')?'verification-throttled':'verification');
+    }
+    window._skeDebugLog?.('Connection error',code||'unknown');
+  }
+  if(appCheck){
+    onTokenChanged(appCheck,()=>{
+      if(_employeeReadFailed)_startEmployeesListener();
+      if(_connectionIssue.startsWith('verification'))_setConnectionIssue('');
+    },_observeConnectionError);
+  }
+  async function _checkConnectionVerification(){
+    if(!appCheck){if(APP_CHECK_CONFIGURED)_setConnectionIssue('verification');return !APP_CHECK_CONFIGURED;}
+    let timer;
+    try{
+      await Promise.race([
+        getAppCheckToken(appCheck,false), // use cached valid token; never force token/reCAPTCHA retries
+        new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('verification-timeout')),8000);})
+      ]);
+      if(_connectionIssue.startsWith('verification'))_setConnectionIssue('');
+      return true;
+    }catch(error){
+      const code=String(error?.code||'');
+      _setConnectionIssue(code.includes('throttl')?'verification-throttled':'verification');
+      window._skeDebugLog?.('App Check connection',code||'verification-timeout');
+      return false;
+    }finally{clearTimeout(timer);}
+  }
+  async function _runConnectionRecovery(source,manual=false){
+    // Only this controller owns the busy indicator, including all early exits.
+    if(_handoffRunning)return;
+    _handoffRunning=true;
+    _reconnecting=true;
+    window._setReconnecting?.(true);
+    try{
+      if(navigator.onLine===false){_setConnectionIssue('offline');return;}
+      if(window._fbConnected===true&&!_employeeReadFailed&&!_connectionIssue.startsWith('verification'))return;
+      if(!manual&&document.visibilityState!=='visible')return;
+      if(!manual&&Date.now()-_lastRecoveryAttemptAt<60000)return;
+      _lastRecoveryAttemptAt=Date.now();
+      _setConnectionIssue('');
+      // Verify the protected client first; an unauthenticated REST 401 says only 'server reachable'.
+      if(!await _checkConnectionVerification())return;
+      if(navigator.onLine===false){_setConnectionIssue('offline');return;}
+      if(_employeeReadFailed)_startEmployeesListener();
+      if(window._fbConnected===true)return;
+      const reachable=await _probeFirebaseRest();
+      if(!reachable){_setConnectionIssue('unreachable');return;}
+      if(window._fbConnected===true)return;
+      if(!await _restartFirebaseTransport(source))_setConnectionIssue('waiting');
+      // Never auto-reload on weak data. Preserve forms, GPS, login and pending outbox writes.
+    }catch(error){
+      _setConnectionIssue('waiting');
+      window._skeDebugLog?.('Reconnect error',String(error?.code||error?.message||'unknown').slice(0,160));
+    }finally{
+      _handoffRunning=false;
+      _reconnecting=false;
+      window._setReconnecting?.(false);
+    }
+  }
+
 
   function _finishReconnect(result) {
     _reconnecting = false;
@@ -331,51 +374,7 @@
   }
 
   window.forceReconnectNow = async function(source){
-    if (_reconnecting) return;
-
-    if (!navigator.onLine) {
-      if (typeof window._skeDebugLog === 'function') {
-        window._skeDebugLog('Reconnect', 'ยกเลิก: navigator.onLine=false');
-      }
-      return;
-    }
-
-    _reconnecting = true;
-    if (typeof window._setReconnecting === 'function') window._setReconnecting(true);
-    if (typeof window._skeDebugLog === 'function') {
-      window._skeDebugLog('Reconnect', source === 'resume'
-        ? 'ตรวจ connection หลังกลับเข้าแอป'
-        : 'ผู้ใช้แตะลองเชื่อมต่อใหม่');
-    }
-
-    try {
-      if (window._fbConnected === true) {
-        _clearReloadLock();
-        _finishReconnect('เชื่อมต่ออยู่แล้ว');
-        return;
-      }
-
-      const reachable = await _probeFirebaseRest();
-      if (!reachable) {
-        _finishReconnect('Firebase REST ยังเข้าไม่ได้');
-        return;
-      }
-
-      const restarted = await _restartFirebaseTransport(source || 'manual');
-      if (restarted) {
-        _clearReloadLock();
-        _finishReconnect('เชื่อมต่อสำเร็จ');
-        return;
-      }
-
-      const started = await _reloadWithFreshClient(source || 'manual');
-      if (!started) {
-        _finishReconnect('กำลังรอ client ที่เพิ่งสร้างใหม่');
-      }
-    } catch (e) {
-      console.error('forceReconnectNow V3.2.2 error', e);
-      _finishReconnect('exception: ' + (e.message || e));
-    }
+    return _runConnectionRecovery(source||'manual',true);
   };
 
   // ══ ระบบเก็บ log ปัญหาจริงในเครื่อง — ดูได้จากในแอพเลย ไม่ต้องต่อคอมพิวเตอร์/USB debugging ══
@@ -758,6 +757,71 @@
   // หลักการใหม่: อัพโหลดข้อมูลเครื่องขึ้น Firebase ได้ "เฉพาะครั้งแรกสุด" เท่านั้น หลังจากนั้น null = ว่างจริง ให้เคารพค่าว่าง
   const _firstSync = { employees:false, vehicles:false, repairs:false, fluidLogs:false, cashRequests:false, leaveLogs:false, runLogs:false, routeTracks:false, monthlyDocs:false, jobPlan:false, jobRouteTemplates:false, feedbacks:false };
 
+  // v3.2.67P: one realtime subscription per requested dataset; none for unopened history.
+  const _deferredData = new Map();
+  function _deferFirebaseData(path, apply, onError) {
+    _deferredData.set(path, {path,apply,onError,state:'idle',waiters:[],stop:null,snapshot:null,generation:0});
+  }
+  window.fbDataReady = paths => paths.every(path => _deferredData.get(path)?.state === 'ready');
+  window.fbDataState = path => _deferredData.get(path)?.state || 'idle';
+  function _settleDataWaiters(entry, error) {
+    entry.waiters.splice(0).forEach(waiter => { clearTimeout(waiter.timer); error ? waiter.reject(error) : waiter.resolve(); });
+  }
+  function _loadDeferredData(path) {
+    const entry = _deferredData.get(path);
+    if (!entry) return Promise.reject(new Error('ไม่พบชุดข้อมูลที่ขอ'));
+    if (entry.state === 'ready') return Promise.resolve();
+    const promise = new Promise((resolve,reject) => {
+      const waiter = {resolve,reject,timer:null};
+      waiter.timer = setTimeout(() => {
+        entry.waiters = entry.waiters.filter(item => item !== waiter);
+        reject(new Error('ข้อมูลยังโหลดไม่ครบ อาจเป็นเพราะสัญญาณช้า กดลองอีกครั้งได้โดยไม่ต้องเปิดแอปใหม่'));
+      }, 15000);
+      entry.waiters.push(waiter);
+    });
+    // A UI timeout is not a cancelled Firebase read. Retrying joins it, never starts a duplicate.
+    if (entry.stop) return promise;
+    entry.state = 'loading';
+    const generation = ++entry.generation;
+    entry.stop = onValue(ref(db,path), snapshot => {
+      if (entry.generation !== generation) return;
+      try {
+        entry.snapshot = snapshot;
+        entry.state = 'ready'; // callbacks may render/re-enter the same dataset
+        entry.apply(snapshot);
+        _settleDataWaiters(entry);
+      } catch (error) {
+        entry.state = 'error';
+        entry.snapshot = null;
+        if(entry.stop)entry.stop();
+        entry.stop = null;
+        _settleDataWaiters(entry,error);
+        console.error('apply data '+path,error);
+      }
+    }, error => {
+      if (entry.generation !== generation) return;
+      entry.state = 'error';
+      entry.snapshot = null;
+      if(entry.stop)entry.stop();
+      entry.stop = null;
+      _settleDataWaiters(entry,new Error('โหลดข้อมูลส่วนนี้ไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตหรือสิทธิ์การใช้งาน แล้วลองใหม่'));
+      if(entry.onError)entry.onError(error);
+    });
+    return promise;
+  }
+  window.fbLoadData = paths => Promise.all([...new Set(paths)].map(_loadDeferredData));
+  window.fbReleaseDeferredData = function() {
+    _deferredData.forEach(entry => {
+      ++entry.generation;
+      if(entry.stop)entry.stop();
+      entry.stop=null;entry.snapshot=null;entry.state='idle';
+      _settleDataWaiters(entry,new Error('ยกเลิกการโหลดเมื่อออกจากระบบ'));
+    });
+    window._monthlyDocsReady=false;
+    window._monthlyDocsSyncError=false;
+    cashOpeningReady=false;
+  };
+
   // ══ ระบบกันบันทึกหาย (Offline-safe save queue / outbox) ═══════════════════════
   // ปัญหาเดิม: ถ้าเน็ตหลุด/อ่อนตอนกำลังบันทึก (เปลี่ยนสถานะ, อัปโหลดรูป, แจ้งซ่อม, เบิกเงิน, ลา ฯลฯ)
   // การเขียนขึ้น Firebase อาจ "ค้างไม่มีกำหนด" หรือ "ล้มเหลวเงียบๆ" โดยไม่แจ้งเตือนและไม่มีการส่งซ้ำ
@@ -767,7 +831,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.66S');
+console.log('[SKE TRUCK] app version: v3.2.67P');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -996,7 +1060,7 @@ console.log('[SKE TRUCK] app version: v3.2.66S');
     }
     // อ่านครั้งเดียวเพื่อจับคู่ id -> Firebase key ที่แท้จริง รองรับข้อมูลเก่าที่เป็น array
     // และข้อมูลใหม่ที่ใช้ deterministic key โดยไม่ต้องอ่านซ้ำทีละรายการ
-    const snap = await _withTimeout(get(ref(db, path)), SKE_WRITE_TIMEOUT_MS, 'timeout:' + path + '-keys');
+    const snap = _deferredData.get(path)?.snapshot || await _withTimeout(get(ref(db, path)), SKE_WRITE_TIMEOUT_MS, 'timeout:' + path + '-keys');
     const keysById = new Map();
     snap.forEach(child => {
       const row = child.val();
@@ -1076,6 +1140,9 @@ console.log('[SKE TRUCK] app version: v3.2.66S');
     } else {
       const list = (Array.isArray(payload) ? payload : []).filter(row => !filterFn || filterFn(row));
       // A partial employee list is not a request to delete missing accounts.
+      if (_deferredData.has(path) && !window.fbDataReady([path])) {
+        return Promise.reject(new Error('กรุณาเปิดรายการและรอโหลดข้อมูลล่าสุดก่อนบันทึก'));
+      }
       ops = _buildRecordOps(path, list, path !== 'employees');
     }
     return _queueRecordOps(path, outboxKey, ops);
@@ -1144,12 +1211,12 @@ console.log('[SKE TRUCK] app version: v3.2.66S');
         _lastTap = now;
         if (ev && ev.type === 'touchend') ev.preventDefault();
         // ให้ผลตอบรับทันทีแบบ sync ก่อน ไม่ต้องรอผล reconnect เพื่อให้รู้ว่าแตะติดแล้ว
-        if (typeof window._setReconnecting === 'function') window._setReconnecting(true);
+        // Controller clears the busy state even when the phone is actually offline.
         if (typeof window.forceReconnectNow === 'function') {
           window.forceReconnectNow();
         } else {
           // เผื่อกรณีร้ายแรงที่ฟังก์ชันยังไม่พร้อมด้วยเหตุผลใดก็ตาม — รีโหลดหน้าเป็นทางสำรองสุดท้าย
-          setTimeout(() => location.reload(), 300);
+          window._setReconnecting?.(false);
         }
       };
       el.addEventListener('touchend', handleTap, {passive:false});
@@ -1163,10 +1230,17 @@ console.log('[SKE TRUCK] app version: v3.2.66S');
         delete el.dataset.offline;
         el.style.display='flex'; el.style.background='#F59E0B'; el.style.cursor='default';
         el.textContent = '🔄 กำลังลองเชื่อมต่อใหม่...';
-      } else if (offline) {
+      } else if (offline || window._skeConnectionIssue) {
         el.dataset.offline = '1';
-        el.style.display='flex'; el.style.background='#DC2626'; el.style.cursor='pointer';
-        el.textContent = '📡 เน็ตหลุดอยู่ — แตะตรงนี้เพื่อลองเชื่อมต่อใหม่';
+        const issue=window._skeConnectionIssue||'';
+        const noNetwork=navigator.onLine===false;
+        el.style.display='flex'; el.style.background=noNetwork||issue.startsWith('verification')?'#B91C1C':'#B45309'; el.style.cursor='pointer';
+        el.textContent=noNetwork?'📡 โทรศัพท์ยังไม่มีการเชื่อมต่อเครือข่าย — เปิดเน็ตแล้วแตะลองใหม่'
+          :issue==='verification-throttled'?'🔒 การยืนยันแอปถูกพักชั่วคราว — กรุณารอแล้วลองใหม่'
+          :issue==='verification'?'🔒 ยังยืนยันการเชื่อมต่อแอปไม่ได้ — แตะลองใหม่ หากยังไม่ได้ให้แจ้งผู้ดูแล'
+          :issue==='unreachable'?'📡 ติดต่อเซิร์ฟเวอร์ไม่ได้ — ตรวจสัญญาณแล้วแตะลองใหม่'
+          :issue==='waiting'?'📡 ยังเชื่อมต่อส่วนกลางไม่ได้ — แตะลองใหม่ (ข้อมูลรอส่งยังอยู่)'
+          :'🔄 กำลังเชื่อมต่อส่วนกลาง — แตะเพื่อลองใหม่';
         // ปิดการเด้ง debug log อัตโนมัติแล้ว (เลือกใช้แบบแตะเวอร์ชัน 5 ครั้งเองแทน ตามที่ผู้ใช้ต้องการ)
       } else {
         delete el.dataset.offline;
@@ -1186,7 +1260,7 @@ console.log('[SKE TRUCK] app version: v3.2.66S');
     const DISCONNECT_DEBOUNCE_MS = 4000; // ต้องหลุดต่อเนื่องเกินนี้ถึงจะถือว่าหลุดจริง (ถ้า navigator.onLine ยัง true)
     const RECONNECT_DEBOUNCE_MS = 1000;  // รอสั้นๆ ก่อนซ่อนแดง กัน flap ซ้ำ
     let disconnectTimer = null, reconnectTimer = null;
-    window._fbConnected = true; // ค่าเริ่มต้น เผื่อ listener ยังไม่ยิง event แรก
+    window._fbConnected = false; // Unknown until the SDK confirms a realtime connection.
 
     function setOfflineNow(isOffline){
       offline = isOffline;
@@ -1214,6 +1288,7 @@ console.log('[SKE TRUCK] app version: v3.2.66S');
         }
       }
     };
+    window._refreshConnectionBanner = render;
     window._setSyncPending = function(isPending){ pending = !!isPending; render(); };
     window._setReconnecting = function(isReconnecting){ reconnecting = !!isReconnecting; render(); };
 
@@ -1344,7 +1419,7 @@ console.log('[SKE TRUCK] app version: v3.2.66S');
         if(!ownsSession()||!current||String(current.id)!==id)return;
         if(current.lastStatusChange?.id===requestId)return current;
         if(_skeStatusFingerprint(current)!==expected)return;
-        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,version:'v3.2.66S'};
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,version:'v3.2.67P'};
         const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
         return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
           ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
@@ -1512,18 +1587,7 @@ console.log('[SKE TRUCK] app version: v3.2.66S');
     );
     return true;
   };
-  onValue(ref(db, 'phonePlaceCache'), (snapshot) => {
-    const data = snapshot.val();
-    Object.keys(_sharedPhonePlaceCache).forEach(key => delete _sharedPhonePlaceCache[key]);
-    if (data && typeof data === 'object') {
-      Object.entries(data).forEach(([key, value]) => {
-        if (_safePhonePlaceCacheKey(key) && value && typeof value === 'object') {
-          _sharedPhonePlaceCache[key] = value;
-        }
-      });
-    }
-    window.dispatchEvent(new CustomEvent('ske-phone-place-cache-updated'));
-  }, error => console.warn('[SKE GPS] โหลดแคชชื่อพื้นที่ส่วนกลางไม่สำเร็จ', error));
+  // Province cache is fetched by coordinate key only; never subscribe to the whole archive.
 
   // ลบพนักงานและข้อมูลที่ผูกกับพนักงานคนนั้นจาก Firebase ใน update เดียว
   // พร้อมสร้าง tombstone เพื่อบังคับออกจากระบบทุกเครื่องและกัน cache เก่าฟื้นบัญชีกลับมา
@@ -1871,7 +1935,12 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
   // หมายเหตุ: การ sync ครั้งแรกหลังเปิดแอพ (เทียบกับ cache เก่าใน localStorage ที่อาจค้างมาเป็นชม./วัน)
   // ไม่นับเป็น "การเปลี่ยนสถานะสด" — กันไม่ให้เด้งแจ้งเตือน+เสียงรัวๆ ย้อนหลังทุกครั้งที่เปิดแอพใหม่
   let _empSynced = false;
-  onValue(ref(db, 'employees'), (snapshot) => {
+  let _employeeReadFailed = false, _employeeListenerStop = null;
+  function _startEmployeesListener(){
+    if(_employeeListenerStop)_employeeListenerStop();
+    _employeeReadFailed=false;
+    _employeeListenerStop=onValue(ref(db, 'employees'), (snapshot) => {
+    _employeeReadFailed=false;
     const rawData = normalizeEmployees(snapshot.val()) || [];
     const data = _activeEmployeeList(rawData);
 
@@ -1916,11 +1985,14 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
     window._employeeListSynced = true;
     window._fbReady = true;
     if(typeof renderEmpList==='function'&&document.getElementById('empList'))renderEmpList();
-  });
+    if(_connectionIssue.startsWith('verification'))_setConnectionIssue('');
+  }, error=>{_employeeReadFailed=true;_observeConnectionError(error);});
+  }
+  _startEmployeesListener();
 
   // ฟัง realtime — รายการรถทั้งหมด (แยกจากพนักงานเด็ดขาด — เพิ่ม/ลบ/แก้รถได้เองโดยไม่ต้องผูกกับคนขับ)
   let _vehSynced = false;
-  onValue(ref(db, 'vehicles'), (snapshot) => {
+  _deferFirebaseData('vehicles', (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('vehicles')) { _firstSync.vehicles = true; _vehSynced = true; return; }
     _setRecordShadow('vehicles', data || []);
@@ -1933,36 +2005,40 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       if (summaryEl && admin && !admin.classList.contains('hidden') && typeof buildSummaryHTML === 'function') summaryEl.innerHTML = buildSummaryHTML();
       const vp = document.getElementById('adminVehiclePanel');
       if (vp && !vp.classList.contains('hidden') && typeof renderAdminVehicleList === 'function') renderAdminVehicleList();
-    } else if (!_firstSync.vehicles && vehicles.length > 0) {
-      // Firebase ว่างจริงๆ (ครั้งแรกที่ใช้งาน) → อัพโหลดข้อมูลเครื่องขึ้นไปครั้งเดียว
-      window.fbSaveVehicles(vehicles);
+    } else {
+      vehicles = [];
+      _skeCacheSet('ske_vehicles', []);
     }
     _firstSync.vehicles = true;
     _vehSynced = true;
   });
 
-  onValue(ref(db, 'adminPwHash'), (snapshot) => {
+  onValue(ref(db, 'adminPwHash'), async snapshot => {
     const h = snapshot.val();
     if (h) { adminPwHash = h; localStorage.setItem('ske_pwHash', h); }
+    else { if(!adminPwHash) adminPwHash = await sha256Hex(SKE_DEFAULT_ADMIN_PW); window.fbSaveAdminPwHash(adminPwHash); }
   });
 
-  onValue(ref(db, 'viewerPwHash'), (snapshot) => {
+  onValue(ref(db, 'viewerPwHash'), async snapshot => {
     const h = snapshot.val();
     if (h) { viewerPwHash = h; localStorage.setItem('ske_viewerPwHash', h); }
+    else { if(!viewerPwHash) viewerPwHash = await sha256Hex(SKE_DEFAULT_VIEWER_PW); window.fbSaveViewerPwHash(viewerPwHash); }
   });
 
-  onValue(ref(db, 'adminPin2Hash'), (snapshot) => {
+  onValue(ref(db, 'adminPin2Hash'), async snapshot => {
     const h = snapshot.val();
     if (h) { adminPin2Hash = h; localStorage.setItem('ske_pin2Hash', h); }
+    else { if(!adminPin2Hash) adminPin2Hash = await sha256Hex(SKE_DEFAULT_PIN2); window.fbSaveAdminPin2Hash(adminPin2Hash); }
   });
 
-  onValue(ref(db, 'emergencyCodeHash'), (snapshot) => {
+  onValue(ref(db, 'emergencyCodeHash'), async snapshot => {
     const h = snapshot.val();
     if (h) { emergencyCodeHash = h; localStorage.setItem('ske_emergHash', h); }
+    else { if(!emergencyCodeHash) emergencyCodeHash = await sha256Hex(SKE_DEFAULT_EMERGENCY_CODE); window.fbSaveEmergencyCodeHash(emergencyCodeHash); }
   });
 
   // ฟัง realtime — รายการแจ้งซ่อม
-  onValue(ref(db, 'repairs'), (snapshot) => {
+  _deferFirebaseData('repairs', (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('repairs')) { _firstSync.repairs = true; return; }
     _setRecordShadow('repairs', data || []);
@@ -1975,8 +2051,9 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       const am = document.getElementById('adminMaintPanel');
       if (am && !am.classList.contains('hidden') && typeof renderAdminMaint === 'function') renderAdminMaint();
       if (typeof updateAdminMaintBadge === 'function') updateAdminMaintBadge();
-    } else if (!_firstSync.repairs && repairs.length > 0) {
-      window.fbSaveRepairs(repairs).catch(() => {});
+    } else {
+      repairs = [];
+      _skeCacheSet('ske_repairs', []);
     }
     if (!_firstSync.repairs) {
       // sync ครั้งแรก → ลบรูปเก่าเกิน 12 เดือนออกจาก repairs แล้วอัพเดท Firebase
@@ -1986,7 +2063,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
   });
 
   // ฟัง realtime — รายการเปลี่ยนถ่ายของเหลว
-  onValue(ref(db, 'fluidLogs'), (snapshot) => {
+  _deferFirebaseData('fluidLogs', (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('fluidLogs')) { _firstSync.fluidLogs = true; return; }
     _setRecordShadow('fluidLogs', data || []);
@@ -1996,13 +2073,14 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       if (typeof updateMaintBadges === 'function') updateMaintBadges();
       const m = document.getElementById('fluidModal');
       if (m && !m.classList.contains('hidden') && typeof renderFluidList === 'function') renderFluidList();
-    } else if (!_firstSync.fluidLogs && fluidLogs.length > 0) {
-      window.fbSaveFluidLogs(fluidLogs).catch(() => {});
+    } else {
+      fluidLogs = [];
+      _skeCacheSet('ske_fluid', []);
     }
     _firstSync.fluidLogs = true;
   });
 
-  onValue(ref(db, 'cashOpeningDates'), snapshot => {
+  _deferFirebaseData('cashOpeningDates', snapshot => {
     _applyCashOpeningDates(snapshot.val());
   }, error => {
     cashOpeningReady = false;
@@ -2012,7 +2090,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
   });
 
   // ฟัง realtime — รายการเบิกเงินพนักงาน
-  onValue(ref(db, 'cashRequests'), (snapshot) => {
+  _deferFirebaseData('cashRequests', (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('cashRequests')) { _firstSync.cashRequests = true; return; }
     _setRecordShadow('cashRequests', data || []);
@@ -2025,14 +2103,15 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       if (m && !m.classList.contains('hidden') && typeof renderCashList === 'function') renderCashList();
       const ap = document.getElementById('adminCashPanel');
       if (ap && !ap.classList.contains('hidden') && typeof renderAdminCashList === 'function') renderAdminCashList();
-    } else if (!_firstSync.cashRequests && cashRequests.length > 0) {
-      window.fbSaveCashRequests(cashRequests);
+    } else {
+      cashRequests = [];
+      _skeCacheSet('ske_cash', []);
     }
     _firstSync.cashRequests = true;
   });
 
   // ฟัง realtime — ประวัติการลา
-  onValue(ref(db, 'leaveLogs'), (snapshot) => {
+  _deferFirebaseData('leaveLogs', (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('leaveLogs')) { _firstSync.leaveLogs = true; return; }
     _setRecordShadow('leaveLogs', data || []);
@@ -2041,14 +2120,15 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       _skeCacheSet('ske_leaveLogs', leaveLogs);
       const lp = document.getElementById('adminLeaveHistoryPanel');
       if (lp && !lp.classList.contains('hidden') && typeof renderLeaveHistory === 'function') renderLeaveHistory();
-    } else if (!_firstSync.leaveLogs && leaveLogs.length > 0) {
-      window.fbSaveLeaveLogs(leaveLogs);
+    } else {
+      leaveLogs = [];
+      _skeCacheSet('ske_leaveLogs', []);
     }
     _firstSync.leaveLogs = true;
   });
 
   // ฟัง realtime — ประวัติเที่ยววิ่งงาน (บันทึกถาวร)
-  onValue(ref(db, 'runLogs'), (snapshot) => {
+  _deferFirebaseData('runLogs', (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('runLogs')) { _firstSync.runLogs = true; return; }
     _setRecordShadow('runLogs', data || []);
@@ -2059,8 +2139,9 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       if (rm && typeof openEmployeeRunLogModal === 'function') openEmployeeRunLogModal();
       const dash = document.getElementById('dashboard');
       if (dash && !dash.classList.contains('hidden') && currentUser && typeof renderDashboard === 'function') renderDashboard();
-    } else if (!_firstSync.runLogs && runLogs.length > 0) {
-      window.fbSaveRunLogs(runLogs);
+    } else {
+      runLogs = [];
+      _skeCacheSet('ske_runlogs', []);
     }
     if (!_firstSync.runLogs) {
       // sync ครั้งแรก → กู้เที่ยวที่ตกหล่นก่อนอัพเดทระบบนี้ (รอให้ employees โหลดเสร็จก่อน)
@@ -2070,7 +2151,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
   });
 
   // ฟัง realtime — ประวัติเส้นทางตั้งแต่ "ออกเดินทาง" ถึง "ถึงแล้วรอลงงาน"
-  onValue(ref(db, 'routeTracks'), (snapshot) => {
+  _deferFirebaseData('routeTracks', (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHas('routeTracks')) { _firstSync.routeTracks = true; return; }
     _setRecordShadow('routeTracks', data || []);
@@ -2078,8 +2159,9 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       _skeRememberConfirmedRoutes(data);
       routeTracks = data;
       _skeCacheSet('ske_route_tracks', routeTracks);
-    } else if (!_firstSync.routeTracks && routeTracks.length > 0) {
-      window.fbSaveRouteTracks(routeTracks).catch(() => {});
+    } else {
+      routeTracks = [];
+      _skeCacheSet('ske_route_tracks', []);
     }
     if (!_firstSync.routeTracks) {
       // ข้อมูลรุ่นเก่าไม่มีพิกัดรายสถานะ จึงนำเข้าเฉพาะตำแหน่งล่าสุดที่มีอยู่จริงและติดป้ายว่าเป็นข้อมูลบางส่วน
@@ -2100,6 +2182,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
     window._fbConnected = connected;
     if (connected) {
       _handoffEverConnected = true;
+      if(!_connectionIssue.startsWith('verification'))_setConnectionIssue('');
       _cancelHandoffTimer();
       _clearReloadLock();
     } else if (_handoffEverConnected && navigator.onLine !== false &&
@@ -2108,116 +2191,27 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
     }
     if (connected && !_wasConnected) {
       _obFlushAll();
-      // เพิ่งกลับมาเชื่อมต่อได้ → sync ข้อมูลทุกชุดทันที (onValue จะ replay ให้เองอยู่แล้ว แต่ get ย้ำให้ชัวร์+เร็ว)
-      get(ref(db, 'employees')).then(s => {
-        const d = _employeeSnapshotView(_activeEmployeeList(normalizeList(s.val()) || []));
-        if (d && d.length > 0) {
-          employees = d;
-          _skeCacheSet('ske_emp', employees);
-          if (currentUser) {
-            const f = employees.find(e => e.id === currentUser.id);
-            if (f) { currentUser = {...currentUser, ...f}; saveU(); }
-            else _notifyDeletedEmployee(currentUser.id, 'ไม่พบบัญชีพนักงานนี้ในระบบแล้ว');
-          }
-          const dash = document.getElementById('dashboard');
-          const admin = document.getElementById('admin');
-          if (dash && !dash.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
-          if (admin && !admin.classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
-        } else {
-          employees = [];
-          _skeCacheSet('ske_emp', employees);
-          if (currentUser) _notifyDeletedEmployee(currentUser.id, 'ไม่พบบัญชีพนักงานนี้ในระบบแล้ว');
-        }
-      }).catch(() => {});
+      // Active listeners resume automatically; do not fetch employees twice.
     }
     _wasConnected = connected;
     if (typeof window._setOnlineDot === 'function') window._setOnlineDot(connected);
   });
 
-  get(ref(db, 'employees')).then(snapshot => {
-    const data = _employeeSnapshotView(_activeEmployeeList(normalizeList(snapshot.val()) || []));
-    if (data && data.length > 0) {
-      // Firebase มีข้อมูลอยู่แล้ว → ใช้เป็นข้อมูลหลักเสมอ
-      employees = data;
-      _skeCacheSet('ske_emp', employees);
-    } else {
-      // ห้าม seed รายชื่อจาก cache เมื่อ Firebase ว่าง เพราะอาจเป็นบัญชีที่ผู้ดูแลลบไปแล้ว
-      employees = [];
-      _skeCacheSet('ske_emp', employees);
-    }
-    _firstSync.employees = true;
-    window._employeeListSynced = true;
-    if (currentUser && !employees.some(e => e && e.id === currentUser.id)) {
-      _notifyDeletedEmployee(currentUser.id, 'ไม่พบบัญชีพนักงานนี้ในระบบแล้ว');
-    }
-    window._fbReady = true;
-  }).catch(e => { window._fbReady = true; console.error('fbGet error', e); });
 
-  get(ref(db, 'adminPwHash')).then(async snapshot => {
-    const h = snapshot.val();
-    if (h) { adminPwHash = h; localStorage.setItem('ske_pwHash', h); }
-    else { if(!adminPwHash) adminPwHash = await sha256Hex(SKE_DEFAULT_ADMIN_PW); window.fbSaveAdminPwHash(adminPwHash); }
-  });
 
-  get(ref(db, 'viewerPwHash')).then(async snapshot => {
-    const h = snapshot.val();
-    if (h) { viewerPwHash = h; localStorage.setItem('ske_viewerPwHash', h); }
-    else { if(!viewerPwHash) viewerPwHash = await sha256Hex(SKE_DEFAULT_VIEWER_PW); window.fbSaveViewerPwHash(viewerPwHash); }
-  });
 
-  get(ref(db, 'adminPin2Hash')).then(async snapshot => {
-    const h = snapshot.val();
-    if (h) { adminPin2Hash = h; localStorage.setItem('ske_pin2Hash', h); }
-    else { if(!adminPin2Hash) adminPin2Hash = await sha256Hex(SKE_DEFAULT_PIN2); window.fbSaveAdminPin2Hash(adminPin2Hash); }
-  });
 
-  get(ref(db, 'emergencyCodeHash')).then(async snapshot => {
-    const h = snapshot.val();
-    if (h) { emergencyCodeHash = h; localStorage.setItem('ske_emergHash', h); }
-    else { if(!emergencyCodeHash) emergencyCodeHash = await sha256Hex(SKE_DEFAULT_EMERGENCY_CODE); window.fbSaveEmergencyCodeHash(emergencyCodeHash); }
-  });
 
-  get(ref(db, 'repairs')).then(snapshot => {
-    if (_obHasFresh('repairs')) return;
-    const data = normalizeList(snapshot.val());
-    _setRecordShadow('repairs', data || []);
-    if (data) {
-      repairs = data;
-      _skeCacheSet('ske_repairs', repairs);
-      if (typeof updateMaintBadges === 'function') updateMaintBadges();
-    } else if (!_firstSync.repairs && repairs.length > 0) {
-      window.fbSaveRepairs(repairs);
-    }
-    _firstSync.repairs = true;
-  }).catch(e => console.error('fbGet repairs error', e));
 
-  get(ref(db, 'fluidLogs')).then(snapshot => {
-    if (_obHasFresh('fluidLogs')) return;
-    const data = normalizeList(snapshot.val());
-    _setRecordShadow('fluidLogs', data || []);
-    if (data) {
-      fluidLogs = data;
-      _skeCacheSet('ske_fluid', fluidLogs);
-      if (typeof updateMaintBadges === 'function') updateMaintBadges();
-    } else if (!_firstSync.fluidLogs && fluidLogs.length > 0) {
-      window.fbSaveFluidLogs(fluidLogs);
-    }
-    _firstSync.fluidLogs = true;
-  }).catch(e => console.error('fbGet fluidLogs error', e));
 
-  get(ref(db, 'cashRequests')).then(snapshot => {
-    if (_obHasFresh('cashRequests')) return;
-    const data = normalizeList(snapshot.val());
-    _setRecordShadow('cashRequests', data || []);
-    if (data) {
-      cashRequests = data;
-      _skeCacheSet('ske_cash', cashRequests);
-      if (typeof updateMaintBadges === 'function') updateMaintBadges();
-    } else if (!_firstSync.cashRequests && cashRequests.length > 0) {
-      window.fbSaveCashRequests(cashRequests);
-    }
-    _firstSync.cashRequests = true;
-  }).catch(e => console.error('fbGet cashRequests error', e));
+
+
+
+
+
+
+
+
 
 
   // ══ Monthly document submissions — realtime Firebase sync ══
@@ -2261,11 +2255,11 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
   window.fbDeleteMonthlyDoc = docId => _deleteRecord('monthlyDocs', 'monthlyDocs', docId);
 
   window.fbGetMonthlyDocs = async function() {
-    const snap = await get(ref(db, 'monthlyDocs'));
-    return normalizeList(snap.val()) || [];
+    await window.fbLoadData(['monthlyDocs']);
+    return monthlyDocs || [];
   };
 
-  onValue(ref(db, 'monthlyDocs'), (snapshot) => {
+  _deferFirebaseData('monthlyDocs', (snapshot) => {
     const data = normalizeList(snapshot.val()) || [];
     _setRecordShadow('monthlyDocs', data);
     monthlyDocs = _docNormalizeRecords(data);
@@ -2318,7 +2312,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       .catch(e => { console.error('fbSaveJobPlanRows error', e); throw e; });
   };
   window.fbDeleteJobPlanRow = rowId => _deleteRecord('jobPlan', 'jobPlan', rowId);
-  onValue(ref(db, 'jobPlan'), (snapshot) => {
+  _deferFirebaseData('jobPlan', (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('jobPlan')) { _firstSync.jobPlan = true; return; }
     _setRecordShadow('jobPlan', data || []);
@@ -2330,13 +2324,6 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       if (typeof _skeRefreshLiveInsightsOnly === 'function') _skeRefreshLiveInsightsOnly();
       const dashboard = document.getElementById('dashboard');
       if (dashboard && !dashboard.classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
-    } else if (!_firstSync.jobPlan) {
-      const cache = (()=>{try{return JSON.parse(localStorage.getItem('ske_jobplan')||'[]');}catch(e){return [];}})();
-      if (Array.isArray(cache) && cache.length) window.fbSaveJobPlan(cache).catch(e=>console.error('fb seed jobPlan error', e));
-      else {
-        jobPlanRows = [];
-        localStorage.setItem('ske_jobplan', '[]');
-      }
     } else {
       jobPlanRows = [];
       localStorage.setItem('ske_jobplan', '[]');
@@ -2348,16 +2335,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
     }
     _firstSync.jobPlan = true;
   });
-  get(ref(db, 'jobPlan')).then(snapshot => {
-    if (_obHasFresh('jobPlan')) return;
-    const data = normalizeList(snapshot.val());
-    _setRecordShadow('jobPlan', data || []);
-    if (data) {
-      jobPlanRows = data;
-      _skeCacheSet('ske_jobplan', data);
-    }
-    _firstSync.jobPlan = true;
-  }).catch(e => { _firstSync.jobPlan = true; console.error('fbGet jobPlan error', e); });
+
 
   // ══ เส้นทางหลักประจำสัปดาห์ (route templates) ══
   window.fbSaveJobRouteTemplates = function(list) {
@@ -2370,7 +2348,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       .catch(e => { console.error('fbSaveJobRouteTemplates error', e); throw e; });
   };
   window.fbDeleteJobRouteTemplate = templateId => _deleteRecord('jobRouteTemplates', 'jobRouteTemplates', templateId);
-  onValue(ref(db, 'jobRouteTemplates'), (snapshot) => {
+  _deferFirebaseData('jobRouteTemplates', (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('jobRouteTemplates')) { _firstSync.jobRouteTemplates = true; return; }
     _setRecordShadow('jobRouteTemplates', data || []);
@@ -2379,13 +2357,6 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       _skeCacheSet('ske_jobtemplates', data);
       const admin = document.getElementById('admin');
       if (admin && !admin.classList.contains('hidden') && typeof renderJobRouteTemplates === 'function') renderJobRouteTemplates();
-    } else if (!_firstSync.jobRouteTemplates) {
-      const cache = (()=>{try{return JSON.parse(localStorage.getItem('ske_jobtemplates')||'[]');}catch(e){return [];}})();
-      if (Array.isArray(cache) && cache.length) window.fbSaveJobRouteTemplates(cache).catch(e=>console.error('fb seed jobRouteTemplates error', e));
-      else {
-        jobRouteTemplates = [];
-        localStorage.setItem('ske_jobtemplates', '[]');
-      }
     } else {
       jobRouteTemplates = [];
       localStorage.setItem('ske_jobtemplates', '[]');
@@ -2394,16 +2365,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
     }
     _firstSync.jobRouteTemplates = true;
   });
-  get(ref(db, 'jobRouteTemplates')).then(snapshot => {
-    if (_obHasFresh('jobRouteTemplates')) return;
-    const data = normalizeList(snapshot.val());
-    _setRecordShadow('jobRouteTemplates', data || []);
-    if (data) {
-      jobRouteTemplates = data;
-      _skeCacheSet('ske_jobtemplates', data);
-    }
-    _firstSync.jobRouteTemplates = true;
-  }).catch(e => { _firstSync.jobRouteTemplates = true; console.error('fbGet jobRouteTemplates error', e); });
+
 
   // ══ ความคิดเห็น/ข้อเสนอแนะพนักงาน (feedbacks) ══
   window.fbSaveFeedbacks = function(list) {
@@ -2413,7 +2375,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       .catch(e => { console.error('fbSaveFeedbacks error', e); throw e; });
   };
   window.fbDeleteFeedback = feedbackId => _deleteRecord('feedbacks', 'feedbacks', feedbackId);
-  onValue(ref(db, 'feedbacks'), (snapshot) => {
+  _deferFirebaseData('feedbacks', (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('feedbacks')) { _firstSync.feedbacks = true; return; }
     _setRecordShadow('feedbacks', data || []);
@@ -2422,13 +2384,6 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       _skeCacheSet('ske_feedbacks', data);
       const admin = document.getElementById('admin');
       if (admin && !admin.classList.contains('hidden') && typeof renderFeedbackList === 'function') renderFeedbackList();
-    } else if (!_firstSync.feedbacks) {
-      const cache = (()=>{try{return JSON.parse(localStorage.getItem('ske_feedbacks')||'[]');}catch(e){return [];}})();
-      if (Array.isArray(cache) && cache.length) window.fbSaveFeedbacks(cache).catch(e=>console.error('fb seed feedbacks error', e));
-      else {
-        companyFeedbacks = [];
-        localStorage.setItem('ske_feedbacks', '[]');
-      }
     } else {
       companyFeedbacks = [];
       localStorage.setItem('ske_feedbacks', '[]');
@@ -2437,16 +2392,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
     }
     _firstSync.feedbacks = true;
   });
-  get(ref(db, 'feedbacks')).then(snapshot => {
-    if (_obHasFresh('feedbacks')) return;
-    const data = normalizeList(snapshot.val());
-    _setRecordShadow('feedbacks', data || []);
-    if (data) {
-      companyFeedbacks = data;
-      _skeCacheSet('ske_feedbacks', data);
-    }
-    _firstSync.feedbacks = true;
-  }).catch(e => { _firstSync.feedbacks = true; console.error('fbGet feedbacks error', e); });
+
 
 </script>
 <style>
@@ -4350,7 +4296,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.66S</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.67P</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4358,7 +4304,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.66S</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.67P</div>
       </div>
     </div>
 
@@ -4476,7 +4422,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.63P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.67P</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4732,7 +4678,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.66S</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.67P</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5408,7 +5354,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.66S';
+const SKE_APP_VERSION='v3.2.67P';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5957,6 +5903,13 @@ function _skeFinishRouteTrack(emp,location,note,source='employee-status'){
   return {...active,...patch};
 }
 function recordRouteStatusTransition(prev,newStatus,location,note,source='employee-status',nextProvince){
+  if(window.fbDataReady && !window.fbDataReady(['routeTracks'])){
+    if(prev?.status==='traveling'||newStatus==='traveling'||newStatus==='unload_bay'){
+      const args=Array.from(arguments);
+      window.fbLoadData(['routeTracks']).then(()=>recordRouteStatusTransition(...args)).catch(e=>console.warn('route history load',e));
+    }
+    return;
+  }
   if(!prev||!newStatus)return;
   const routeFields=_skeRouteStatusFields(prev,newStatus,location,nextProvince);
   const emp={...prev,...routeFields,status:newStatus,province:nextProvince!==undefined?nextProvince:prev.province,note:note!==undefined?note:prev.note};
@@ -6163,6 +6116,7 @@ function _skeRevealAdminRouteHistory(focus='catalog'){
   setTimeout(()=>target.classList.remove('status-jump-flash'),1600);
 }
 function openAdminRouteHistory(){
+  if(skeWaitForData(["routeTracks"],()=>openAdminRouteHistory(...arguments)))return;
   if(!_skeCanAdminViewRoutes()){alert('กรุณาเข้าสู่ระบบผู้ดูแลหรือแอดมินก่อนดูประวัติการเดินทาง');return;}
   switchAdminTab('tracking');
   setTimeout(_skeRevealAdminRouteHistory,80);
@@ -6493,6 +6447,7 @@ function openRouteComparison(empId){if(!_skeCanAdminViewRoutes()){alert('เฉ�
 function openRouteTrackPreview(trackId){if(!_skeCanAdminViewRoutes()){alert('เฉพาะผู้ดูแลและแอดมินเท่านั้นที่เปิดประวัติการเดินทางได้');return;}_skeOpenRouteModal((routeTracks||[]).find(t=>t&&t.id===trackId),null);}
 function closeRouteComparison(){document.getElementById('skeRouteCompareModal')?.remove();}
 function backfillRouteTracksFromExistingData(){
+  if(window.fbDataReady && !window.fbDataReady(['routeTracks']))return;
   let added=false;
   (employees||[]).forEach(emp=>{
     if(!emp||!emp.id||!['traveling','unload_bay'].includes(emp.status))return;
@@ -6574,12 +6529,14 @@ async function _skeSendPhoneLocation(position,force=false,allowBackground=false)
   _skePhoneGpsLastSentAt=now;
   _skePhoneGpsLastSentCoords={lat:phoneLocation.lat,lng:phoneLocation.lng};
   const previousEmployee=(employees||[]).find(e=>e&&e.id===empId)||currentUser;
-  const routeDeviation=previousEmployee&&previousEmployee.status==='traveling'?_skeEvaluateRouteDeviation(previousEmployee,phoneLocation,now):null;
+  const routeReady=!window.fbDataReady||window.fbDataReady(['routeTracks']);
+  if(previousEmployee?.status==='traveling'&&!routeReady)window.fbLoadData(['routeTracks']).catch(()=>{});
+  const routeDeviation=previousEmployee&&previousEmployee.status==='traveling'&&routeReady?_skeEvaluateRouteDeviation(previousEmployee,phoneLocation,now):(previousEmployee?.routeDeviation||null);
   const captureMissingOrigin=previousEmployee&&previousEmployee.status==='loading'&&!previousEmployee.routeOriginLocation;
   const routeOriginFields=captureMissingOrigin?_skeRouteStatusFields(previousEmployee,'loading',phoneLocation,''):{};
   _skeApplyPhoneLocationLocal(empId,phoneLocation,routeDeviation,routeOriginFields);
   const activeEmployee=(employees||[]).find(e=>e&&e.id===empId)||currentUser;
-  if(activeEmployee&&activeEmployee.status==='traveling'){
+  if(routeReady&&activeEmployee&&activeEmployee.status==='traveling'){
     _skeAppendActiveRoutePoint(empId,phoneLocation);
     _skeUpdateRouteDeviationEvent(empId,routeDeviation,phoneLocation);
   }
@@ -6964,6 +6921,7 @@ function _maintCutoffTime(){
   return d.getTime();
 }
 function pruneOldMaintenance(){
+  if(window.fbDataReady && !window.fbDataReady(['repairs','fluidLogs']))return false;
   const cutoff=_maintCutoffTime();
   let changed=false;
   const newRepairs=repairs.filter(r=>{
@@ -6991,6 +6949,7 @@ setInterval(pruneOldMaintenance,60*60*1000);
 // รายการยังอยู่ครบ (ไม่หาย) แค่รูปโดนล้างเพื่อประหยัด Firebase DB quota
 // รันครั้งเดียวตอน sync ครั้งแรก (เรียกจาก onValue repairs)
 function purgeOldPhotos(){
+  if(window.fbDataReady && !window.fbDataReady(['repairs','fluidLogs']))return;
   const cutoff=_maintCutoffTime();
   let repChanged=false,fluChanged=false;
   const purgedIds=[]; // รหัสรูปที่ถูกถอดออก — จะตามไปลบตัวรูปจริงในคลังด้วย ไม่ให้เป็นขยะค้าง
@@ -7126,6 +7085,56 @@ window.SKEIntro={
 // วิดีโอ splash โหลดเสร็จ 100% ก่อนถึงจะเริ่มแอพ — ถ้าเน็ตช้ามากจะทำให้แอพค้างไม่เปิดเลย
 // DOMContentLoaded ยิงทันทีที่ HTML พาร์สเสร็จ ส่วนวิดีโอยังเล่นแบบ progressive ได้ตามปกติ
 // และถ้าเน็ตช้าจนเล่นวิดีโอไม่ได้จริงๆ ตัว fallback timeout 8.5 วิที่มีอยู่แล้วจะพาเข้าแอพให้เอง
+// Load only on explicit entry. Waiting does not hide the current screen or permit edits on old data.
+let _skeDataWaitToken=0;
+function skeCancelDataWait(){
+  ++_skeDataWaitToken;
+  document.getElementById('skeDataWait')?.remove();
+}
+function skeWaitForData(paths, resume){
+  if(!window.fbLoadData||window.fbDataReady(paths))return false;
+  const key=[...new Set(paths)].sort().join(',');
+  const existing=document.getElementById('skeDataWait');
+  if(existing?.dataset.key===key)return true;
+  skeCancelDataWait();
+  const token=_skeDataWaitToken;
+  const dialog=document.createElement('div');
+  dialog.id='skeDataWait';dialog.dataset.key=key;
+  dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');
+  dialog.setAttribute('aria-label','โหลดข้อมูลที่เลือก');
+  dialog.style.cssText='position:fixed;inset:0;z-index:100050;background:rgba(15,23,42,.38);display:grid;place-items:center;padding:20px';
+  dialog.innerHTML='<div style="width:min(390px,100%);padding:22px;border-radius:20px;background:white;box-shadow:0 20px 70px #0f172a40;color:#0f172a"><h3 style="margin:0 0 10px;font-size:18px">กำลังโหลดข้อมูลที่เลือก</h3><p role="status" style="font-size:14px;line-height:1.65;color:#475569">โหลดเฉพาะส่วนนี้ ไม่ต้องรอประวัติทั้งหมด<br>หากเน็ตช้า สามารถกลับไปดูสถานะรถก่อนได้</p><div style="display:flex;gap:10px;margin-top:16px"><button class="btn btn-blue" data-retry hidden>ลองอีกครั้ง</button><button class="btn btn-gray" data-cancel>กลับ</button></div></div>';
+  dialog.querySelector('[data-cancel]').onclick=skeCancelDataWait;
+  document.body.appendChild(dialog);
+  const attempt=()=>{
+    const retry=dialog.querySelector('[data-retry]');retry.hidden=true;retry.style.display='none';
+    dialog.querySelector('[role="status"]').textContent='กำลังรับข้อมูลล่าสุดจากส่วนกลาง…';
+    window.fbLoadData(paths).then(()=>{
+      if(token!==_skeDataWaitToken||!dialog.isConnected)return;
+      skeCancelDataWait();resume();
+    }).catch(error=>{
+      if(token!==_skeDataWaitToken||!dialog.isConnected)return;
+      dialog.querySelector('[role="status"]').textContent=error.message||'โหลดไม่สำเร็จ กรุณาลองใหม่';
+      retry.hidden=false;retry.style.display='';
+    });
+  };
+  dialog.querySelector('[data-retry]').onclick=attempt;
+  attempt();
+  return true;
+}
+function skeLazyCard(title,detail,path,action){
+  const loading=window.fbDataState?.(path)==='loading';
+  return `<button type="button" class="card" onclick="${action}" style="display:block;width:100%;text-align:left;margin-top:10px;padding:14px 16px;border:1px solid #CBD5E1;background:#F8FAFC;border-radius:14px;"><span style="display:block;color:#0F172A;font-size:14px;font-weight:800;">${title} <span style="float:right;color:#0284C7">›</span></span><span style="display:block;margin-top:5px;color:#475569;font-size:12px;line-height:1.6">${loading?'กำลังโหลด… แตะดูความคืบหน้า':detail}</span></button>`;
+}
+function skeOpenEmployeeDocs(){
+  if(skeWaitForData(['monthlyDocs'],skeOpenEmployeeDocs))return;
+  if(currentUser&&!adminMode)renderDashboard();
+}
+function skeOpenEmployeeJobs(){
+  if(skeWaitForData(['jobPlan'],skeOpenEmployeeJobs))return;
+  if(currentUser&&!adminMode){renderDashboard();if(!getQueuedEmployeeJobRows(currentUser).length)showDocUploadToast('ไม่มีงานถัดไปที่รออยู่ในขณะนี้',true);}
+}
+
 function skeInitApp(){
   const startApp=function(){
   const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -7194,7 +7203,8 @@ document.addEventListener('visibilitychange',()=>{
 });
 
 // ── Nav helpers ───────────────────────────────────────────────────────────────
-function show(id){['splash','login','dashboard','admin'].forEach(s=>document.getElementById(s).classList.add('hidden'));document.getElementById(id).classList.remove('hidden');}
+function show(id){
+  skeCancelDataWait();['splash','login','dashboard','admin'].forEach(s=>document.getElementById(s).classList.add('hidden'));document.getElementById(id).classList.remove('hidden');}
 function showMode(m){['mode-select','mode-register','mode-adminPw','mode-pin'].forEach(x=>document.getElementById(x).classList.add('hidden'));document.getElementById('mode-'+m).classList.remove('hidden');['loginMsg','regMsg','adminPwMsg','pinMsg'].forEach(x=>{const el=document.getElementById(x);if(el)el.classList.add('hidden');});if(m==='adminPw'){const i=document.getElementById('adminPwInput');if(i)i.value='';const p2=document.getElementById('adminPin2Input');if(p2)p2.value='';if(typeof selLoginRole==='function')selLoginRole('super');}}
 
 function highlightNav(btn){document.querySelectorAll('#dashboard .nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
@@ -7746,7 +7756,9 @@ function requestNotifPermission(){
   }
 }
 
-function doLogout(){if(window.fbUnregisterPushToken)window.fbUnregisterPushToken();stopEmployeePhoneGps();closeEmpSettings();closeRepairModal();closeFluidModal();stopAlertTimer();stopAdminAlertTimer();currentUser=null;adminMode=false;adminRole=null;saveU();saveA();saveAR();document.getElementById('admin')?.classList.remove('role-viewer');show('login');renderEmpList();showMode('select');}
+function doLogout(){
+  skeCancelDataWait();
+  window.fbReleaseDeferredData?.();if(window.fbUnregisterPushToken)window.fbUnregisterPushToken();stopEmployeePhoneGps();closeEmpSettings();closeRepairModal();closeFluidModal();stopAlertTimer();stopAdminAlertTimer();currentUser=null;adminMode=false;adminRole=null;saveU();saveA();saveAR();document.getElementById('admin')?.classList.remove('role-viewer');show('login');renderEmpList();showMode('select');}
 
 // ── Employee settings sheet (โปรไฟล์ + ออกจากระบบ) ───────────────────────────
 function openEmpSettings(){
@@ -7891,6 +7903,7 @@ function saveFeedbacks(){
   return Promise.resolve();
 }
 function openFeedbackModal(){
+  if(skeWaitForData(["feedbacks"],()=>openFeedbackModal(...arguments)))return;
   if(denySharedTruckRestrictedAccess())return;
   const m=document.getElementById('fbMsg');
   if(m)m.classList.add('hidden');
@@ -7924,6 +7937,7 @@ function doSendFeedback(){
 
 // ── หน้าแอดมิน: ดูความคิดเห็น/ข้อเสนอแนะที่พนักงานส่งมาทั้งหมด ──
 function renderFeedbackList(){
+  if(skeWaitForData(["feedbacks"],()=>renderFeedbackList(...arguments)))return;
   const el=document.getElementById('feedbackList');
   if(!el)return;
   const list=companyFeedbacks.slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
@@ -7958,6 +7972,7 @@ async function delFeedback(id){
 // ── รายการแจ้งซ่อม (Repair reports) ─────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════
 function openRepairModal(){
+  if(skeWaitForData(["repairs"],()=>openRepairModal(...arguments)))return;
   if(denySharedTruckRestrictedAccess())return;
   if(!currentUser)return;
   document.getElementById('repairForm').classList.add('hidden');
@@ -8532,6 +8547,7 @@ function fmtDate(d){if(!d)return'-';try{return new Date(d+'T00:00:00').toLocaleD
 function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 
 function openFluidModal(){
+  if(skeWaitForData(["fluidLogs"],()=>openFluidModal(...arguments)))return;
   if(denySharedTruckRestrictedAccess())return;
   if(!currentUser)return;
   document.getElementById('fluidForm').classList.add('hidden');
@@ -8763,6 +8779,7 @@ function _cashPhotosHTML(s,maxH){
   ).join('')}</div>`;
 }
 function openCashModal(){
+  if(skeWaitForData(["cashOpeningDates","cashRequests"],()=>openCashModal(...arguments)))return;
   if(denySharedTruckRestrictedAccess())return;
   if(!currentUser)return;
   document.getElementById('cashForm').classList.add('hidden');
@@ -8959,10 +8976,13 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 
 // ── อัพเดทตัวเลขสรุปบนการ์ดลัด แจ้งซ่อม/เปลี่ยนถ่าย/เบิกเงิน ในหน้าหลัก ────────
 function updateMaintBadges(){
+  for(const [path,id,dot] of [['repairs','repairSub','repairDot'],['fluidLogs','fluidSub',''],['cashRequests','cashSub','cashDot']]){
+    if(window.fbDataReady&&!window.fbDataReady([path])){const el=document.getElementById(id);if(el)el.textContent='แตะเพื่อโหลดข้อมูลล่าสุด';if(dot)document.getElementById(dot)?.classList.add('hidden');}
+  }
   if(!currentUser)return;
   const repSub=document.getElementById('repairSub');
   const repDot=document.getElementById('repairDot');
-  if(repSub){
+  if(repSub&&(!window.fbDataReady||window.fbDataReady(['repairs']))){
     const mineRep=repairs.filter(r=>r.empId===currentUser.id);
     const pending=mineRep.filter(r=>r.status!=='done').length;
     repSub.textContent=mineRep.length===0?'ไม่มีรายการ':(pending>0?`รอดำเนินการ ${pending} รายการ`:'ซ่อมเสร็จครบแล้ว');
@@ -8973,13 +8993,13 @@ function updateMaintBadges(){
     }
   }
   const fluSub=document.getElementById('fluidSub');
-  if(fluSub){
+  if(fluSub&&(!window.fbDataReady||window.fbDataReady(['fluidLogs']))){
     const mineFlu=fluidLogs.filter(f=>f.empId===currentUser.id).sort((a,b)=>new Date(b.changedAt)-new Date(a.changedAt));
     fluSub.textContent=mineFlu.length===0?'ยังไม่มีบันทึก':`ล่าสุด ${fmtDate(mineFlu[0].changedAt)}`;
   }
   const cashSub=document.getElementById('cashSub');
   const cashDot=document.getElementById('cashDot');
-  if(cashSub){
+  if(cashSub&&(!window.fbDataReady||window.fbDataReady(['cashRequests','cashOpeningDates']))){
     const mineCash=cashRequests.filter(s=>s.empId===currentUser.id);
     const pendingCash=mineCash.filter(s=>s.status!=='done').length;
     const dayOpen=isCashDayOpen();
@@ -9045,6 +9065,7 @@ function _empLookup(empId,fallbackName,fallbackPlate){
 }
 
 function renderAdminMaint(){
+  if(window.fbDataReady && !window.fbDataReady(["repairs","fluidLogs"]))return;
   renderAdminRepairList();
   updateAdminMaintBadge();
 }
@@ -9054,6 +9075,7 @@ function renderAdminMaint(){
 function isRepairResolved(r){return r.status==='done'||r.approval==='rejected';}
 
 function updateAdminMaintBadge(){
+  if(window.fbDataReady&&!window.fbDataReady(['repairs'])){document.getElementById('maintTabBadge')?.classList.add('hidden');document.getElementById('navMaintNavBadge')?.classList.add('hidden');return;}
   const badge=document.getElementById('maintTabBadge');
   const navBadge=document.getElementById('navMaintNavBadge');
   const pending=_countNewRepairs();
@@ -9385,6 +9407,7 @@ function renderAdminFluidHistory(){
 // ── แผงผู้ดูแล: รายการเบิกเงินพนักงานทุกคน ────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════
 function updateAdminCashBadge(){
+  if(window.fbDataReady&&!window.fbDataReady(['cashRequests'])){document.getElementById('cashTabBadge')?.classList.add('hidden');document.getElementById('navCashNavBadge')?.classList.add('hidden');return;}
   const badge=document.getElementById('cashTabBadge');
   const navBadge=document.getElementById('navCashNavBadge');
   const pending=_countNewCash();
@@ -9447,6 +9470,7 @@ async function doDeleteAllCashPhotos(){
   alert(`✅ ลบรูปบิล ${photoIds.length} รูปเรียบร้อยแล้ว`);
 }
 function renderAdminCashList(){
+  if(window.fbDataReady && !window.fbDataReady(["cashRequests"]))return;
   renderCashOpeningAdmin();
   const statsEl=document.getElementById('adminCashStats');
   const groupsEl=document.getElementById('adminCashGroups');
@@ -9713,6 +9737,7 @@ async function syncMonthlyDocumentPenaltyRecords(targetEmployees=[]){
   }
 }
 function renderMonthlyDocAlert(me){
+  if(me&&isDrivingPosition(me.position)&&window.fbDataReady&&!window.fbDataReady(['monthlyDocs']))return skeLazyCard('เอกสารประจำเดือน','ส่งภายในวันที่ 10 · แตะตรวจสอบการส่งและยอดแจ้งหัก','monthlyDocs','skeOpenEmployeeDocs()');
   if(!me)return'';
   // เตือน/ให้ส่งเอกสารเฉพาะตำแหน่ง "พนักงานขับรถ" เท่านั้น — ตำแหน่งอื่นไม่ต้องส่งเอกสารเข้าส่วนกลาง เลยไม่ต้องเห็นป้ายนี้เลย
   if(!isDrivingPosition(me.position))return'';
@@ -9888,23 +9913,26 @@ function recordRunLogIfNeeded(prevEmp,newStatus,newNote,empId,plate,name){
   const prevNote=(prevEmp&&prevEmp.status==='traveling')?String(prevEmp.note||'').trim():'';
   if(note===prevNote)return; // หมายเหตุไม่เปลี่ยน ไม่บันทึกซ้ำ
   const now=new Date().toISOString();
-  runLogs.unshift({
+  const record={
     id:'rl_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
     empId,name:name||'',plate:plate||'',
     detail:note,
     trips:countSixWTrips(note)||1,
     createdAt:now
-  });
+  };
+  runLogs.unshift(record);
   // เก็บย้อนหลังแบบเดือนปฏิทินจริง — ไว้ให้พนักงานตรวจเที่ยววิ่งของตัวเองเฉยๆ ไม่ต้องเก็บนาน (แอดมิน export เก็บถาวรได้จากเมนู "เครื่องมือระบบ")
   const cutoff=_runLogCutoff();
   runLogs=runLogs.filter(r=>!r.createdAt||new Date(r.createdAt).getTime()>=cutoff);
-  saveRunLogs();
+  _cacheSet('ske_runlogs',runLogs);
+  if(window.fbSaveRunLogs)window.fbSaveRunLogs({__skeRecordOps:1,ops:[{id:record.id,create:true,patch:record}]}).catch(e=>console.warn('run log pending',e));
 }
 // ── กู้เที่ยวที่ตกหล่น ──
 // เผื่อกรณีพนักงานเปลี่ยนเป็น "ออกเดินทาง" + หมายเหตุ 6W ไปแล้วตั้งแต่ก่อนอัพเดทระบบนี้ขึ้นเว็บจริง
 // ทำงานครั้งเดียวตอนแอปโหลดเสร็จ — สแกนเฉพาะพนักงานที่ "สถานะปัจจุบันเป็นออกเดินทาง" เท่านั้น (เดิมสแกนทุกคนไม่สนสถานะ ทำให้บันทึกผิดตอนรถยังไม่ออก)
 // ถ้าหมายเหตุมี 6W และยังไม่เคยถูกบันทึกไว้เลย (เทียบข้อความทั้งหมด) จะเก็บเข้าประวัติให้อัตโนมัติ
 function backfillMissedRunLogs(){
+  if(window.fbDataReady && !window.fbDataReady(['runLogs']))return;
   if(!Array.isArray(employees)||!employees.length)return;
   const now=new Date().toISOString();
   let added=false;
@@ -9974,6 +10002,7 @@ function getRunLogEntriesForEmployee(e,monthKey=_runLogCurrentMonthKey()){
     }));
 }
 function renderEmployeeRunLogCard(me){
+  if(window.fbDataReady&&!window.fbDataReady(['runLogs']))return skeLazyCard('บันทึกวิ่งงาน','แตะเพื่อโหลดจำนวนเที่ยวและประวัติรายเดือน','runLogs','openEmployeeRunLogModal()');
   const currentMonthKey=_runLogCurrentMonthKey();
   const currentMonthLabel=_runLogMonthLabel(currentMonthKey);
   const entries=getRunLogEntriesForEmployee(me,currentMonthKey);
@@ -10022,6 +10051,7 @@ function toggleRunLogEntryCount(el,ev){
 }
 let _runLogModalMonthKey='';
 function openEmployeeRunLogModal(keepSelectedMonth=false){
+  if(skeWaitForData(["runLogs"],()=>openEmployeeRunLogModal(...arguments)))return;
   const me=employees.find(e=>e.id===currentUser?.id)||currentUser;
   if(!me)return;
   const months=_runLogAvailableMonthsForEmployee(me);
@@ -10191,7 +10221,7 @@ function renderDashboard(){
   }
   const leavePill=me.onLeave?leaveApprovalPill(me):null;
   const queueInfo=sharedTruck?null:getQueuePosition(me);
-  const queuedJobs=sharedTruck?[]:getQueuedEmployeeJobRows(me);
+  const queuedJobs=sharedTruck||window.fbDataReady&&!window.fbDataReady(['jobPlan'])?[]:getQueuedEmployeeJobRows(me);
 
   document.getElementById('dashboard')?.classList.toggle('shared-truck-mode',sharedTruck);
   document.getElementById('adminBadge').classList.toggle('hidden',!adminMode||sharedTruck);
@@ -10231,6 +10261,7 @@ function renderDashboard(){
       <div style="font-size:12px;font-weight:800;color:#4F46E5;margin-bottom:5px;">📦 รายละเอียดงานที่ได้รับ</div>
       <div style="font-size:14.5px;color:#1a1a2e;font-weight:700;line-height:1.6;white-space:pre-wrap;">${esc(me.note)}</div>
     </div>`:''}
+    ${window.fbDataReady&&!window.fbDataReady(['jobPlan'])?skeLazyCard('งานถัดไป','แตะตรวจสอบคิวงานล่าสุดจากส่วนกลาง','jobPlan','skeOpenEmployeeJobs()'):''}
     ${queuedJobs.length?`<div style="margin-top:10px;background:#FFF7ED;border:2px solid #FDBA74;border-radius:12px;padding:12px 14px;">
       <div style="font-size:12px;font-weight:900;color:#C2410C;margin-bottom:8px;">⏳ งานถัดไป ${queuedJobs.length} งาน — รอจบงานปัจจุบัน</div>
       ${queuedJobs.map((job,index)=>`<div style="padding:${index?'9px 0 0':'0'};margin-top:${index?'9px':'0'};border-top:${index?'1px solid #FED7AA':'0'};">
@@ -10791,7 +10822,7 @@ function buildSummaryHTML(){
 
   // สรุปบนสุด — "รถทั้งหมด" นับจากรายการรถจริง (vehicles) ตรงๆ แยกขาดจากพนักงาน/คนขับโดยสิ้นเชิง
   // แจ้งเตือนเฉพาะสถานะที่กำลังทำงานอยู่ที่ช่อง (4 สถานะ) เกิน ALERT_HOURS ชม.
-  const total=vehicles.filter(v=>v.active!==false).length;
+  const total=window.fbDataReady&&!window.fbDataReady(['vehicles'])?'…':vehicles.filter(v=>v.active!==false).length;
   const stale=awaitingStatus.length+dedupedEmployees.filter(e=>!isLeaveActiveToday(e)&&ALERT_STATUSES.includes(e.status)&&(!e.updatedAt||(Date.now()-new Date(e.updatedAt))/3600000>=ALERT_HOURS)).length;
   const primaryActionIds=['unload_bay','loading','traveling','standby'];
   const primaryActionLabels={unload_bay:'ถึงแล้ว',loading:'ขึ้นงาน',traveling:'เดินทาง',standby:'สแตนบาย'};
@@ -11131,10 +11162,18 @@ function _skeNearestProvinceFromGps(loc){
 async function _skeFetchPhonePlace(loc,allowNetwork=false){
   const cached=_skeReadPhonePlaceCache(loc);
   if(cached)return cached;
-  // แคชส่วนกลางถูก sync แบบ realtime ไว้ใน window._skeSharedPhonePlaceCache แล้ว
-  // ถ้ายังโหลดไม่ทัน ให้โทรศัพท์เจ้าของตำแหน่งค้นหาจาก GPS ปัจจุบันต่อได้เลย
-  // ไม่วนอ่าน Firebase ทีละช่อง เพราะจะทำให้การแสดงตำแหน่งใหม่ช้าลง
   if(!allowNetwork)return null;
+  if(window.fbGetPhonePlaceCache){
+    let cacheTimer;
+    try{
+      await Promise.race([
+        Promise.all(_skePhonePlaceCacheCandidateKeys(loc).map(key=>window.fbGetPhonePlaceCache(key).catch(()=>null))),
+        new Promise(resolve=>{cacheTimer=setTimeout(resolve,1200);})
+      ]);
+    }finally{clearTimeout(cacheTimer);}
+    const shared=_skeReadPhonePlaceCache(loc);
+    if(shared)return shared;
+  }
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),SKE_PHONE_PLACE_TIMEOUT_MS);
   try{
@@ -11650,6 +11689,9 @@ function doSave(){
   const needProv=!isOffice&&(['standby','traveling','returning','done'].includes(selectedStatus)||isFinishAction);
   const provSel=document.getElementById('provSel'),prov=needProv?String((provSel?provSel.value:_selProv)||'').trim():'';
   if(needProv&&!isValidProvince(prov)){alert('กรุณาเลือกจังหวัดจากรายการก่อนบันทึก');provSel?.focus();return;}
+  if(isFinishAction && skeWaitForData(['jobPlan'],()=>{
+    if(currentUser?.id===empId && document.getElementById('statusEditModal')===modal)doSave();
+  }))return;
   _statusSaving=true;
   try{
     const now=new Date().toISOString(),finishPlan=isFinishAction?_prepareJobCompletion(prev):null,next=finishPlan?.next||null;
@@ -11670,6 +11712,7 @@ function doSave(){
 
 // ══ Export บันทึกเที่ยววิ่งเป็น CSV (สำหรับแอดมินเก็บถาวรก่อนข้อมูลถูกลบอัตโนมัติตามอายุ 3 เดือน) ══
 function exportRunLogsCSV(){
+  if(skeWaitForData(["runLogs"],()=>exportRunLogsCSV(...arguments)))return;
   if(!runLogs||!runLogs.length){alert('ยังไม่มีข้อมูลบันทึกเที่ยววิ่งให้ดาวน์โหลด');return;}
   const rows=[['วันที่-เวลา','ชื่อพนักงาน','ทะเบียนรถ','จำนวนเที่ยว','รายละเอียด']];
   runLogs.slice().sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt)).forEach(r=>{
@@ -11769,6 +11812,7 @@ function updateAdminDocBadge(){
   if(n>0){b.textContent=n;b.classList.remove('hidden');}else b.classList.add('hidden');
 }
 function renderAdminDocPanel(){
+  if(window.fbDataReady && !window.fbDataReady(["monthlyDocs"]))return;
   const stats=document.getElementById('adminDocStats');
   const listEl=document.getElementById('adminDocList');
   if(!stats||!listEl)return;
@@ -11882,10 +11926,11 @@ async function rejectMonthlyDoc(id){
 }
 
 function renderAdmin(){
+  if(window.fbLoadData && !window.fbDataReady(['vehicles']))window.fbLoadData(['vehicles']).catch(()=>{});
   renderAdminEmpList();
   renderSysInfo();
   const el=document.getElementById('adminSummaryContent');
-  if(el)el.innerHTML=buildSummaryHTML();
+  if(el&&(!window._currentAdminTab||window._currentAdminTab==='summary'))el.innerHTML=buildSummaryHTML();
   const lc=document.getElementById('adminLeaveContent');
   if(lc)lc.innerHTML=buildLeaveHTML();
   updateAdminMaintBadge();
@@ -12045,6 +12090,8 @@ function closeAdminMoreMenu(){
 }
 
 function switchAdminTab(t){
+  const needed={maint:['repairs','fluidLogs'],cash:['cashOpeningDates','cashRequests'],cashHistory:['cashRequests'],doc:['monthlyDocs'],jobPlan:['jobPlan','jobRouteTemplates'],history:['repairs'],fluidHistory:['fluidLogs'],leaveHistory:['leaveLogs']}[t];
+  if(needed && skeWaitForData(needed,()=>switchAdminTab(t)))return;
   if(t==='tracking')t='summary'; // รองรับทางลัด/สถานะหน้าค้างจากรุ่นก่อน
   if(adminRole==='viewer'&&t!=='summary'&&t!=='leave'&&t!=='leaveHistory'&&t!=='jobPlan')t='summary';
   // เก็บตำแหน่ง scroll ของแท็บเดิมไว้ก่อนสลับ เพื่อให้กลับมาที่เดิมได้เวลาสลับกลับมาแท็บนี้อีก
@@ -12174,6 +12221,7 @@ function hideEmpManage(){
 // "รถทั้งหมด" ในหน้าสรุปนับจากรายการนี้ตรงๆ (vehicles.length) ไม่ต้องเดาจากทะเบียนที่พนักงานกรอกไว้อีกต่อไป
 // ══════════════════════════════════════════════════════════════════════════
 function showVehicleManage(){
+  if(skeWaitForData(["vehicles"],()=>showVehicleManage(...arguments)))return;
   document.getElementById('adminTabBar')?.classList.add('hidden');
   document.getElementById('adminSummaryPanel').classList.add('hidden');
   document.getElementById('adminSettingsPanel').classList.add('hidden');
@@ -12561,6 +12609,7 @@ function fmtJobMonthLabel(mk){
 }
 function toggleJobPlanMonth(mk){toggleAcc('jpmonth_'+mk);}
 function renderJobPlan(){
+  if(window.fbDataReady && !window.fbDataReady(["jobPlan"]))return;
   const el=document.getElementById('jobPlanList');
   if(!el)return;
   const fsel=document.getElementById('jpCopyFromSel');
@@ -13058,6 +13107,7 @@ function saveJobRouteTemplates(){
   return Promise.resolve();
 }
 function renderJobRouteTemplates(){
+  if(window.fbDataReady && !window.fbDataReady(["jobRouteTemplates"]))return;
   const el=document.getElementById('jobTemplateList');
   if(!el)return;
   if(!jobRouteTemplates.length){
@@ -13166,6 +13216,7 @@ function _swVehicleGroups(){
 }
 function _swOwnerEmp(){return employees.find(e=>e.isOwner)||null;}
 function openSwitchDriverModal(){
+  if(skeWaitForData(["vehicles"],()=>openSwitchDriverModal(...arguments)))return;
   _sd={step:1,plate:'',driverMode:'',driverId:'',newName:'',newPhone:'',ownerPickOpen:false,ownerPickMarkNew:false,q:''};
   let ov=document.getElementById('switchDriverModal');
   if(!ov){
