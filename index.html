@@ -831,7 +831,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.67P');
+console.log('[SKE TRUCK] app version: v3.2.68M');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1419,7 +1419,7 @@ console.log('[SKE TRUCK] app version: v3.2.67P');
         if(!ownsSession()||!current||String(current.id)!==id)return;
         if(current.lastStatusChange?.id===requestId)return current;
         if(_skeStatusFingerprint(current)!==expected)return;
-        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,version:'v3.2.67P'};
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,version:'v3.2.68M'};
         const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
         return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
           ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
@@ -2312,6 +2312,36 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
       .catch(e => { console.error('fbSaveJobPlanRows error', e); throw e; });
   };
   window.fbDeleteJobPlanRow = rowId => _deleteRecord('jobPlan', 'jobPlan', rowId);
+  window.fbCreateJobPlanMonth = async function(month, templates) {
+    if (!adminMode) throw new Error('กรุณาเข้าสู่หน้าผู้ดูแลก่อน');
+    if (!window.fbDataReady(['jobPlan','jobRouteTemplates'])) throw new Error('กรุณารอโหลดแผนงานและเส้นทางหลักให้ครบก่อน');
+    if (!window._fbConnected || navigator.onLine === false) throw new Error('ยังเชื่อมต่อส่วนกลางไม่ได้ กรุณาเชื่อมต่อแล้วลองใหม่');
+    if (_obHasFresh('jobPlan') || _obHasFresh('jobRouteTemplates') || _recordWriteBusy.jobPlan || _recordWriteBusy.jobRouteTemplates) {
+      throw new Error('กำลังส่งการแก้ไขก่อนหน้า กรุณารอให้บันทึกสำเร็จแล้วลองใหม่');
+    }
+    // One atomic append, recomputed on every retry: two admins cannot create the same month twice.
+    // Never use ordinary create patches here: they may overwrite an already assigned row on retry.
+    const selectedTemplates = _cloneRecord(templates);
+    buildJobPlanMonth(month, selectedTemplates, []); // Validate before starting any write.
+    let added = 0, days = 0;
+    const result = await _withTimeout(runTransaction(ref(db, 'jobPlan'), current => {
+      if (current !== null && (typeof current !== 'object' || !current)) throw new Error('รูปแบบแผนงานไม่ถูกต้อง กรุณาตรวจสอบก่อนสร้าง');
+      const batch = buildJobPlanMonth(month, selectedTemplates, normalizeList(current) || []);
+      added = batch.rows.length;
+      days = new Set(batch.rows.map(row => row.workDate)).size;
+      if (!added) return current;
+      const next = { ...(current || {}) };
+      batch.rows.forEach(row => {
+        const key = _safeRecordKey(row.id);
+        if (Object.prototype.hasOwnProperty.call(next, key)) throw new Error('รหัสแผนงานซ้ำ กรุณาตรวจสอบข้อมูลก่อน');
+        next[key] = row;
+      });
+      return next;
+    }, { applyLocally:false }), SKE_WRITE_TIMEOUT_MS, 'ยังไม่ได้รับคำยืนยันจากส่วนกลาง กรุณาตรวจรายการแล้วลองใหม่ได้ โดยระบบจะไม่สร้างซ้ำ');
+    if (!result.committed) throw new Error('ยังยืนยันการสร้างแผนไม่ได้ กรุณาตรวจรายการแล้วลองใหม่');
+    // The realtime listener applies the acknowledged snapshot; do not replace it with a stale local list.
+    return { added, days };
+  };
   _deferFirebaseData('jobPlan', (snapshot) => {
     const data = normalizeList(snapshot.val());
     if (_obHasFresh('jobPlan')) { _firstSync.jobPlan = true; return; }
@@ -4296,7 +4326,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.67P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.68M</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4304,7 +4334,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.67P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.68M</div>
       </div>
     </div>
 
@@ -4422,7 +4452,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.67P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.68M</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4678,7 +4708,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.67P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.68M</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -4769,6 +4799,23 @@ select.inp option{background:#fff;color:#1a1a2e;}
           <button class="btn btn-gray btn-full" style="margin-top:10px;" onclick="addJobRouteTemplate()">+ เพิ่มเส้นทางหลัก</button>
           <button class="btn btn-blue btn-full" style="margin-top:8px;" onclick="toggleAcc('jptemplates')">✓ เสร็จแล้ว พับเก็บ</button>
         </div>
+      </div>
+
+      <div class="card" style="padding:16px;margin:16px 0;border:1px solid #BFDBFE;background:#F8FBFF;">
+        <div style="font-weight:800;color:#1E40AF;margin-bottom:6px;">🗓️ สร้างแผนทั้งเดือน</div>
+        <p style="font-size:12px;line-height:1.7;color:#475569;margin:0 0 12px;">เลือกเดือนครั้งเดียว ระบบเติมเส้นทางตามวันวิ่งที่ตั้งไว้ใน “เส้นทางหลักประจำสัปดาห์” ตั้งแต่วันที่ 1 ถึงสิ้นเดือน</p>
+        <label class="inp-label" for="jpMonthSelect">เดือนที่ต้องการสร้าง</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input id="jpMonthInput" type="hidden">
+          <div style="display:flex;gap:8px;flex:1;min-width:230px;">
+            <select class="inp" id="jpMonthSelect" style="flex:1;min-width:0;" onchange="changeJobPlanMonth()"></select>
+            <select class="inp" id="jpYearSelect" aria-label="ปี พ.ศ." style="width:105px;" onchange="changeJobPlanMonth()"></select>
+          </div>
+          <button class="btn btn-blue" id="jpCreateMonthBtn" style="flex:1;min-width:160px;" onclick="createJobPlanMonth()">สร้างแผนทั้งเดือน</button>
+        </div>
+        <div id="jpMonthPreview" style="font-size:12px;color:#334155;line-height:1.7;margin-top:10px;"></div>
+        <div style="font-size:12px;color:#047857;margin-top:5px;">✓ ไม่สร้างซ้ำ · ไม่ทับแผนเดิม · เป็นแผนร่าง ยังไม่จ่ายงาน</div>
+        <div id="jpMonthResult" role="status" aria-live="polite" style="font-size:13px;font-weight:700;line-height:1.7;margin-top:8px;"></div>
       </div>
 
       <div class="card" style="padding:12px;margin:16px 0;">
@@ -5354,7 +5401,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.67P';
+const SKE_APP_VERSION='v3.2.68M';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -12608,14 +12655,106 @@ function fmtJobMonthLabel(mk){
   return THAI_MONTHS_FULL_JP[m-1]+' '+(y+543);
 }
 function toggleJobPlanMonth(mk){toggleAcc('jpmonth_'+mk);}
+function currentJobPlanMonth(now=new Date()){
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit'}).formatToParts(now);
+  return parts.find(p=>p.type==='year').value+'-'+parts.find(p=>p.type==='month').value;
+}
+function buildJobPlanMonth(month,templates,existing){
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month||'') || +month.slice(0,4)<2000 || +month.slice(0,4)>2100)throw new Error('กรุณาเลือกเดือนและปีให้ถูกต้อง');
+  const [year,mon]=month.split('-').map(Number);
+  const calendarDays=new Date(Date.UTC(year,mon,0)).getUTCDate();
+  const textKey=(route,time)=>JSON.stringify([String(route||'').trim().replace(/\s+/g,' ').toUpperCase(),String(time||'').trim()]);
+  const linked=new Set(),named=new Set(),ids=new Set();
+  (Array.isArray(existing)?existing:[]).forEach(row=>{
+    if(!row)return;
+    ids.add(String(row.id));
+    if(row.sourceTemplateId)linked.add(JSON.stringify([row.workDate,String(row.sourceTemplateId)]));
+    named.add(JSON.stringify([row.workDate,textKey(row.route,row.standbyTime)]));
+  });
+  let skippedTemplates=0;
+  const valid=(Array.isArray(templates)?templates:[]).filter(t=>{
+    const good=t && (typeof t.id==='string'||typeof t.id==='number') && String(t.id) && encodeURIComponent(String(t.id)).length<=400 && String(t.route||'').trim() && Array.isArray(t.weekDays) && t.weekDays.some(d=>Number.isInteger(d)&&d>=1&&d<=7);
+    if(!good)skippedTemplates++;
+    return good;
+  });
+  const rows=[];
+  let skipped=0,scheduled=0;
+  for(let day=1;day<=calendarDays;day++){
+    const workDate=month+'-'+String(day).padStart(2,'0');
+    const weekday=new Date(Date.UTC(year,mon-1,day)).getUTCDay()||7;
+    valid.forEach(t=>{
+      if(!t.weekDays.includes(weekday))return;
+      scheduled++;
+      const sourceTemplateId=String(t.id);
+      const id='jpm_'+workDate+'_'+encodeURIComponent(sourceTemplateId);
+      const link=JSON.stringify([workDate,sourceTemplateId]);
+      const namedKey=JSON.stringify([workDate,textKey(t.route,t.standbyTime)]);
+      if(ids.has(id)||linked.has(link)||named.has(namedKey)){skipped++;return;}
+      rows.push({id,workDate,route:String(t.route).trim(),standbyTime:String(t.standbyTime||'').trim(),empId:'',empName:'',plate:'',phone:'',remark:'',dispatched:false,sourceTemplateId});
+      ids.add(id);linked.add(link);named.add(namedKey);
+    });
+  }
+  return {rows,skipped,scheduled,skippedTemplates,calendarDays,templates:valid.length};
+}
+let _jpMonthCreating=false;
+function changeJobPlanMonth(){
+  const month=document.getElementById('jpMonthSelect')?.value;
+  const year=document.getElementById('jpYearSelect')?.value;
+  const input=document.getElementById('jpMonthInput');
+  if(input)input.value=year+'-'+month;
+  updateJobPlanMonthPreview(true);
+}
+function updateJobPlanMonthPreview(clearResult=false){
+  const input=document.getElementById('jpMonthInput'),summary=document.getElementById('jpMonthPreview'),button=document.getElementById('jpCreateMonthBtn');
+  if(!input||!summary||!button)return;
+  if(!input.value && !clearResult)input.value=currentJobPlanMonth();
+  input.disabled=_jpMonthCreating;
+  const monthSelect=document.getElementById('jpMonthSelect'),yearSelect=document.getElementById('jpYearSelect');
+  if(monthSelect && yearSelect){
+    if(!monthSelect.options.length)monthSelect.innerHTML=THAI_MONTHS_FULL_JP.map((name,i)=>`<option value="${String(i+1).padStart(2,'0')}">${name}</option>`).join('');
+    if(!yearSelect.options.length)yearSelect.innerHTML=Array.from({length:101},(_,i)=>`<option value="${2000+i}">${2543+i}</option>`).join('');
+    monthSelect.value=input.value.slice(5,7);yearSelect.value=input.value.slice(0,4);
+    monthSelect.disabled=yearSelect.disabled=_jpMonthCreating;
+  }
+  button.disabled=_jpMonthCreating;
+  button.textContent=_jpMonthCreating?'กำลังบันทึกแผน…':'สร้างแผนทั้งเดือน';
+  if(clearResult){const result=document.getElementById('jpMonthResult');if(result)result.textContent='';}
+  try{
+    const batch=buildJobPlanMonth(input.value,jobRouteTemplates,jobPlanRows);
+    summary.textContent=!batch.templates?'ยังไม่มีเส้นทางพร้อมสร้าง กรุณาระบุชื่อเส้นทางและวันวิ่งในเส้นทางหลักประจำสัปดาห์ก่อน':`${fmtJobMonthLabel(input.value)} · เพิ่ม ${batch.rows.length} รายการ ใน ${new Set(batch.rows.map(r=>r.workDate)).size} วัน · ข้ามรายการเดิม/ซ้ำ ${batch.skipped} รายการ`;
+    if(batch.skippedTemplates)summary.textContent+=` · ข้ามเส้นทางที่ยังตั้งค่าไม่ครบ ${batch.skippedTemplates} เส้นทาง`;
+    if(!batch.rows.length)button.disabled=true;
+  }catch(e){summary.textContent=e.message;button.disabled=true;}
+}
+async function createJobPlanMonth(){
+  if(_jpMonthCreating)return;
+  if(!adminMode){alert('กรุณาเข้าสู่หน้าผู้ดูแลก่อน');return;}
+  if(skeWaitForData(['jobPlan','jobRouteTemplates'],()=>createJobPlanMonth()))return;
+  const month=document.getElementById('jpMonthInput')?.value;
+  const output=document.getElementById('jpMonthResult');
+  const message=(text,ok)=>{if(output){output.textContent=text;output.style.color=ok?'#047857':'#B45309';}};
+  try{
+    const templates=JSON.parse(JSON.stringify(jobRouteTemplates));
+    const preview=buildJobPlanMonth(month,templates,jobPlanRows);
+    if(!preview.rows.length){updateJobPlanMonthPreview();message('ไม่มีเส้นทางที่ต้องเพิ่ม ตรวจวันวิ่งในเส้นทางหลักได้ด้านบน',true);return;}
+    if(!confirm(`สร้างแผนร่าง ${fmtJobMonthLabel(month)} ตั้งแต่วันที่ 1–${preview.calendarDays}\nเพิ่มประมาณ ${preview.rows.length} รายการ ตามวันวิ่งที่ตั้งไว้\n\nไม่ทับแผนเดิม ไม่สร้างซ้ำ และยังไม่จ่ายงานให้พนักงาน\nต้องการสร้างทั้งเดือนหรือไม่?`))return;
+    _jpMonthCreating=true;updateJobPlanMonthPreview();message('กำลังรอส่วนกลางยืนยัน กรุณาอย่าปิดหน้านี้…',true);
+    if(!window.fbCreateJobPlanMonth)throw new Error('ระบบบันทึกยังไม่พร้อม กรุณาลองใหม่');
+    const result=await window.fbCreateJobPlanMonth(month,templates);
+    message(result.added?`บันทึกสำเร็จ · เพิ่ม ${result.added} รายการ ใน ${result.days} วัน (${fmtJobMonthLabel(month)}) เป็นแผนร่าง ยังไม่จ่ายงาน`:'ตรวจสอบแล้ว แผนมีครบอยู่แล้ว จึงไม่สร้างซ้ำ',true);
+    renderJobPlan();
+  }catch(e){message('ยังยืนยันการสร้างแผนไม่ได้: '+(e.message||'กรุณาตรวจการเชื่อมต่อแล้วลองใหม่'),false);}
+  finally{_jpMonthCreating=false;updateJobPlanMonthPreview();}
+}
 function renderJobPlan(){
   if(window.fbDataReady && !window.fbDataReady(["jobPlan"]))return;
+  updateJobPlanMonthPreview();
   const el=document.getElementById('jobPlanList');
   if(!el)return;
   const fsel=document.getElementById('jpCopyFromSel');
   if(fsel)fsel.innerHTML=jpExistingDateOptionsHTML(fsel.value);
   if(!jobPlanRows.length){
-    el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">ยังไม่มีแผนงาน เลือกวันที่ด้านบนแล้วกด "+ เพิ่ม" เพื่อเริ่มต้น</div></div>';
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">ยังไม่มีแผนงาน เลือกสร้างทั้งเดือน หรือเพิ่มทีละวันที่ด้านบนได้เลย</div></div>';
     return;
   }
   const byDate={};
@@ -13108,6 +13247,7 @@ function saveJobRouteTemplates(){
 }
 function renderJobRouteTemplates(){
   if(window.fbDataReady && !window.fbDataReady(["jobRouteTemplates"]))return;
+  updateJobPlanMonthPreview();
   const el=document.getElementById('jobTemplateList');
   if(!el)return;
   if(!jobRouteTemplates.length){
@@ -13150,6 +13290,7 @@ async function delJobRouteTemplate(id){
 function updateJobRouteTemplate(id,field,value){
   jobRouteTemplates=jobRouteTemplates.map(t=>t.id===id?{...t,[field]:value}:t);
   saveJobRouteTemplates();
+  updateJobPlanMonthPreview(true);
 }
 function toggleTemplateWeekday(id,dnum){
   jobRouteTemplates=jobRouteTemplates.map(t=>{
