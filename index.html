@@ -831,7 +831,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.69G');
+console.log('[SKE TRUCK] app version: v3.2.70T');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1081,6 +1081,7 @@ console.log('[SKE TRUCK] app version: v3.2.69G');
         if (op.delete) {
           if (current == null) return null;
           if (String(current.id || '') !== op.id) return;
+          if(path==='cashRequests'&&_isTollCashRequest(current)&&current.status!=='done'&&!(adminMode&&adminRole==='super'))return;
           return null;
         }
         if (current == null && !op.create) return;
@@ -1419,7 +1420,7 @@ console.log('[SKE TRUCK] app version: v3.2.69G');
         if(!ownsSession()||!current||String(current.id)!==id)return;
         if(current.lastStatusChange?.id===requestId)return current;
         if(_skeStatusFingerprint(current)!==expected)return;
-        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,version:'v3.2.69G'};
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,version:'v3.2.70T'};
         const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
         return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
           ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
@@ -1752,6 +1753,51 @@ console.log('[SKE TRUCK] app version: v3.2.69G');
       .catch(e => console.error('fbSaveCashRequests error', e));
   };
   window.fbDeleteCashRequest = requestId => _deleteRecord('cashRequests', 'cashRequests', requestId);
+
+  // Check and insert at the same transaction boundary: two devices cannot both
+  // pass a separate read/check and create outstanding toll requests.
+  window.fbSubmitTollCashRequest = async function(request) {
+    const ownsRequest=()=>currentUser&&String(request?.empId)===String(currentUser.id)&&!_isEmployeeDeleted(request.empId);
+    if(!ownsRequest())throw new Error('กรุณาเข้าสู่บัญชีพนักงานของคุณอีกครั้ง');
+    if(window._fbConnected!==true||navigator.onLine===false)throw new Error('กรุณาเชื่อมต่ออินเทอร์เน็ตเพื่อตรวจรายการค่าทางด่วนล่าสุด');
+    if(!request.id||!Number.isFinite(request.amount)||request.amount<=0||!Array.isArray(request.photos)||!request.photos.length||request.photos.length>5||request.photos.some(p=>typeof p!=='string'||!p))throw new Error('กรุณากรอกจำนวนเงินและแนบรูปบิลให้ครบ');
+    const row={...request,status:'pending',requestType:'toll'};
+    let active=true;
+    try{
+      const tx=await _withTimeout(runTransaction(ref(db,'cashRequests'),current=>{
+        if(!active||!ownsRequest()||window._fbConnected!==true||navigator.onLine===false)return;
+        return _tollCashTransactionValue(current,row,_safeRecordKey(row.id));
+      },{applyLocally:false}),SKE_WRITE_TIMEOUT_MS,'ยังยืนยันการส่งค่าทางด่วนไม่ได้ กรุณาตรวจรายการก่อนลองส่งซ้ำ');
+      if(!tx.committed)throw new Error('ยังมีค่าทางด่วนรอจ่าย หรือข้อมูลเปลี่ยนระหว่างบันทึก กรุณาตรวจรายการและรอผู้ดูแลกด “จ่ายแล้ว”');
+      const saved=Object.values(tx.snapshot.val()||{}).find(r=>r&&String(r.id)===String(row.id)&&String(r.empId)===String(row.empId)&&_isTollCashRequest(r));
+      if(!saved)throw new Error('ยังไม่พบผลยืนยันค่าทางด่วนจากส่วนกลาง กรุณาตรวจรายการก่อนส่งซ้ำ');
+      const shadow=_recordShadows.cashRequests||new Map();
+      shadow.set(String(saved.id),_cloneRecord(saved));_recordShadows.cashRequests=shadow;
+      return saved;
+    }finally{active=false;}
+  };
+  window.fbSetCashRequestStatus = async function(id,status) {
+    const authorized=()=>adminMode&&adminRole==='super';
+    if(!authorized())throw new Error('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้นที่ยืนยันการจ่ายได้');
+    if(!['pending','done'].includes(status))throw new Error('สถานะการจ่ายไม่ถูกต้อง');
+    if(window._fbConnected!==true||navigator.onLine===false)throw new Error('กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนยืนยันการจ่าย');
+    const snap=_deferredData.get('cashRequests')?.snapshot||await _withTimeout(get(ref(db,'cashRequests')),SKE_WRITE_TIMEOUT_MS,'โหลดรายการเบิกเงินไม่สำเร็จ');
+    let key=null;
+    snap.forEach(child=>{if(String(child.val()?.id)===String(id)){key=child.key;return true;}return false;});
+    if(key===null)throw new Error('ไม่พบรายการเบิกเงินนี้ กรุณาโหลดรายการใหม่');
+    let active=true;
+    try{
+      const tx=await _withTimeout(runTransaction(ref(db,'cashRequests/'+key),current=>{
+        if(!active||!authorized()||window._fbConnected!==true||navigator.onLine===false||!current||String(current.id)!==String(id))return;
+        if(current.status===status)return current;
+        return {...current,status,paidAt:status==='done'?new Date().toISOString():null,paidByRole:status==='done'?'super':null};
+      },{applyLocally:false}),SKE_WRITE_TIMEOUT_MS,'ยังยืนยันการจ่ายไม่ได้ กรุณาตรวจรายการจากส่วนกลาง');
+      if(!tx.committed)throw new Error('รายการเปลี่ยนแปลงหรือถูกลบ กรุณาโหลดใหม่');
+      const saved=tx.snapshot.val(),shadow=_recordShadows.cashRequests||new Map();
+      shadow.set(String(saved.id),_cloneRecord(saved));_recordShadows.cashRequests=shadow;
+      return saved;
+    }finally{active=false;}
+  };
 
   // Opening a cash request round is separate from approving/paying any request.
   window.fbLoadCashOpeningDates = async function() {
@@ -4326,7 +4372,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.69G</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.70T</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4334,7 +4380,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.69G</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.70T</div>
       </div>
     </div>
 
@@ -4452,7 +4498,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.69G</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.70T</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4648,7 +4694,8 @@ select.inp option{background:#fff;color:#1a1a2e;}
     <!-- เบิกค่าทางด่วน — ไม่ผูกกับวันที่อนุมัติเปิดรอบเงินเบิกทั่วไป -->
     <div class="card" style="margin-bottom:14px;display:flex;flex-direction:column;gap:10px;background:#F0F9FF;border-color:#7DD3FC;">
       <div style="font-weight:800;font-size:14px;color:#0369A1;">🛣️ เบิกค่าทางด่วน</div>
-      <div style="background:#ECFEFF;border:1px solid #A5F3FC;border-radius:8px;padding:8px 11px;font-size:11.5px;color:#155E75;">✅ ค่าทางด่วนเบิกได้ทุกวัน ไม่ต้องรอรอบเงินเบิกทั่วไป</div>
+      <div id="tollRequestNotice" role="status" style="background:#ECFEFF;border:1px solid #A5F3FC;border-radius:8px;padding:8px 11px;font-size:11.5px;color:#155E75;">กำลังตรวจรายการค่าทางด่วนล่าสุด…</div>
+      <fieldset id="tollRequestFields" disabled style="border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:10px;">
       <div><div class="inp-label">จำนวนเงิน (บาท) *</div><input class="inp" id="tollAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="เช่น 150"></div>
       <div><div class="inp-label">เส้นทาง/รายละเอียด (ไม่บังคับ)</div><input class="inp" id="tollReason" placeholder="เช่น ด่านบางปะอิน"></div>
       <div>
@@ -4657,7 +4704,8 @@ select.inp option{background:#fff;color:#1a1a2e;}
         <button type="button" class="btn btn-gray btn-full" onclick="document.getElementById('tollPhotoInput').click()">📎 เลือกรูปบิล/ใบเสร็จ</button>
         <div id="tollPhotoPreviewWrap" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
       </div>
-      <button class="btn btn-full" style="background:#0284C7;color:#fff;" onclick="doAddTollCash()">✓ ส่งคำขอเบิกค่าทางด่วน</button>
+      <button id="tollSubmitBtn" class="btn btn-full" style="background:#0284C7;color:#fff;" onclick="doAddTollCash()">✓ ส่งคำขอเบิกค่าทางด่วน</button>
+      </fieldset>
     </div>
 
     <button class="btn btn-orange btn-full" onclick="toggleCashForm()" id="cashFormToggleBtn">+ เบิกเงินใหม่</button>
@@ -4708,7 +4756,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.69G</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.70T</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5401,7 +5449,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.69G';
+const SKE_APP_VERSION='v3.2.70T';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -8864,6 +8912,7 @@ function openCashModal(){
   if(skeWaitForData(["cashOpeningDates","cashRequests"],()=>openCashModal(...arguments)))return;
   if(denySharedTruckRestrictedAccess())return;
   if(!currentUser)return;
+  if(_tollSubmitting||_tollPreparingPhotos)return;
   document.getElementById('cashForm').classList.add('hidden');
   document.getElementById('cashFormToggleBtn').textContent='+ เบิกเงินใหม่';
   document.getElementById('cashAmount').value='';
@@ -8936,7 +8985,39 @@ async function doAddCash(){
 }
 // เก็บรูปบิลค่าทางด่วนที่เลือกไว้ชั่วคราว (ยังไม่อัพโหลดจนกว่าจะกดส่งจริง กันอัพรูปทิ้งเปล่าถ้าไม่ได้ส่งคำขอ) — แนบได้หลายรูป สูงสุด 5
 let _tollNewPhotos=[];
+let _tollSubmitting=false,_tollPreparingPhotos=false,_tollDraftRequest=null,_tollDraftSourcePhotos=[];
+const _cashStatusBusy=new Set();
+function _isTollCashRequest(row){
+  return Boolean(row&&(row.requestType==='toll'||(!row.requestType&&/ค่าทางด่วน/.test(String(row.reason||'')))));
+}
+function _pendingTollCash(empId,list=cashRequests){
+  return (list||[]).filter(row=>row&&String(row.empId)===String(empId)&&_isTollCashRequest(row)&&row.status!=='done');
+}
+function _tollCashTransactionValue(current,row,key){
+  if(current!==null&&(typeof current!=='object'||!current))return;
+  const rows=Object.values(current||{}),existing=rows.find(r=>r&&String(r.id)===String(row.id));
+  // Same request retry returns the original record, including a paid record.
+  if(existing)return String(existing.empId)===String(row.empId)&&_isTollCashRequest(existing)?current:undefined;
+  if(_pendingTollCash(row.empId,rows).length)return;
+  if(typeof key!=='string'||!key)return;
+  if(current&&Object.prototype.hasOwnProperty.call(current,key))return;
+  return {...(current||{}),[key]:row};
+}
+function renderTollRequestGate(){
+  const notice=document.getElementById('tollRequestNotice'),fields=document.getElementById('tollRequestFields'),button=document.getElementById('tollSubmitBtn');
+  const ready=Boolean(currentUser&&(!window.fbDataReady||window.fbDataReady(['cashRequests'])));
+  const pending=ready?_pendingTollCash(currentUser.id):[];
+  const blocked=!ready||pending.length>0||_tollSubmitting||_tollPreparingPhotos;
+  if(fields){fields.disabled=blocked;fields.style.opacity=blocked?'.55':'1';}
+  if(button){button.disabled=blocked;button.textContent=_tollSubmitting?'กำลังส่งและยืนยันกับส่วนกลาง…':pending.length?'รอผู้ดูแลยืนยันจ่ายรายการเดิม':'✓ ส่งคำขอเบิกค่าทางด่วน';}
+  if(notice)notice.textContent=!ready?'กำลังตรวจรายการค่าทางด่วนล่าสุด…':pending.length
+    ?`🔒 มีค่าทางด่วนรอจ่าย ${pending.length} รายการ รวม ฿${fmtBaht(pending.reduce((n,r)=>n+(Number(r.amount)||0),0))} — กรอกใหม่ได้เมื่อผู้ดูแลกด “จ่ายแล้ว” ครบทุกรายการ`
+    :_tollSubmitting?'กำลังส่งคำขอ กรุณารอผลยืนยันก่อนทำรายการใหม่':_tollPreparingPhotos?'กำลังเตรียมรูปบิล กรุณารอสักครู่'
+    :'✅ ค่าทางด่วนเบิกได้ทุกวัน ครั้งละ 1 รายการ ต้องรอผู้ดูแลกด “จ่ายแล้ว” ก่อนกรอกใหม่';
+}
 async function addNewTollPhotos(input){
+  if(!currentUser||_tollSubmitting||_tollPreparingPhotos||_pendingTollCash(currentUser.id).length){input.value='';return;}
+  const employeeId=String(currentUser.id);
   const files=Array.from(input.files||[]);
   input.value='';
   if(!files.length)return;
@@ -8944,17 +9025,19 @@ async function addNewTollPhotos(input){
   if(room<=0){alert('⚠️ แนบได้สูงสุด 5 รูป');return;}
   const take=files.slice(0,room);
   if(files.length>room)alert(`⚠️ แนบได้อีก ${room} รูป (สูงสุด 5 รูป)`);
-  for(const f of take){
+  _tollPreparingPhotos=true;renderTollRequestGate();
+  try{for(const f of take){
     if(!f.type||!f.type.startsWith('image/')){alert('กรุณาแนบไฟล์รูปภาพเท่านั้น');continue;}
     if(f.size>12*1024*1024){alert('รูปภาพมีขนาดใหญ่เกินไป กรุณาเลือกรูปไม่เกิน 12 MB');continue;}
     try{
       const dataUrl=await compressMonthlyDocImage(f);
+      if(String(currentUser?.id)!==employeeId||_pendingTollCash(employeeId).length)return;
       _tollNewPhotos.push(dataUrl);
     }catch(e){alert('เตรียมรูปไม่สำเร็จ ลองใหม่อีกครั้ง');}
-  }
-  renderNewTollPhotos();
+  }}finally{_tollPreparingPhotos=false;renderNewTollPhotos();renderTollRequestGate();}
 }
 function delNewTollPhoto(idx){
+  if(_tollSubmitting||_tollPreparingPhotos||!currentUser||_pendingTollCash(currentUser.id).length)return;
   _tollNewPhotos.splice(idx,1);
   renderNewTollPhotos();
 }
@@ -8968,32 +9051,47 @@ function renderNewTollPhotos(){
 }
 // เบิกค่าทางด่วน — เบิกได้ทุกวัน ไม่ผูกกับรอบเงินเบิกทั่วไป แต่ต้องแนบรูปบิลอย่างน้อย 1 รูป
 async function doAddTollCash(){
-  if(!currentUser)return;
+  if(!currentUser||_tollSubmitting||_tollPreparingPhotos)return;
+  if(denySharedTruckRestrictedAccess())return;
+  if(window.fbDataReady&&!window.fbDataReady(['cashRequests'])){renderTollRequestGate();alert('กรุณารอโหลดรายการค่าทางด่วนล่าสุดก่อน');return;}
+  if(_pendingTollCash(currentUser.id).length){renderTollRequestGate();alert('ยังมีค่าทางด่วนรอจ่าย กรุณารอผู้ดูแลกด “จ่ายแล้ว” ก่อนกรอกใหม่');return;}
   const amount=parseFloat(document.getElementById('tollAmount').value);
   const reason=document.getElementById('tollReason').value.trim();
-  if(!amount||amount<=0){document.getElementById('tollAmount').focus();return;}
+  if(!Number.isFinite(amount)||amount<=0){document.getElementById('tollAmount').focus();return;}
   if(!_tollNewPhotos.length){alert('⚠️ กรุณาแนบรูปบิล/ใบเสร็จค่าทางด่วนอย่างน้อย 1 รูปก่อนส่งคำขอ');return;}
-  if(window._fbConnected===false){alert('⚠️ ตอนนี้เน็ตหลุดอยู่ กรุณาเช็คสัญญาณอินเทอร์เน็ตก่อนส่งคำขอ');return;}
+  if(window._fbConnected!==true||navigator.onLine===false){alert('⚠️ ตอนนี้เน็ตหลุดอยู่ กรุณาเช็คสัญญาณอินเทอร์เน็ตก่อนส่งคำขอ');return;}
   const me=employees.find(e=>e.id===currentUser.id)||currentUser;
-  showDocUploadPopup('กำลังส่งคำขอเบิกค่าทางด่วน',`กำลังอัปโหลดรูปบิล ${_tollNewPhotos.length} รูป กรุณารอสักครู่`);
-  const photoIds=await uploadPhotos(_tollNewPhotos);
-  cashRequests.unshift({
-    id:'cash_'+Date.now(),
+  const fullReason=reason?('🛣️ ค่าทางด่วน: '+reason):'🛣️ ค่าทางด่วน';
+  const sameDraft=_tollDraftRequest&&String(_tollDraftRequest.empId)===String(me.id)&&_tollDraftRequest.amount===amount&&_tollDraftRequest.reason===fullReason
+    &&_tollDraftSourcePhotos.length===_tollNewPhotos.length&&_tollDraftSourcePhotos.every((p,i)=>p===_tollNewPhotos[i]);
+  if(!sameDraft){_tollDraftSourcePhotos=[..._tollNewPhotos];_tollDraftRequest={
+    id:'toll_'+Date.now()+'_'+Math.random().toString(36).slice(2,10),
     empId:me.id,empName:me.name,plate:me.plate||'',
-    amount,reason:reason?('🛣️ ค่าทางด่วน: '+reason):'🛣️ ค่าทางด่วน',status:'pending',requestType:'toll',photos:photoIds,
+    amount,reason:fullReason,status:'pending',requestType:'toll',photos:[],
     createdAt:new Date().toISOString()
-  });
-  saveCash();
-  document.getElementById('tollAmount').value='';
-  document.getElementById('tollReason').value='';
-  document.getElementById('tollPhotoInput').value='';
-  _tollNewPhotos=[];
-  renderNewTollPhotos();
-  refreshCashViews();
-  hideDocUploadPopup();
-  alert('✅ ส่งคำขอเบิกค่าทางด่วนแล้ว รอแอดมินอนุมัติ');
+  };}
+  const draft=_tollDraftRequest;
+  _tollSubmitting=true;renderTollRequestGate();
+  try{
+    if(!window.fbSubmitTollCashRequest)throw new Error('ระบบส่วนกลางยังไม่พร้อม');
+    showDocUploadPopup('กำลังส่งคำขอเบิกค่าทางด่วน',`กำลังอัปโหลดรูปบิล ${_tollNewPhotos.length} รูป กรุณารอสักครู่`);
+    if(!draft.photos.length)draft.photos=await uploadPhotos([..._tollDraftSourcePhotos]);
+    if(String(currentUser?.id)!==String(me.id))throw new Error('บัญชีเปลี่ยนระหว่างส่งคำขอ กรุณาเข้าสู่ระบบใหม่');
+    const saved=await window.fbSubmitTollCashRequest(draft);
+    cashRequests=[saved,...cashRequests.filter(row=>String(row.id)!==String(saved.id))];
+    _cacheSet('ske_cash',cashRequests);
+    _tollDraftRequest=null;_tollDraftSourcePhotos=[];
+    document.getElementById('tollAmount').value='';document.getElementById('tollReason').value='';document.getElementById('tollPhotoInput').value='';
+    _tollNewPhotos=[];renderNewTollPhotos();
+    hideDocUploadPopup();
+    alert(saved.status==='done'?'✅ รายการนี้ผู้ดูแลยืนยันจ่ายแล้ว':'✅ ส่งคำขอเบิกค่าทางด่วนถึงส่วนกลางแล้ว กรอกใหม่ได้เมื่อผู้ดูแลกด “จ่ายแล้ว”');
+  }catch(error){
+    hideDocUploadPopup();
+    alert('❌ ยังยืนยันการส่งไม่ได้: '+(error?.message||'กรุณาตรวจรายการก่อนลองใหม่'));
+  }finally{_tollSubmitting=false;renderTollRequestGate();refreshCashViews();}
 }
 function renderCashList(){
+  renderTollRequestGate();
   const el=document.getElementById('cashList');
   if(!el||!currentUser)return;
   const mine=cashRequests.filter(s=>s.empId===currentUser.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
@@ -9015,13 +9113,15 @@ function renderCashList(){
         <span style="color:#aaa;font-size:11px;">${fmt(s.createdAt)}</span>
       </div>
       <div class="row-btns" style="margin-top:10px;">
-        <button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelCash('${s.id}')">🗑️ ลบรายการ</button>
+        ${_isTollCashRequest(s)&&!done&&!(adminMode&&adminRole==='super')?'<span style="font-size:11px;color:#92400E;">ค่าทางด่วนรอจ่าย — หากกรอกผิด ให้ผู้ดูแลตรวจแก้รายการ</span>':`<button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelCash('${s.id}')">🗑️ ลบรายการ</button>`}
       </div>
     </div>`;
   }).join('');
   updateMaintBadges();
 }
 async function doDelCash(id){
+  const row=cashRequests.find(s=>String(s.id)===String(id));
+  if(_isTollCashRequest(row)&&row.status!=='done'&&!(adminMode&&adminRole==='super')){alert('ค่าทางด่วนยังรอจ่าย หากกรอกผิดกรุณาแจ้งผู้ดูแล');return;}
   if(!confirm('ลบรายการเบิกเงินนี้?'))return;
   try{
     if(window.fbDeleteCashRequest)await window.fbDeleteCashRequest(id);
@@ -9034,9 +9134,16 @@ async function doDelCash(id){
     alert('❌ ลบรายการเบิกเงินไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่');
   }
 }
-function toggleCashStatus(id){
-  cashRequests=cashRequests.map(s=>s.id===id?{...s,status:s.status==='done'?'pending':'done'}:s);
-  saveCash();refreshCashViews();
+async function toggleCashStatus(id){
+  if(!adminMode||adminRole!=='super'||_cashStatusBusy.has(String(id)))return;
+  const row=cashRequests.find(s=>String(s.id)===String(id));if(!row)return;
+  _cashStatusBusy.add(String(id));
+  try{
+    if(!window.fbSetCashRequestStatus)throw new Error('ระบบส่วนกลางยังไม่พร้อม');
+    const saved=await window.fbSetCashRequestStatus(id,row.status==='done'?'pending':'done');
+    cashRequests=cashRequests.map(s=>String(s.id)===String(id)?saved:s);_cacheSet('ske_cash',cashRequests);
+  }catch(error){alert('❌ ยังยืนยันการจ่ายไม่ได้: '+(error?.message||'กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่'));}
+  finally{_cashStatusBusy.delete(String(id));refreshCashViews();}
 }
 // รีเฟรชทุกหน้าที่อาจกำลังแสดงรายการเบิกเงินอยู่ (หน้าพนักงาน + แผงผู้ดูแล)
 function refreshCashViews(){
