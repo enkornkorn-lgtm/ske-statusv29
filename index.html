@@ -504,9 +504,12 @@
       console.info('FCM: ลงทะเบียน push token สำเร็จ');
       // รับข้อความตอนแอปเปิดอยู่ (foreground) — เด้ง notification เอง
       onMessage(_messaging, (payload) => {
+        // Status pushes must follow the same page gate as realtime employee updates.
+        const statusPush = _isAdminVehicleStatusPush(payload);
+        if (statusPush && !_isAdminOverviewVisible()) return;
         const n = payload.notification || {};
         if (typeof showSystemNotification === 'function') {
-          showSystemNotification(n.title || '🔔 SKE TRUCK', { body: n.body || '' });
+          showSystemNotification(n.title || '🔔 SKE TRUCK', { body: n.body || '', skeAdminOverviewOnly: statusPush });
         }
         if (typeof playAlertSound === 'function') playAlertSound();
       });
@@ -831,7 +834,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.70T');
+console.log('[SKE TRUCK] app version: v3.2.71N');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1420,7 +1423,7 @@ console.log('[SKE TRUCK] app version: v3.2.70T');
         if(!ownsSession()||!current||String(current.id)!==id)return;
         if(current.lastStatusChange?.id===requestId)return current;
         if(_skeStatusFingerprint(current)!==expected)return;
-        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,version:'v3.2.70T'};
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,version:'v3.2.71N'};
         const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
         return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
           ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
@@ -4372,7 +4375,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.70T</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.71N</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4380,7 +4383,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.70T</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.71N</div>
       </div>
     </div>
 
@@ -4498,7 +4501,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.70T</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.71N</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4756,7 +4759,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.70T</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.71N</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5449,7 +5452,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.70T';
+const SKE_APP_VERSION='v3.2.71N';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5668,6 +5671,9 @@ let emergencyCodeHash=localStorage.getItem('ske_emergHash')||null;
   if(!emergencyCodeHash)emergencyCodeHash=await sha256Hex(SKE_DEFAULT_EMERGENCY_CODE);
 })();
 let adminMode=false,editOpen=false,leaveFormOpen=false;
+let _availToastTimer=null,_statusChangeToastTimer=null;
+// In-memory notification queue, initialized before startup navigation can run.
+const _pendingAdminStatusChanges=new Map();
 // บทบาทผู้เข้าระบบฝั่งหลังบ้าน: 'super' = ผู้ดูแล (สิทธิ์เต็ม), 'viewer' = แอดมิน (ดูเฉพาะแผนผังงาน)
 let adminRole=localStorage.getItem('ske_adminRole')||null;
 let _selStatus='standby',_selProv='';
@@ -7178,19 +7184,22 @@ const _SKE_ICON='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" vi
 // แสดงการแจ้งเตือน — ผ่าน Service Worker ถ้าพร้อม (เด้งขึ้น system tray ได้แม้อยู่เบื้องหลัง) ไม่งั้น fallback Notification ปกติ
 function showSystemNotification(title, options){
   if(!('Notification' in window) || Notification.permission!=='granted') return;
+  const allowed=()=>!options?.skeAdminOverviewOnly||_isAdminOverviewVisible();
+  if(!allowed())return;
   const opts=Object.assign({
     icon:_SKE_ICON, badge:_SKE_ICON, vibrate:[200,100,200],
     requireInteraction:false, tag:'ske-alert', renotify:true
   }, options||{});
+  delete opts.skeAdminOverviewOnly;
   try{
     const reg=_swReg||(navigator.serviceWorker&&navigator.serviceWorker.controller?navigator.serviceWorker.ready:null);
     if(_swReg&&_swReg.showNotification){ _swReg.showNotification(title,opts); return; }
     if(navigator.serviceWorker&&navigator.serviceWorker.ready){
-      navigator.serviceWorker.ready.then(r=>{ _swReg=r; r.showNotification(title,opts); }).catch(()=>{ new Notification(title,opts); });
+      navigator.serviceWorker.ready.then(r=>{ _swReg=r; if(allowed())r.showNotification(title,opts); }).catch(()=>{ if(allowed())new Notification(title,opts); });
       return;
     }
-    new Notification(title,opts);
-  }catch(e){ try{ new Notification(title,opts); }catch(_){} }
+    if(allowed())new Notification(title,opts);
+  }catch(e){ try{ if(allowed())new Notification(title,opts); }catch(_){} }
 }
 
 // ── Keep Awake / Prevent bounce ───────────────────────────────────────────────
@@ -7334,6 +7343,7 @@ document.addEventListener('visibilitychange',()=>{
 
 // ── Nav helpers ───────────────────────────────────────────────────────────────
 function show(id){
+  if(id!=='admin')_dismissAdminStatusOverlays(true);
   skeCancelDataWait();['splash','login','dashboard','admin'].forEach(s=>document.getElementById(s).classList.add('hidden'));document.getElementById(id).classList.remove('hidden');}
 function showMode(m){['mode-select','mode-register','mode-adminPw','mode-pin'].forEach(x=>document.getElementById(x).classList.add('hidden'));document.getElementById('mode-'+m).classList.remove('hidden');['loginMsg','regMsg','adminPwMsg','pinMsg'].forEach(x=>{const el=document.getElementById(x);if(el)el.classList.add('hidden');});if(m==='adminPw'){const i=document.getElementById('adminPwInput');if(i)i.value='';const p2=document.getElementById('adminPin2Input');if(p2)p2.value='';if(typeof selLoginRole==='function')selLoginRole('super');}}
 
@@ -7718,54 +7728,63 @@ function _saveStaleAlerted(){try{localStorage.setItem('ske_stale_alerted',JSON.s
 // (เคสพิเศษ "เปลี่ยนเป็นสแตนบายว่างงาน" จะมีกล่องข้อความสีเขียวแยกต่างหาก
 //  ส่วนการเปลี่ยนสถานะอื่นๆ ทั้งหมดจะแจ้งด้วยกล่องข้อความสีฟ้าแบบทั่วไป — ทั้งสองแบบเล่นเสียงเหมือนกัน)
 // ══════════════════════════════════════════════════════════════════════════
-let _availToastTimer=null;
-let _statusChangeToastTimer=null;
+// One latest change per employee, in memory only. No new reads/writes or replay after logout.
+function _isAdminOverviewVisible(){
+  const admin=document.getElementById('admin'),summary=document.getElementById('adminSummaryPanel');
+  const more=document.getElementById('adminMoreModal');
+  return Boolean(adminMode&&document.visibilityState==='visible'&&window._currentAdminTab==='summary'
+    &&admin&&!admin.classList.contains('hidden')&&summary&&!summary.classList.contains('hidden')
+    &&(!more||more.classList.contains('hidden')));
+}
+function _isAdminVehicleStatusPush(payload){
+  const title=String(payload?.notification?.title||'');
+  return ['มีรถว่างงานใหม่','มีการเปลี่ยนสถานะรถ','แจ้งเตือนสถานะรถ SKE'].some(s=>title.includes(s))
+    ||['status_change','vehicle_status'].includes(payload?.data?.type);
+}
+function _dismissAdminStatusOverlays(clearPending=false){
+  dismissAvailableToast();dismissStatusChangeToast();
+  const stale=document.getElementById('adminStaleModal');
+  if(stale){stale.classList.add('hidden');stale.style.display='none';}
+  if(clearPending)_pendingAdminStatusChanges.clear();
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible')_dismissAdminStatusOverlays();
+  else flushAdminStatusChanges();
+});
 // เฉพาะ 4 สถานะนี้เท่านั้นที่จะแจ้งเตือนผู้ดูแล (เสียง+ข้อความ) — สถานะอื่นเปลี่ยนแล้วจะไม่แจ้งเตือน
 const NOTIFY_STATUSES=['done','standby','loading','unloading'];
 function notifyNewlyAvailable(oldList,newList){
   if(!adminMode)return;
   const adminScreen=document.getElementById('admin');
   if(!adminScreen||adminScreen.classList.contains('hidden'))return;
-  const oldMap={};
-  (oldList||[]).forEach(e=>{oldMap[e.id]=e.status;});
-  // เฉพาะพนักงานที่มีข้อมูลอยู่ก่อนแล้ว (ไม่ใช่เพิ่งถูกเพิ่มใหม่), สถานะเปลี่ยนไปจากเดิมจริงๆ,
-  // และสถานะใหม่ต้องอยู่ในกลุ่มที่ต้องการแจ้งเตือนเท่านั้น
-  const changed=(newList||[]).filter(e=>{
-    const prevStatus=oldMap[e.id];
-    return prevStatus!==undefined&&prevStatus!==e.status&&NOTIFY_STATUSES.includes(e.status);
+  const oldMap=new Map((oldList||[]).map(e=>[String(e.id),e.status]));
+  const present=new Set((newList||[]).map(e=>String(e.id)));
+  for(const id of _pendingAdminStatusChanges.keys())if(!present.has(id))_pendingAdminStatusChanges.delete(id);
+  (newList||[]).forEach(e=>{
+    const id=String(e.id),prevStatus=oldMap.get(id);
+    if(prevStatus===undefined||prevStatus===e.status)return;
+    if(NOTIFY_STATUSES.includes(e.status))_pendingAdminStatusChanges.set(id,e.status);
+    else _pendingAdminStatusChanges.delete(id); // Never replay an obsolete intermediate status.
   });
+  flushAdminStatusChanges();
+}
+function flushAdminStatusChanges(){
+  if(!_isAdminOverviewVisible())return;
+  const changed=(employees||[]).filter(e=>_pendingAdminStatusChanges.get(String(e.id))===e.status&&NOTIFY_STATUSES.includes(e.status));
+  _pendingAdminStatusChanges.clear();
   if(!changed.length)return;
-
-  const becameAvailable=changed.filter(e=>e.status==='done');
-  const others=changed.filter(e=>e.status!=='done');
-
+  // A single grouped message on return, rather than a stack of historical popups.
+  const allAvailable=changed.every(e=>e.status==='done');
+  dismissAvailableToast();dismissStatusChangeToast();
+  if(allAvailable)showAvailableToast(changed);
+  else showStatusChangeToast(changed);
   playAlertSound();
-
-  if(becameAvailable.length){
-    showAvailableToast(becameAvailable);
-    if('Notification' in window && Notification.permission==='granted'){
-      const names=becameAvailable.map(e=>e.name).join(', ');
-      showSystemNotification('✅ มีรถว่างงานใหม่!', {
-        body:`${names} — เปลี่ยนเป็นสแตนบายว่างงานแล้ว`,
-        icon:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%2310B981"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
-      });
-    }
-  }
-  if(others.length){
-    showStatusChangeToast(others);
-    if('Notification' in window && Notification.permission==='granted'){
-      const detail=others.map(e=>{
-        const s=STATUSES.find(st=>st.id===e.status);
-        return `${e.name} → ${s?.label||e.status}`;
-      }).join(' • ');
-      showSystemNotification('🔔 มีการเปลี่ยนสถานะรถ', {
-        body:detail,
-        icon:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%231E90D6"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
-      });
-    }
-  }
+  showSystemNotification(allAvailable?'✅ มีรถว่างงานใหม่!':'🔔 มีการเปลี่ยนสถานะรถ',{
+    body:changed.map(e=>`${e.name} → ${getS(e.status).label||e.status}`).join(' • '),skeAdminOverviewOnly:true
+  });
 }
 function showAvailableToast(list){
+  if(!_isAdminOverviewVisible())return;
   const el=document.getElementById('vehicleAvailToast');
   const msg=document.getElementById('vehicleAvailToastMsg');
   if(!el||!msg)return;
@@ -7777,10 +7796,11 @@ function showAvailableToast(list){
 }
 function dismissAvailableToast(){
   const el=document.getElementById('vehicleAvailToast');
-  el.classList.add('hidden');el.style.display='none';
+  if(el){el.classList.add('hidden');el.style.display='none';}
   if(_availToastTimer){clearTimeout(_availToastTimer);_availToastTimer=null;}
 }
 function showStatusChangeToast(list){
+  if(!_isAdminOverviewVisible())return;
   const el=document.getElementById('statusChangeToast');
   const msg=document.getElementById('statusChangeToastMsg');
   if(!el||!msg)return;
@@ -7795,7 +7815,7 @@ function showStatusChangeToast(list){
 }
 function dismissStatusChangeToast(){
   const el=document.getElementById('statusChangeToast');
-  el.classList.add('hidden');el.style.display='none';
+  if(el){el.classList.add('hidden');el.style.display='none';}
   if(_statusChangeToastTimer){clearTimeout(_statusChangeToastTimer);_statusChangeToastTimer=null;}
 }
 
@@ -7826,13 +7846,14 @@ function checkAdminStaleAlert(){
   if(newStale.length>0){
     // ถ้าไม่ได้อยู่หน้า "ภาพรวม" (summary) ไม่ต้องเด้ง popup กวนใจ — แต่ยังคงบันทึกว่าเตือนคนนี้ไปแล้ว
     // (badge ตัวเลขแจ้งเตือนที่แท็บภาพรวมยังขึ้นตามจริงอยู่ ไม่เกี่ยวกับส่วนนี้ — คนละกลไกกัน)
-    if(window._currentAdminTab!=='summary')return;
+    if(!_isAdminOverviewVisible())return;
     newStale.forEach(e=>_staleAlerted.add(e.id));
     _saveStaleAlerted();
     showAdminStaleAlert(stale); // แสดงรายชื่อค้างทั้งหมด แต่จะเด้งก็ต่อเมื่อมีคนใหม่เท่านั้น
   }
 }
 function showAdminStaleAlert(stale){
+  if(!_isAdminOverviewVisible())return;
   const sorted=[...stale].sort((a,b)=>(a.updatedAt?new Date(a.updatedAt):0)-(b.updatedAt?new Date(b.updatedAt):0));
   const rows=sorted.slice(0,8).map(e=>{
     let timeStr='ไม่เคยอัพเดท';
@@ -7855,6 +7876,7 @@ function showAdminStaleAlert(stale){
   playAlertSound();
   if('Notification' in window && Notification.permission==='granted'){
     showSystemNotification('⚠️ แจ้งเตือนสถานะรถ SKE', {
+      skeAdminOverviewOnly:true,
       body:`มีพนักงาน ${stale.length} คน ไม่อัพเดทสถานะนานผิดปกติ`,
       icon:'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="50" fill="%23F47920"/%3E%3Ctext x="50" y="65" text-anchor="middle" font-size="36" fill="white" font-family="Arial"%3ESKE%3C/text%3E%3C/svg%3E'
     });
@@ -12332,6 +12354,7 @@ function focusAdminEmployee(empId){
 }
 
 function openAdminMoreMenu(){
+  _dismissAdminStatusOverlays();
   document.getElementById('adminMoreModal')?.classList.remove('hidden');
   document.getElementById('navAdminMore')?.classList.add('active');
   updateLeaveBadge();
@@ -12340,6 +12363,7 @@ function closeAdminMoreMenu(){
   document.getElementById('adminMoreModal')?.classList.add('hidden');
   const activeMain=['navAdminSum','navAdminMaint','navAdminCash','navAdminDoc'].some(id=>document.getElementById(id)?.classList.contains('active'));
   if(activeMain)document.getElementById('navAdminMore')?.classList.remove('active');
+  setTimeout(flushAdminStatusChanges,0); // Menu actions may navigate immediately after closing it.
 }
 
 function switchAdminTab(t){
@@ -12356,6 +12380,7 @@ function switchAdminTab(t){
     window._adminTabScrollPos[prevTab]=prevScrollEl.scrollTop;
   }
   window._currentAdminTab=t; // ใช้เช็คก่อนเด้งแจ้งเตือน — เด้งเฉพาะตอนอยู่หน้า "ภาพรวม" เท่านั้น
+  if(t!=='summary')_dismissAdminStatusOverlays();
   document.getElementById('adminEmpPanel').classList.add('hidden');
   document.getElementById('adminVehiclePanel')?.classList.add('hidden');
   document.getElementById('adminLeaveHistoryPanel')?.classList.add('hidden');
@@ -12401,6 +12426,7 @@ function switchAdminTab(t){
   const savedPos=(window._adminTabScrollPos&&window._adminTabScrollPos[t])||0;
   if(scrollEl)scrollEl.scrollTo({top:savedPos,behavior:'auto'});
   else window.scrollTo({top:savedPos,behavior:'auto'});
+  if(t==='summary')flushAdminStatusChanges();
 }
 
 // ── ประวัติการลา — แยกเดือน เก็บสูงสุด 1 ปีปฏิทิน ──────────────────────────
@@ -12456,6 +12482,7 @@ function toggleAcc(key){
 }
 
 function showEmpManage(){
+  _dismissAdminStatusOverlays();
   document.getElementById('adminTabBar')?.classList.add('hidden');
   document.getElementById('adminSummaryPanel').classList.add('hidden');
   document.getElementById('adminSettingsPanel').classList.add('hidden');
@@ -12475,6 +12502,7 @@ function hideEmpManage(){
 // ══════════════════════════════════════════════════════════════════════════
 function showVehicleManage(){
   if(skeWaitForData(["vehicles"],()=>showVehicleManage(...arguments)))return;
+  _dismissAdminStatusOverlays();
   document.getElementById('adminTabBar')?.classList.add('hidden');
   document.getElementById('adminSummaryPanel').classList.add('hidden');
   document.getElementById('adminSettingsPanel').classList.add('hidden');
