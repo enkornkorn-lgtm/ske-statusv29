@@ -834,7 +834,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.71N');
+console.log('[SKE TRUCK] app version: v3.2.72D');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1411,7 +1411,11 @@ console.log('[SKE TRUCK] app version: v3.2.71N');
     const source=options.source||(adminMode?'admin-edit':'employee');
     const actor=adminMode?'admin':String(currentUser?.id||'');
     const requestId=options.requestId||('st_'+Date.now()+'_'+Math.random().toString(36).slice(2,10));
-    const ownsSession=()=>adminMode?actor==='admin'&&adminRole==='super':actor===id&&String(currentUser?.id||'')===id;
+    const roleAtStart=adminMode?adminRole:null;
+    const ownsSession=()=>adminMode
+      ?actor==='admin'&&adminRole===roleAtStart&&(adminRole==='super'
+        ||(adminRole==='viewer'&&_isAllowedViewerDispatch(id,patch,source,base)))
+      :roleAtStart===null&&actor===id&&String(currentUser?.id||'')===id;
     if(!ownsSession())throw _statusWriteError('status-denied','บัญชีนี้ไม่มีสิทธิ์แก้สถานะ กรุณาเข้าใช้งานใหม่');
     const task=(async()=>{
       const snap=await _withTimeout(get(ref(db,'employees')),SKE_WRITE_TIMEOUT_MS,'โหลดสถานะล่าสุดไม่สำเร็จ');
@@ -1423,7 +1427,7 @@ console.log('[SKE TRUCK] app version: v3.2.71N');
         if(!ownsSession()||!current||String(current.id)!==id)return;
         if(current.lastStatusChange?.id===requestId)return current;
         if(_skeStatusFingerprint(current)!==expected)return;
-        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,version:'v3.2.71N'};
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.72D'};
         const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
         return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
           ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
@@ -1705,7 +1709,7 @@ console.log('[SKE TRUCK] app version: v3.2.71N');
     set(ref(db, 'adminPwHash'), hash).catch(e => console.error('fbSavePw error', e));
   };
 
-  // บันทึก viewer password (รหัสแอดมิน — ดูเฉพาะแผนผังงาน) — เก็บเป็น hash เท่านั้น
+  // บันทึก viewer password (รหัสแอดมิน — ดูแผนงานและจ่ายงาน) — เก็บเป็น hash เท่านั้น
   window.fbSaveViewerPwHash = function(hash) {
     set(ref(db, 'viewerPwHash'), hash).catch(e => console.error('fbSaveViewerPw error', e));
   };
@@ -2628,7 +2632,7 @@ textarea{resize:none;}
 /* ปุ่มเลือกสิทธิ์ตอนเข้าระบบหลังบ้าน */
 .role-pick{flex:1;padding:11px 6px;border-radius:10px;font-size:13px;font-weight:700;line-height:1.3;border:1.5px solid #E8EAF0;background:#fff;color:#888;text-align:center;cursor:pointer;transition:all .15s;}
 .role-pick.active{border-color:#7B2FBE;background:#F5F3FF;color:#6D28D9;box-shadow:0 0 0 2px #E9D5FF;}
-/* โหมดแอดมิน (viewer): เห็นเฉพาะแผนผังงาน + หน้าลา — ซ่อนเมนูล่างที่เหลือ และปุ่มย้อนกลับบนหัว */
+/* โหมดแอดมิน (viewer): ภาพรวม + แผนงาน/จ่ายงาน + หน้าลา — ไม่เปิดสิทธิ์การเงิน/เอกสาร */
 #admin.role-viewer #navAdminMaint,
 #admin.role-viewer #navAdminCash,
 #admin.role-viewer #navAdminDoc{display:none;}
@@ -4375,7 +4379,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.71N</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.72D</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4383,7 +4387,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.71N</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.72D</div>
       </div>
     </div>
 
@@ -4460,7 +4464,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
           <div class="inp-label" style="margin-bottom:7px;">เลือกสิทธิ์การเข้าใช้งาน</div>
           <div style="display:flex;gap:8px;">
             <button type="button" id="roleBtnSuper" class="role-pick active" onclick="selLoginRole('super')">🛡️ ผู้ดูแล<br><span style="font-size:10px;font-weight:400;">จัดการได้ทุกอย่าง</span></button>
-            <button type="button" id="roleBtnViewer" class="role-pick" onclick="selLoginRole('viewer')">👁️ แอดมิน<br><span style="font-size:10px;font-weight:400;">ดูเฉพาะแผนผังงาน</span></button>
+            <button type="button" id="roleBtnViewer" class="role-pick" onclick="selLoginRole('viewer')">👁️ แอดมิน<br><span style="font-size:10px;font-weight:400;">ดูแผนงานและจ่ายงาน</span></button>
           </div>
         </div>
         <div id="adminPwHint" style="background:#F5F3FF;border:1px solid #D8B4FE;border-radius:10px;padding:10px 12px;font-size:12px;color:#6D28D9;">
@@ -4501,7 +4505,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.71N</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.72D</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4759,7 +4763,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.71N</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.72D</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5004,7 +5008,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
         </button>
         <div class="acc-body hidden">
           <div style="background:#F5F3FF;border:1px solid #D8B4FE;border-radius:10px;padding:8px 11px;font-size:11.5px;color:#6D28D9;margin-bottom:12px;line-height:1.5;">
-            🛡️ <b>ผู้ดูแล</b> = จัดการได้ทุกอย่าง<br>👁️ <b>แอดมิน</b> = ดูได้เฉพาะหน้าแผนผังงาน แก้ไขอะไรไม่ได้
+            🛡️ <b>ผู้ดูแล</b> = จัดการได้ทุกอย่าง<br>👁️ <b>แอดมิน</b> = ดูแผนงานและจ่ายงานให้พนักงานได้ (ไม่รวมแก้สถานะทั่วไป/อนุมัติเงิน)
           </div>
           <div class="inp-label" style="margin-bottom:8px;">🛡️ รหัสผ่านผู้ดูแล (สิทธิ์เต็ม)</div>
           <input class="inp" id="newPwInput" type="password" placeholder="รหัสผ่านใหม่ (อย่างน้อย 4 ตัว)">
@@ -5452,7 +5456,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.71N';
+const SKE_APP_VERSION='v3.2.72D';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -5674,7 +5678,7 @@ let adminMode=false,editOpen=false,leaveFormOpen=false;
 let _availToastTimer=null,_statusChangeToastTimer=null;
 // In-memory notification queue, initialized before startup navigation can run.
 const _pendingAdminStatusChanges=new Map();
-// บทบาทผู้เข้าระบบฝั่งหลังบ้าน: 'super' = ผู้ดูแล (สิทธิ์เต็ม), 'viewer' = แอดมิน (ดูเฉพาะแผนผังงาน)
+// บทบาทผู้เข้าระบบฝั่งหลังบ้าน: 'super' = ผู้ดูแล (สิทธิ์เต็ม), 'viewer' = แอดมิน (ดูแผนงานและจ่ายงาน)
 let adminRole=localStorage.getItem('ske_adminRole')||null;
 let _selStatus='standby',_selProv='';
 let _selLeaveAt='',_selLeaveTo='',_selLeaveNote='';
@@ -7502,7 +7506,7 @@ function doRegister(){
   const lg=document.getElementById('loginMsg');lg.textContent='✅ ลงทะเบียนสำเร็จ! เลือกชื่อด้านล่าง';lg.classList.remove('hidden');
 }
 
-// ── สิทธิ์เข้าระบบหลังบ้าน: super = ผู้ดูแล (เต็ม), viewer = แอดมิน (ดูแผนผังงานอย่างเดียว) ──
+// ── สิทธิ์เข้าระบบหลังบ้าน: super = ผู้ดูแล (เต็ม), viewer = แอดมิน (ดูแผนงานและจ่ายงาน) ──
 let _loginRole='super';
 function selLoginRole(r){
   _loginRole=r;
@@ -7514,14 +7518,14 @@ function selLoginRole(r){
       hint.innerHTML='🔑 รหัสผ่านเริ่มต้น: <b>admin1234</b> • PIN ชั้น 2 เริ่มต้น: <b>135790</b><br><span style="color:#888;font-size:11px;">(สิทธิ์เต็ม — จัดการได้ทุกอย่าง · เปลี่ยนรหัสได้ในหน้าตั้งค่า)</span>';
       hint.style.background='#F5F3FF';hint.style.borderColor='#D8B4FE';hint.style.color='#6D28D9';
     }else{
-      hint.innerHTML='🔑 รหัสผ่านเริ่มต้น: <b>view1234</b> • PIN ชั้น 2 เริ่มต้น: <b>135790</b><br><span style="color:#888;font-size:11px;">(ดูเฉพาะหน้าแผนผังงาน — แก้ไขอะไรไม่ได้ · ผู้ดูแลตั้งรหัสนี้ได้ในหน้าตั้งค่า)</span>';
+      hint.innerHTML='🔑 รหัสผ่านเริ่มต้น: <b>view1234</b> • PIN ชั้น 2 เริ่มต้น: <b>135790</b><br><span style="color:#888;font-size:11px;">(ดูแผนงานและกดจ่ายงานให้พนักงานได้ · ผู้ดูแลตั้งรหัสนี้ได้ในหน้าตั้งค่า)</span>';
       hint.style.background='#ECFEFF';hint.style.borderColor='#A5F3FC';hint.style.color='#0E7490';
     }
   }
   const m=document.getElementById('adminPwMsg');if(m)m.classList.add('hidden');
 }
 
-// ปรับหน้าจอแผงหลังบ้านตามบทบาท — viewer เห็นเฉพาะแผนผังงาน, ซ่อนเมนูล่าง + ปุ่มที่แก้ไขได้
+// ปรับหน้าจอแผงหลังบ้านตามบทบาท — viewer ใช้แผนงาน/จ่ายงานได้ แต่ไม่เปิดเมนูสิทธิ์เต็ม
 function applyAdminRoleUI(){
   const adminEl=document.getElementById('admin');
   const isViewer=adminRole==='viewer';
@@ -13181,15 +13185,23 @@ function updateJobPlanField(id,field,value){
   // การแก้เส้นทาง/เวลา/หมายเหตุ เป็นแค่การแก้แผนในหน้าแอดมิน ต้องกดปุ่ม "จ่ายงาน" เท่านั้นถึงจะแจ้งพนักงานจริง
 }
 
-async function syncJobNoteToEmployee(row,options={}){
-  if(!row||!row.empId)return;
-  // งานย้อนหลัง/งานยกเลิกเป็นข้อมูลประวัติเท่านั้น ห้ามนำกลับมาเปลี่ยนสถานะปัจจุบัน
-  if(!row.workDate||isPastWorkDate(row.workDate)||isCancelledJobPlanRow(row)){
-    console.warn('[SKE job plan] ข้ามการเปลี่ยนสถานะจากงานย้อนหลัง/งานยกเลิก',row.id||'');
-    return{assignmentState:'history'};
-  }
-  const emp=employees.find(e=>e.id===row.empId);
-  if(!emp)return;
+function canDispatchJobPlan(){
+  return Boolean(adminMode&&(adminRole==='super'||adminRole==='viewer'));
+}
+
+// Client-side role scope only: viewer may send a draft job, not edit arbitrary employee fields.
+// Keep Firebase authentication/rules unchanged; this does not grant general administrator access.
+function _isAllowedViewerDispatch(empId,patch,source,base){
+  if(source!=='admin-dispatch'||patch.status!=='got_job')return false;
+  const row=jobPlanRows.find(r=>String(r.id)===String(patch.currentJobPlanId||''));
+  if(!row||row.dispatched||String(row.empId)!==String(empId)||String(base?.id)!==String(empId)
+    ||!row.route?.trim()||!row.standbyTime||!row.workDate||isPastWorkDate(row.workDate)||isCancelledJobPlanRow(row))return false;
+  const allowed=_buildJobDispatchPatch(row,base,patch.updatedAt);
+  return Object.keys(patch).length===Object.keys(allowed).length
+    &&Object.keys(allowed).every(key=>Object.prototype.hasOwnProperty.call(patch,key)&&patch[key]===allowed[key]);
+}
+
+function _buildJobDispatchPatch(row,emp,at=new Date().toISOString()){
   // ทุกครั้งที่กดจ่ายงาน ต้องเปลี่ยนเป็น "ได้งานแล้ว" ทันที ไม่ว่าสถานะเดิมคืออะไร
   // และเก็บภาพสถานะเดิมไว้ทั้งในพนักงานและแถวงาน เพื่อคืนได้แม่นยำเมื่อมีการเปลี่ยนรายชื่อ
   const sameAssignment=String(emp.currentJobPlanId||'')===String(row.id||'');
@@ -13207,8 +13219,7 @@ async function syncJobNoteToEmployee(row,options={}){
   const prevStandbyAt=hasRowSnapshot
     ?(row.previousEmployeeStandbyAt||null)
     :(reuseEmployeeSnapshot?(emp.previousStandbyAt||null):(emp.standbyAt||null));
-  const activatedAt=new Date().toISOString();
-  const patch={
+  return {
     status:'got_job',
     note:buildJobNoteText(row),
     province:'',
@@ -13219,8 +13230,22 @@ async function syncJobNoteToEmployee(row,options={}){
     previousProvince:prevProvince,
     previousNote:prevNote,
     previousStandbyAt:prevStandbyAt,
-    updatedAt:new Date().toISOString()
+    updatedAt:at
   };
+}
+
+async function syncJobNoteToEmployee(row,options={}){
+  if(!canDispatchJobPlan())throw new Error('เฉพาะผู้ดูแลหรือแอดมินเท่านั้นที่จ่ายงานได้');
+  if(!row||!row.empId)throw new Error('กรุณาเลือกพนักงานก่อนจ่ายงาน');
+  // งานย้อนหลัง/งานยกเลิกเป็นข้อมูลประวัติเท่านั้น ห้ามนำกลับมาเปลี่ยนสถานะปัจจุบัน
+  if(!row.workDate||isPastWorkDate(row.workDate)||isCancelledJobPlanRow(row)){
+    console.warn('[SKE job plan] ข้ามการเปลี่ยนสถานะจากงานย้อนหลัง/งานยกเลิก',row.id||'');
+    return{assignmentState:'history'};
+  }
+  const emp=employees.find(e=>e.id===row.empId);
+  if(!emp)throw new Error('ไม่พบพนักงานในรายชื่อล่าสุด กรุณารีเฟรชแผนงาน');
+  const activatedAt=new Date().toISOString();
+  const patch=_buildJobDispatchPatch(row,emp,activatedAt);
   await fbPatchEmployee(row.empId,patch,{expected:emp,source:'admin-dispatch'});
   jobPlanRows=jobPlanRows.map(r=>r.id===row.id?{
     ...r,
@@ -13228,10 +13253,10 @@ async function syncJobNoteToEmployee(row,options={}){
     activatedAt:r.activatedAt||activatedAt,
     queuedAt:null,
     completedAt:null,
-    previousEmployeeStatus:prevStatus,
-    previousEmployeeProvince:prevProvince,
-    previousEmployeeNote:prevNote,
-    previousEmployeeStandbyAt:prevStandbyAt
+    previousEmployeeStatus:patch.previousStatus,
+    previousEmployeeProvince:patch.previousProvince,
+    previousEmployeeNote:patch.previousNote,
+    previousEmployeeStandbyAt:patch.previousStandbyAt
   }:r);
   _cacheSet('ske_jobplan',jobPlanRows);
   const dash=document.getElementById('dashboard');
@@ -13384,6 +13409,7 @@ function exportJobPlanCSV(){
 // จ่ายงานเฉพาะเส้นทางเดียว (แยกจากปุ่มจ่ายงานรวมทั้งวัน) — ใช้เวลาเพิ่มเส้นทางใหม่เข้าไปในวันที่จ่ายงานไปแล้วบางส่วน
 // กันปัญหาเดิม: ถ้าใช้ปุ่ม "จ่ายงานวันนี้" ซ้ำทั้งวัน อาจไปกระทบคนที่จ่ายไปแล้วโดยไม่ตั้งใจ จ่ายทีละเส้นจึงชัดเจนและปลอดภัยกว่า
 async function dispatchJobPlanRow(rowId){
+  if(!canDispatchJobPlan()){alert('เฉพาะผู้ดูแลหรือแอดมินเท่านั้นที่จ่ายงานได้');return;}
   if(window._jobStatusActionBusy){alert('กรุณารอรายการก่อนหน้ายืนยันก่อน');return;}
   window._jobStatusActionBusy=true;
   try{
@@ -13421,6 +13447,7 @@ async function dispatchJobPlanRow(rowId){
 }
 
 async function dispatchJobPlan(date){
+  if(!canDispatchJobPlan()){alert('เฉพาะผู้ดูแลหรือแอดมินเท่านั้นที่จ่ายงานได้');return;}
   if(window._jobStatusActionBusy){alert('กรุณารอรายการก่อนหน้ายืนยันก่อน');return;}
   window._jobStatusActionBusy=true;
   try{
