@@ -834,7 +834,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.72D');
+console.log('[SKE TRUCK] app version: v3.2.73L');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1427,7 +1427,7 @@ console.log('[SKE TRUCK] app version: v3.2.72D');
         if(!ownsSession()||!current||String(current.id)!==id)return;
         if(current.lastStatusChange?.id===requestId)return current;
         if(_skeStatusFingerprint(current)!==expected)return;
-        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.72D'};
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.73L'};
         const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
         return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
           ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
@@ -1877,6 +1877,9 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
   if(!authorized())throw new Error('บัญชีเปลี่ยนระหว่างบันทึก กรุณาลองใหม่');
   const now=new Date().toISOString();
   _leaveTransition(latest,action,input,now);
+  const reservesDates=['request','approve','start'].includes(action);
+  const latestRows=Object.values(snap.val()||{}).filter(row=>row&&!_isEmployeeDeleted(row.id));
+  if(reservesDates)_leaveAssertAvailable(latestRows,latest,action,input,now);
   // Persist the previous request before allowing it to be replaced. No history deletion.
   async function archive(row){
     if(!row.leaveRequestId||row.leaveFlowVersion!==2)return;
@@ -1894,13 +1897,24 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
   if(action==='request')await archive(latest);
   let reason='คำขอเปลี่ยนระหว่างบันทึก กรุณาโหลดใหม่';
   const identity=_leaveIdentity(latest),revision=latest.leaveRevisionAt||null;
-  const tx=await _withTimeout(runTransaction(ref(db,'employees/'+key),current=>{
+  // Date reservations must share one transaction. Two devices cannot both pass
+  // a separate read/check then commit overlapping requests to different children.
+  const tx=await _withTimeout(runTransaction(ref(db,reservesDates?'employees':'employees/'+key),value=>{
+    const current=reservesDates?value?.[key]:value;
     if(!authorized()||!current||String(current.id)!==id||_isEmployeeDeleted(id))return;
     if(_leaveIdentity(current)!==identity||(current.leaveRevisionAt||null)!==revision)return;
-    try{return {...current,..._leaveTransition(current,action,input,now)};}catch(error){reason=error.message;return;}
+    try{
+      const patch=_leaveTransition(current,action,input,now);
+      if(reservesDates)_leaveAssertAvailable(Object.values(value).filter(row=>row&&!_isEmployeeDeleted(row.id)),current,action,input,now);
+      const saved={...current,...patch};
+      if(!reservesDates)return saved;
+      const next=Array.isArray(value)?value.slice():{...value};
+      next[key]=saved;
+      return next;
+    }catch(error){reason=error.message;return;}
   },{applyLocally:false}),SKE_WRITE_TIMEOUT_MS,'ยังยืนยันการเปลี่ยนสถานะลาไม่ได้ กรุณาตรวจรายการล่าสุด');
   if(!tx.committed)throw new Error(reason);
-  const saved=tx.snapshot.val();
+  const saved=reservesDates?tx.snapshot.val()[key]:tx.snapshot.val();
   const shadow=_recordShadows.employees||new Map();shadow.set(id,_cloneRecord(saved));_recordShadows.employees=shadow;
   _leaveApplySaved(saved);
   await archive(saved);
@@ -4379,7 +4393,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.72D</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.73L</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4387,7 +4401,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.72D</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.73L</div>
       </div>
     </div>
 
@@ -4505,7 +4519,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.72D</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.73L</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4763,7 +4777,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.72D</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.73L</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5456,7 +5470,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.72D';
+const SKE_APP_VERSION='v3.2.73L';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -8259,6 +8273,40 @@ function _leaveStageInfo(e){
   const stage=_leaveStage(e);
   return ({pending:{label:'รออนุมัติ',color:'#A16207',bg:'#FFFBEB'},ready:{label:'อนุมัติแล้ว · รอเริ่มลา',color:'#1D4ED8',bg:'#EFF6FF'},active:{label:'กำลังลาจริง',color:'#7C3AED',bg:'#F5F3FF'},ended:{label:'กลับมาทำงานแล้ว',color:'#047857',bg:'#ECFDF5'},cancelled:{label:'ยกเลิกคำขอแล้ว',color:'#64748B',bg:'#F1F5F9'},rejected:{label:'ไม่อนุมัติ',color:'#B91C1C',bg:'#FEF2F2'},none:{label:'ไม่มีคำขอลา',color:'#64748B',bg:'#F1F5F9'}})[stage];
 }
+function _leaveReservedRange(e,now=new Date()){
+  const stage=_leaveStage(e);
+  if(!['pending','ready','active'].includes(stage))return null;
+  let from=String(e.leaveFrom||e.leaveAt||'').slice(0,10),to=String(e.leaveTo||from).slice(0,10);
+  if(!_leaveValidDay(from)||!_leaveValidDay(to)||to<from)return null;
+  if(stage==='active'){
+    const started=_leaveDay(e.leaveStartedAt),today=_leaveDay(now);
+    from=from<started?from:started;
+    to=to>today?to:today;
+  }
+  return {from,to};
+}
+function _leaveConflicts(rows,empId,from,to=from,now=new Date()){
+  if(!_leaveValidDay(from)||!_leaveValidDay(to)||to<from)return [];
+  return (rows||[]).filter(e=>e&&String(e.id)!==String(empId)).map(e=>({employee:e,range:_leaveReservedRange(e,now)}))
+    .filter(item=>item.range&&from<=item.range.to&&to>=item.range.from)
+    .sort((a,b)=>a.range.from.localeCompare(b.range.from)||String(a.employee.id).localeCompare(String(b.employee.id)));
+}
+function _leaveConflictMessage(conflicts){
+  if(!conflicts.length)return '';
+  const details=conflicts.map(({employee:e,range})=>`${e.name||'พนักงาน'} (${_leaveDateLabel(range.from)}${range.to!==range.from?' – '+_leaveDateLabel(range.to):''} · ${_leaveStageInfo(e).label})`);
+  return 'วันลาทับกับ '+details.join(', ')+' กรุณาเลือกวันที่ไม่ทับกัน';
+}
+function _leaveAssertAvailable(rows,e,action,input,now){
+  const candidate={...e,..._leaveTransition(e,action,input,now)};
+  const range=_leaveReservedRange(candidate,now);
+  if(!range)return;
+  const conflicts=_leaveConflicts(rows,e.id,range.from,range.to,now);
+  if(conflicts.length)throw new Error(_leaveConflictMessage(conflicts));
+}
+function _leaveDraftConflict(){
+  const from=_selLeaveAt,to=_selLeaveTo||from;
+  return _leaveConflictMessage(_leaveConflicts(employees,currentUser?.id,from,to));
+}
 function _leaveTransition(e,action,input,now){
   const stage=_leaveStage(e),today=_leaveDay(now);
   if(action==='request'){
@@ -8326,6 +8374,9 @@ function _leaveDraftChanged(){
   _selLeaveAt=document.getElementById('leaveFromInp')?.value||'';
   _selLeaveTo=document.getElementById('leaveToInp')?.value||'';
   _selLeaveNote=document.getElementById('leaveNoteInp2')?.value||'';
+  const message=_leaveDraftConflict(),warning=document.getElementById('leaveConflictNotice'),button=document.getElementById('leaveRequestSubmit');
+  if(warning){warning.textContent=message;warning.classList.toggle('hidden',!message);}
+  if(button)button.disabled=!!message;
 }
 function renderEmployeeLeaveCard(e){
   const stage=_leaveStage(e),p=_leaveStageInfo(e),has=['pending','ready','active'].includes(stage);
@@ -8336,7 +8387,7 @@ function renderEmployeeLeaveCard(e){
     ${stage==='active'||stage==='ended'?`<div class="lv-actual"><small>ผู้ดูแลยืนยันเริ่มจริง</small><strong>${esc(_leaveTimeLabel(e.leaveStartedAt))}</strong>${stage==='ended'?`<small>กลับมาทำงานจริง</small><strong>${esc(_leaveTimeLabel(e.leaveEndedAt))}</strong>`:'<p>เมื่อกลับมาทำงาน ให้แจ้งผู้ดูแลยืนยันจบการลา</p>'}</div>`:''}
     ${e.leaveReply?`<div class="lv-info">ข้อความผู้ดูแล: ${esc(e.leaveReply)}</div>`:''}
     ${['pending','ready'].includes(stage)?'<button class="btn btn-gray btn-full" onclick="doCancelLeave()">ยกเลิกคำขอนี้</button>':''}`:''}
-    ${!has?`${renderApprovedLeaveNoticeForEmployees(e.id)}<button class="btn btn-blue btn-full" onclick="toggleLeaveForm()">${leaveFormOpen?'ปิดแบบฟอร์ม':'+ ส่งคำขอลา'}</button><div id="leaveFormWrap" class="${leaveFormOpen?'':'hidden'}"><div class="lv-info">เลือกช่วงวันที่ต้องการหยุดงาน (วันที่ 16–25 ตามกติกาเดิม)<br>วันที่ส่งคำขอจะบันทึกให้อัตโนมัติ</div><div class="lv-form-dates"><label>วันเริ่มลาที่ขอ<input id="leaveFromInp" class="inp" type="date" min="${_leaveDay()}" value="${esc(_selLeaveAt)}" onchange="_leaveDraftChanged()"></label><label>วันสิ้นสุดที่ขอ<input id="leaveToInp" class="inp" type="date" min="${_leaveDay()}" value="${esc(_selLeaveTo)}" onchange="_leaveDraftChanged()"></label></div><label class="lv-note-label">เหตุผลการลา<textarea id="leaveNoteInp2" class="inp" rows="2" oninput="_leaveDraftChanged()" placeholder="เช่น ลากิจ / ลาป่วย">${esc(_selLeaveNote)}</textarea></label><button class="btn btn-blue btn-full" onclick="doRequestLeave()">ส่งให้ผู้ดูแลอนุมัติ</button></div>`:''}</section>`;
+    ${!has?`${renderApprovedLeaveNoticeForEmployees(e.id)}<button class="btn btn-blue btn-full" onclick="toggleLeaveForm()">${leaveFormOpen?'ปิดแบบฟอร์ม':'+ ส่งคำขอลา'}</button><div id="leaveFormWrap" class="${leaveFormOpen?'':'hidden'}"><div class="lv-info">เลือกช่วงวันที่ต้องการหยุดงาน (วันที่ 16–25 ตามกติกาเดิม)<br>ห้ามทับวันลาของคนอื่น รวมคำขอที่รออนุมัติ · วันที่ส่งคำขอบันทึกให้อัตโนมัติ</div><div class="lv-form-dates"><label>วันเริ่มลาที่ขอ<input id="leaveFromInp" class="inp" type="date" min="${_leaveDay()}" value="${esc(_selLeaveAt)}" onchange="_leaveDraftChanged()"></label><label>วันสิ้นสุดที่ขอ<input id="leaveToInp" class="inp" type="date" min="${_leaveDay()}" value="${esc(_selLeaveTo)}" onchange="_leaveDraftChanged()"></label></div><div id="leaveConflictNotice" class="lv-info ${_leaveDraftConflict()?'':'hidden'}" role="alert">${esc(_leaveDraftConflict())}</div><label class="lv-note-label">เหตุผลการลา<textarea id="leaveNoteInp2" class="inp" rows="2" oninput="_leaveDraftChanged()" placeholder="เช่น ลากิจ / ลาป่วย">${esc(_selLeaveNote)}</textarea></label><button id="leaveRequestSubmit" class="btn btn-blue btn-full" ${_leaveDraftConflict()?'disabled':''} onclick="doRequestLeave()">ส่งให้ผู้ดูแลอนุมัติ</button></div>`:''}</section>`;
 }
 function renderAdminLeaveCard(e){
   const stage=_leaveStage(e),p=_leaveStageInfo(e),can=adminRole==='super',due=stage==='ready'&&e.leaveFrom<=_leaveDay();
@@ -10599,21 +10650,21 @@ function activeApprovedLeaveLogForEmployee(e){
 }
 function isLeaveActiveToday(e){return _leaveStage(e)==='active';}
 function getApprovedLeaveListForEmployees(){
-  return employees.filter(e=>['ready','active'].includes(_leaveStage(e))).map(e=>({empId:e.id,empName:e.name,plate:e.plate,leaveFrom:e.leaveFrom,leaveTo:e.leaveTo,leaveNote:e.leaveNote})).sort((a,b)=>a.leaveFrom.localeCompare(b.leaveFrom));
+  return employees.map(e=>({e,range:_leaveReservedRange(e)})).filter(({range})=>range&&range.to>=_leaveDay()).map(({e,range})=>({empId:e.id,empName:e.name,plate:e.plate,leaveFrom:range.from,leaveTo:range.to,stageLabel:_leaveStageInfo(e).label})).sort((a,b)=>a.leaveFrom.localeCompare(b.leaveFrom));
 }
 function renderApprovedLeaveNoticeForEmployees(currentEmpId){
   const list=getApprovedLeaveListForEmployees().filter(x=>String(x.empId)!==String(currentEmpId||''));
   if(!list.length)return '';
   return `<div style="margin-top:10px;background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:10px 12px;">
-    <div style="font-size:13px;font-weight:900;color:#92400E;margin-bottom:6px;">📌 วันที่มีพนักงานลาแล้ว — ตรวจสอบก่อนแจ้งลา</div>
+    <div style="font-size:13px;font-weight:900;color:#92400E;margin-bottom:6px;">📌 วันที่ถูกจองลาแล้ว — ไม่สามารถเลือกทับกันได้</div>
     <div style="display:flex;flex-direction:column;gap:6px;max-height:170px;overflow:auto;">
       ${list.map(x=>`<div style="background:#fff;border:1px solid #FDE68A;border-radius:10px;padding:7px 9px;">
         <div style="font-size:12.5px;font-weight:800;color:#1a1a2e;">🌴 ${esc(x.empName)} <span style="color:#64748B;font-weight:600;">🚛 ${esc(x.plate||'-')}</span></div>
         <div style="font-size:11.5px;color:#92400E;font-weight:800;margin-top:2px;">📅 ${fmtLeaveRange(x)}</div>
-        ${x.leaveNote?`<div style="font-size:11px;color:#64748B;margin-top:2px;">${skeIcon('note')} ${esc(x.leaveNote)}</div>`:''}
+        <div style="font-size:11px;color:#64748B;margin-top:2px;">${esc(x.stageLabel)}</div>
       </div>`).join('')}
     </div>
-    <div style="font-size:10.5px;color:#92400E;margin-top:6px;">แสดงเฉพาะรายการที่ผู้ดูแลอนุมัติแล้ว เพื่อไม่ให้ลาซ้ำวันพร้อมกัน</div>
+    <div style="font-size:10.5px;color:#92400E;margin-top:6px;">รวมรออนุมัติ อนุมัติแล้ว และกำลังลา · เมื่อยกเลิก ไม่อนุมัติ หรือกลับมาทำงานแล้ว จึงเลือกวันนั้นใหม่ได้</div>
   </div>`;
 }
 function getActiveLeaveRange(e){return isLeaveActiveToday(e)?{leaveFrom:_leaveDay(e.leaveStartedAt),leaveTo:null}:e;}
@@ -10642,7 +10693,7 @@ async function doRequestLeave(){
   if(denySharedTruckRestrictedAccess()||!currentUser)return;
   _leaveDraftChanged();
   const input={from:_selLeaveAt,to:_selLeaveTo||_selLeaveAt,note:_selLeaveNote,requestId:'lv2_'+Date.now()+'_'+Math.random().toString(36).slice(2,9)};
-  try{_leaveTransition(employees.find(e=>e.id===currentUser.id)||currentUser,'request',input,new Date().toISOString());}catch(e){alert(e.message);return;}
+  try{_leaveAssertAvailable(employees,employees.find(e=>e.id===currentUser.id)||currentUser,'request',input,new Date().toISOString());}catch(e){alert(e.message);return;}
   if(await _leaveRunAction(currentUser.id,'request',input)){leaveFormOpen=false;_selLeaveAt='';_selLeaveTo='';_selLeaveNote='';renderDashboard();}
 }
 async function doCancelLeave(){
