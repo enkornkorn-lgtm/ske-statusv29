@@ -834,7 +834,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.75D');
+console.log('[SKE TRUCK] app version: v3.2.76D');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1427,7 +1427,7 @@ console.log('[SKE TRUCK] app version: v3.2.75D');
         if(!ownsSession()||!current||String(current.id)!==id)return;
         if(current.lastStatusChange?.id===requestId)return current;
         if(_skeStatusFingerprint(current)!==expected)return;
-        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.75D'};
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.76D'};
         const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
         return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
           ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
@@ -2389,23 +2389,23 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
     if(!window._fbConnected||navigator.onLine===false)throw new Error('ยังเชื่อมต่อส่วนกลางไม่ได้ กรุณาเชื่อมต่อแล้วลองใหม่');
     if(_obHasFresh('jobPlan')||_recordWriteBusy.jobPlan||window._jobStatusActionBusy||_jpMonthCreating)throw new Error('กำลังบันทึกแผนงานก่อนหน้า กรุณารอให้สำเร็จก่อน');
   }
-  window.fbGetJobPlanMonthForBackup = async function(month) {
+  window.fbGetJobPlanMonthForDeletion = async function(month) {
     _requireJobPlanMonthDeleteReady();
     validatePastJobPlanMonth(month);
     const snap=await _withTimeout(get(ref(db,'jobPlan')),SKE_WRITE_TIMEOUT_MS,'โหลดแผนเดือนเก่าไม่สำเร็จ กรุณาลองใหม่');
     _requireJobPlanMonthDeleteReady();
     return _cloneRecord(jobPlanRowsInMonth(month,normalizeList(snap.val())||[]));
   };
-  window.fbDeleteJobPlanMonth = async function(month,backupRows) {
+  window.fbDeleteJobPlanMonth = async function(month,confirmedRows) {
     _requireJobPlanMonthDeleteReady();
     if(window._jpMonthDeleteBusy)throw new Error('กำลังลบเดือนเก่า กรุณารอให้เสร็จก่อน');
-    const saved=_cloneRecord(backupRows);
+    const saved=_cloneRecord(confirmedRows);
     validateJobPlanMonthDeletion(month,saved);
     const signature=jobPlanMonthSignature(saved);
     let removed=0;
     window._jpMonthDeleteBusy=true;
     try{
-      // One transaction on jobPlan only. Recheck the exact backed-up rows on EVERY retry.
+      // One transaction on jobPlan only. Recheck the rows shown in the confirmation on EVERY retry.
       // Do not enqueue this destructive action in the offline outbox or revert employee status.
       // Await the actual acknowledgement: a timeout must not report failure while a delete is still pending.
       const result=await runTransaction(ref(db,'jobPlan'),current=>{
@@ -2417,7 +2417,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
         const rows=jobPlanRowsInMonth(month,normalizeList(current)||[]);
         if(!rows.length)return current;
         validateJobPlanMonthDeletion(month,rows);
-        if(jobPlanMonthSignature(rows)!==signature)throw new Error('แผนเดือนนี้มีการเปลี่ยนแปลงหลังสำรอง กรุณาดาวน์โหลด CSV ใหม่ก่อนลบ');
+        if(jobPlanMonthSignature(rows)!==signature)throw new Error('แผนเดือนนี้มีการเปลี่ยนแปลงระหว่างรอยืนยัน กรุณากดลบใหม่เพื่อตรวจรายการล่าสุด');
         const next={...current};
         Object.entries(current).forEach(([key,row])=>{
           if(row&&String(row.workDate||'').slice(0,7)===month){delete next[key];removed++;}
@@ -4444,7 +4444,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.75D</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.76D</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4452,7 +4452,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.75D</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.76D</div>
       </div>
     </div>
 
@@ -4570,7 +4570,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.75D</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.76D</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4828,7 +4828,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.75D</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.76D</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5521,7 +5521,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.75D';
+const SKE_APP_VERSION='v3.2.76D';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -13025,70 +13025,50 @@ function validateJobPlanMonthDeletion(month,rows){
     if(!row||!String(row.id||'')||String(row.workDate||'').slice(0,7)!==month||ids.has(String(row.id)))throw new Error('ข้อมูลแผนงานไม่ครบหรือรหัสซ้ำ กรุณาตรวจสอบก่อนลบ');
     ids.add(String(row.id));
   }
-  const open=rows.filter(r=>['active','queued'].includes(r.assignmentState)||(r.dispatched&&!['completed','cancelled'].includes(r.assignmentState)));
-  if(open.length)throw new Error(`ยังมี ${open.length} งานที่ยังไม่ยืนยันจบหรือยกเลิก จึงยังลบทั้งเดือนไม่ได้`);
+  // The admin explicitly deletes ALL plans in a past month, including legacy unfinished rows.
+  // This removes the plan records only; it does not finish jobs or modify employee status.
 }
 function jobPlanMonthSignature(rows){
   const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'
     ?Object.fromEntries(Object.keys(value).sort().map(k=>[k,canonical(value[k])])):value;
   return JSON.stringify(rows.slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).map(canonical));
 }
-const _jpMonthBackups=new Map();
-let _jpMonthBackupBusy=false;
+let _jpMonthPreparing=false;
 function renderJobPlanMonthTools(month,rows){
   if(!adminMode||adminRole!=='super')return '';
   let blocked='';
   try{validateJobPlanMonthDeletion(month,rows);}catch(e){blocked=e.message;}
-  const backup=_jpMonthBackups.get(month);
-  const ready=!!backup&&jobPlanMonthSignature(backup)===jobPlanMonthSignature(rows);
-  const busy=!!window._jpMonthDeleteBusy||_jpMonthBackupBusy;
+  const busy=!!window._jpMonthDeleteBusy||_jpMonthPreparing;
   return `<div style="padding:12px;margin-bottom:12px;border:1px solid #FECACA;border-radius:10px;background:#FFF7F7;">
     <b style="font-size:13px;color:#991B1B;">จัดการแผนงาน ${esc(fmtJobMonthLabel(month))} · ${rows.length} รายการ</b>
-    <p style="font-size:12px;color:#64748B;margin:6px 0 10px;">ลบเฉพาะแผนร่าง งานจบแล้ว หรือยกเลิกแล้ว ไม่ลบเอกสาร เงินเบิก หรือบันทึกเที่ยวงาน<br>เมื่อลบจะเปิดดูแผนเดือนนี้ในแอปไม่ได้ กรุณาเก็บไฟล์ CSV ไว้ก่อน</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn btn-gray btn-sm" style="min-height:40px;${busy?'opacity:.5;cursor:not-allowed;':''}" ${busy?'disabled':''} onclick="backupJobPlanMonth('${month}')">📥 1. สำรอง CSV เดือนนี้</button>
-      <button class="btn btn-red btn-sm" style="min-height:40px;${busy||blocked||!ready?'opacity:.45;cursor:not-allowed;':''}" ${busy||blocked||!ready?'disabled':''} onclick="deleteJobPlanMonth('${month}')">🗑️ 2. ลบแผนงานเดือนนี้</button>
-    </div>
-    <div role="status" style="margin-top:8px;font-size:12px;color:${blocked?'#B91C1C':'#475569'};">${esc(busy?'กำลังรอส่วนกลางยืนยัน กรุณาอย่าปิดหน้านี้…':blocked||(ready?'ส่งไฟล์ CSV ให้ดาวน์โหลดแล้ว โปรดตรวจว่าเก็บไฟล์เรียบร้อยก่อนกดลบ':'ต้องสำรอง CSV ล่าสุดของเดือนนี้ก่อน จึงจะกดลบได้'))}</div>
+    <p style="font-size:12px;color:#64748B;margin:6px 0 10px;">ลบแผนงานทุกสถานะของเดือนนี้ถาวร และดูแผนเดือนนี้ย้อนหลังในแอปไม่ได้<br>ไม่เปลี่ยนสถานะพนักงาน ไม่ลบเอกสาร เงินเบิก หรือบันทึกเที่ยวงาน</p>
+    <button class="btn btn-red btn-sm" style="min-height:40px;${busy||blocked?'opacity:.45;cursor:not-allowed;':''}" ${busy||blocked?'disabled':''} onclick="deleteJobPlanMonth('${month}')">🗑️ ลบแผนงานทั้งเดือน</button>
+    ${busy||blocked?`<div role="status" style="margin-top:8px;font-size:12px;color:${blocked?'#B91C1C':'#475569'};">${esc(busy?'กำลังตรวจรายการและรอส่วนกลางยืนยัน กรุณาอย่าปิดหน้านี้…':blocked)}</div>`:''}
   </div>`;
 }
 function refreshJobPlanMonthTools(month){
   const el=document.getElementById('jpMonthTools_'+month);
   if(el)el.innerHTML=renderJobPlanMonthTools(month,jobPlanRowsInMonth(month,jobPlanRows));
 }
-async function backupJobPlanMonth(month){
-  if(_jpMonthBackupBusy||window._jpMonthDeleteBusy)return;
+async function deleteJobPlanMonth(month){
+  if(_jpMonthPreparing||window._jpMonthDeleteBusy)return;
   try{
     if(!adminMode||adminRole!=='super')throw new Error('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้น');
     validatePastJobPlanMonth(month);
-    _jpMonthBackupBusy=true;refreshJobPlanMonthTools(month);
-    if(!window.fbGetJobPlanMonthForBackup)throw new Error('ยังเชื่อมต่อส่วนกลางไม่ได้ กรุณาลองใหม่');
-    const rows=await window.fbGetJobPlanMonthForBackup(month);
-    if(!rows.length)throw new Error('ไม่มีแผนงานในเดือนที่เลือก');
-    exportJobPlanCSV(rows,'แผนงาน_'+month+'_ก่อนลบ.csv');
-    _jpMonthBackups.set(month,rows);
-    showDocUploadToast('ดาวน์โหลด CSV แล้ว โปรดตรวจว่าเก็บไฟล์เรียบร้อยก่อนลบ',true);
-  }catch(e){alert('สำรองไม่สำเร็จ: '+(e.message||e));}
-  finally{_jpMonthBackupBusy=false;refreshJobPlanMonthTools(month);}
-}
-async function deleteJobPlanMonth(month){
-  if(_jpMonthBackupBusy||window._jpMonthDeleteBusy)return;
-  try{
-    if(!adminMode||adminRole!=='super')throw new Error('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้น');
-    const rows=jobPlanRowsInMonth(month,jobPlanRows),backup=_jpMonthBackups.get(month);
-    validateJobPlanMonthDeletion(month,rows);
-    if(!backup||jobPlanMonthSignature(backup)!==jobPlanMonthSignature(rows))throw new Error('กรุณาสำรอง CSV ล่าสุดของเดือนนี้ก่อนลบ');
-    if(!confirm(`ยืนยันว่าเก็บไฟล์ แผนงาน_${month}_ก่อนลบ.csv แล้ว?\n\nจะลบแผนงาน ${fmtJobMonthLabel(month)} ทั้งหมด ${rows.length} รายการออกจากส่วนกลางถาวร และดูแผนเดือนนี้ย้อนหลังในแอปไม่ได้\n\nไม่ลบเอกสาร เงินเบิก บันทึกเที่ยวงาน หรือเปลี่ยนสถานะพนักงาน\n\nกดตกลงเพื่อลบ หรือยกเลิกเพื่อเก็บข้อมูลไว้`))return;
-    if(!window.fbDeleteJobPlanMonth)throw new Error('ยังเชื่อมต่อส่วนกลางไม่ได้ กรุณาลองใหม่');
-    const pending=window.fbDeleteJobPlanMonth(month,backup);
+    if(!window.fbGetJobPlanMonthForDeletion||!window.fbDeleteJobPlanMonth)throw new Error('ยังเชื่อมต่อส่วนกลางไม่ได้ กรุณาลองใหม่');
+    _jpMonthPreparing=true;
     const list=document.getElementById('jobPlanList');if(list)list.inert=true;
     refreshJobPlanMonthTools(month);
+    const rows=await window.fbGetJobPlanMonthForDeletion(month);
+    validateJobPlanMonthDeletion(month,rows);
+    if(!confirm(`ลบแผนงาน ${fmtJobMonthLabel(month)} ทั้งเดือน จำนวน ${rows.length} รายการใช่ไหม?\n\nรวมทุกสถานะ ทั้งงานร่าง งานค้าง และงานจบแล้ว ลบถาวรและไม่สามารถกู้คืนผ่านแอปได้\n\nไม่ลบเอกสาร เงินเบิก บันทึกเที่ยวงาน หรือเปลี่ยนสถานะพนักงาน\n\nกดตกลงเพื่อลบ หรือยกเลิกเพื่อเก็บข้อมูลไว้`))return;
+    const pending=window.fbDeleteJobPlanMonth(month,rows);
+    refreshJobPlanMonthTools(month);
     const result=await pending;
-    _jpMonthBackups.delete(month);
     showDocUploadToast(result.removed?`ลบแผนงาน ${fmtJobMonthLabel(month)} แล้ว ${result.removed} รายการ`:'เดือนนี้ไม่มีรายการเหลือในส่วนกลางแล้ว',true);
     renderJobPlan();
   }catch(e){alert('ยังไม่ได้รับการยืนยันการลบ: '+(e.message||e));}
-  finally{const list=document.getElementById('jobPlanList');if(list)list.inert=false;refreshJobPlanMonthTools(month);}
+  finally{_jpMonthPreparing=false;const list=document.getElementById('jobPlanList');if(list)list.inert=false;refreshJobPlanMonthTools(month);}
 }
 function buildJobPlanMonth(month,templates,existing){
   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month||'') || +month.slice(0,4)<2000 || +month.slice(0,4)>2100)throw new Error('กรุณาเลือกเดือนและปีให้ถูกต้อง');
