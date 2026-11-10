@@ -834,7 +834,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.77D');
+console.log('[SKE TRUCK] app version: v3.2.78Q');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1426,8 +1426,9 @@ console.log('[SKE TRUCK] app version: v3.2.77D');
       const tx=await runTransaction(ref(db,'employees/'+key),current=>{
         if(!ownsSession()||!current||String(current.id)!==id)return;
         if(current.lastStatusChange?.id===requestId)return current;
+        if(source==='admin-quick-status'&&(_leaveStage(current)==='active'||current.status!=='done'))return;
         if(_skeStatusFingerprint(current)!==expected)return;
-        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.77D'};
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.78Q'};
         const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
         return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
           ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
@@ -1877,7 +1878,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
   if(!authorized())throw new Error('บัญชีเปลี่ยนระหว่างบันทึก กรุณาลองใหม่');
   const now=new Date().toISOString();
   _leaveTransition(latest,action,input,now);
-  const reservesDates=['request','approve','start'].includes(action);
+  const reservesDates=['request','approve','start','quick-start'].includes(action);
   const latestRows=Object.values(snap.val()||{}).filter(row=>row&&!_isEmployeeDeleted(row.id));
   if(reservesDates)_leaveAssertAvailable(latestRows,latest,action,input,now);
   // Persist the previous request before allowing it to be replaced. No history deletion.
@@ -1894,7 +1895,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
     _skeCacheSet('ske_leaveLogs',leaveLogs);
     const shadow=_recordShadows.leaveLogs||new Map();shadow.set(String(saved.id),_cloneRecord(saved));_recordShadows.leaveLogs=shadow;
   }
-  if(action==='request')await archive(latest);
+  if(action==='request'||(action==='quick-start'&&!['pending','ready','active'].includes(_leaveStage(latest))))await archive(latest);
   let reason='คำขอเปลี่ยนระหว่างบันทึก กรุณาโหลดใหม่';
   const identity=_leaveIdentity(latest),revision=latest.leaveRevisionAt||null;
   // Date reservations must share one transaction. Two devices cannot both pass
@@ -3363,6 +3364,9 @@ select.inp option{background:#fff;color:#1a1a2e;}
 .ske-status-person{position:relative;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:start;gap:9px;padding:8px 8px 8px 10px;background:linear-gradient(90deg,var(--status-bg) 0,#F8FAFC 34%);border-radius:12px;border:1px solid var(--status-border);overflow:hidden;}
 .ske-status-person::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--status-color);opacity:1;}
 .ske-status-person-main{min-width:0;}
+.ske-status-person-name-row{display:flex;align-items:center;gap:8px;min-width:0;}
+.ske-status-person-name-row .ske-status-person-name{min-width:0;}
+.ske-quick-status{max-width:130px;min-height:30px;padding:3px 6px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;color:#334155;font-size:12px;font-weight:700;}
 .ske-status-avatar{position:relative;width:34px!important;height:34px!important;min-width:34px!important;font-size:14px!important;border-radius:11px!important;background:var(--status-bg)!important;color:var(--status-color)!important;box-shadow:none!important;overflow:visible!important;}
 .ske-status-avatar img{width:34px!important;height:34px!important;border-radius:11px!important;}
 .ske-status-queue{position:absolute;right:-5px;bottom:-5px;min-width:17px;height:17px;padding:0 3px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:var(--status-color);color:#fff;border:2px solid #fff;font-size:8.5px;font-weight:950;}
@@ -4444,7 +4448,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.77D</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.78Q</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4452,7 +4456,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.77D</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.78Q</div>
       </div>
     </div>
 
@@ -4570,7 +4574,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.77D</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.78Q</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4828,7 +4832,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.77D</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.78Q</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5521,7 +5525,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.77D';
+const SKE_APP_VERSION='v3.2.78Q';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -8360,6 +8364,17 @@ function _leaveDraftConflict(){
 }
 function _leaveTransition(e,action,input,now){
   const stage=_leaveStage(e),today=_leaveDay(now);
+  if(action==='quick-start'){
+    if(input.expected!==_leaveIdentity(e))throw new Error('คำขอลาเปลี่ยนแล้ว กรุณาโหลดรายการล่าสุด');
+    if(e.status!=='done'||input.expectedStatus!==_skeStatusFingerprint(e))throw new Error('สถานะเปลี่ยนแล้ว กรุณาตรวจรายการล่าสุด');
+    if(stage==='active')throw new Error('พนักงานเริ่มลาจริงแล้ว');
+    if(['pending','ready'].includes(stage)){
+      if(!_leaveValidDay(e.leaveFrom)||!_leaveValidDay(e.leaveTo||e.leaveFrom))throw new Error('วันลาของคำขอไม่ครบ กรุณาตรวจรายการเดิม');
+      return {onLeave:true,leaveFlowVersion:2,leaveRequestId:_leaveIdentity(e),leaveApproval:'approved',leaveApprovedAt:e.leaveApprovedAt||now,leaveStartedAt:now,leaveEndedAt:null,leaveRevisionAt:now};
+    }
+    if(!/^lv2_[a-zA-Z0-9_]+$/.test(input.requestId||''))throw new Error('รหัสคำขอไม่ถูกต้อง');
+    return {onLeave:true,leaveFlowVersion:2,leaveRequestId:input.requestId,leaveRequestedAt:now,leaveFrom:today,leaveTo:today,leaveNote:'ผู้ดูแลบันทึกลาโดยตรง',leaveApproval:'approved',leaveApprovedAt:now,leaveStartedAt:now,leaveEndedAt:null,leaveCancelledAt:null,leaveReply:null,leaveReplyAt:null,leaveRevisionAt:now};
+  }
   if(action==='request'){
     if(['pending','ready','active'].includes(stage))throw new Error('มีคำขอลาที่ยังไม่สิ้นสุด กรุณาจัดการรายการเดิมก่อน');
     const from=input.from,to=input.to||from;
@@ -11711,10 +11726,11 @@ function renderEmployeePhoneLocation(e){
 function renderStatusPersonRow(e,st,options={}){
   const queue=Number(options.queue||0);
   const timeValue=options.timeValue||e.updatedAt;
+  const quick=st.id==='done'&&adminMode&&adminRole==='super' ? `<select class="ske-quick-status" aria-label="เปลี่ยนสถานะ ${esc(e.name||'พนักงาน')}" data-employee-id="${esc(String(e.id))}" onchange="adminQuickStatus(this)"><option value="">เลือกสถานะ</option><option value="got_job">ได้งานแล้ว</option><option value="leave">ลา</option></select>` : '';
   return `<div class="ske-status-person">
     <div class="avatar ske-status-avatar">${avatarImg(e,34)}${queue?`<span class="ske-status-queue" title="คิวที่ ${queue}">${queue}</span>`:''}</div>
     <div class="ske-status-person-main">
-      <div class="ske-status-person-name">${esc(e.name||'-')}</div>
+      <div class="ske-status-person-name-row"><div class="ske-status-person-name">${esc(e.name||'-')}</div>${quick}</div>
       <div class="ske-status-person-meta">${skeIcon('truck')} ${esc(e.plate||'-')}${phoneLink(e.phone)}${lineLink(e.lineId)}</div>
       ${leaveTodayBadge(e)}
       ${e.note?`<div class="ske-status-person-note">${skeIcon('note')} ${esc(e.note)}</div>`:''}
@@ -11723,6 +11739,28 @@ function renderStatusPersonRow(e,st,options={}){
     </div>
     <div class="ske-status-person-time">${skeIcon('history')} ${statusTimeShort(timeValue)}</div>
   </div>`;
+}
+
+async function adminQuickStatus(select){
+  const action=select.value,id=select.dataset.employeeId;
+  select.value='';
+  if(!adminMode||adminRole!=='super'){alert('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้น');return;}
+  if(!['got_job','leave'].includes(action))return;
+  const emp=employees.find(row=>String(row.id)===String(id));
+  if(!emp||emp.status!=='done'||isLeaveActiveToday(emp)){alert('สถานะเปลี่ยนแล้ว กรุณาตรวจรายการล่าสุด');return;}
+  if(action==='leave'){
+    if(!confirm(`ยืนยันว่า ${emp.name} เริ่มลาจริงตอนนี้ใช่ไหม?\nระบบจะบันทึกเวลาเริ่มลาจริงและตรวจวันลาซ้ำ\nหากยังไม่มีคำขอ จะบันทึกวันลาเป็นวันนี้ และรอผู้ดูแลยืนยันกลับมาทำงาน`))return;
+    const ok=await _leaveRunAction(id,'quick-start',{expected:_leaveIdentity(emp),expectedStatus:_skeStatusFingerprint(emp),requestId:'lv2_'+Date.now()+'_'+Math.random().toString(36).slice(2,10)});
+    if(ok)showDocUploadToast('ยืนยันเริ่มลาจริงแล้ว',true);
+    return;
+  }
+  if(!confirm(`เปลี่ยนสถานะ ${emp.name} เป็น “ได้งานแล้ว” ใช่ไหม?\nการดำเนินการนี้ไม่สร้างหรือจ่ายงานในแผน`))return;
+  select.disabled=true;
+  try{
+    await fbPatchEmployee(id,{status:'got_job',updatedAt:new Date().toISOString(),standbyAt:null},{expected:emp,source:'admin-quick-status'});
+    renderAdmin();showDocUploadToast('เปลี่ยนสถานะเป็นได้งานแล้ว',true);
+  }catch(error){alert('ยังยืนยันการเปลี่ยนสถานะไม่ได้: '+(error.message||error));}
+  finally{select.disabled=false;}
 }
 
 function renderStatusGroupedByProvince(st,options={}){
