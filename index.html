@@ -834,7 +834,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.80P');
+console.log('[SKE TRUCK] app version: v3.2.81R');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1081,6 +1081,9 @@ console.log('[SKE TRUCK] app version: v3.2.80P');
       }
       const itemRef = ref(db, path + '/' + key);
       const tx = await _withTimeout(runTransaction(itemRef, current => {
+        // A reassignment is a two-phase operation; normal queued edits must not
+        // overwrite or delete its row while it is being completed or retried.
+        if(path==='jobPlan' && current?.pendingReassignment)return;
         if (op.delete) {
           if (current == null) return null;
           if (String(current.id || '') !== op.id) return;
@@ -1428,7 +1431,7 @@ console.log('[SKE TRUCK] app version: v3.2.80P');
         if(current.lastStatusChange?.id===requestId)return current;
         if(source==='admin-quick-status'&&(_leaveStage(current)==='active'||!['done','standby'].includes(current.status)))return;
         if(_skeStatusFingerprint(current)!==expected)return;
-        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.80P'};
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.81R'};
         const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
         return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
           ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
@@ -2380,6 +2383,101 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
     );
     return _queueRecordOps('jobPlan', 'jobPlan', _buildRecordOps('jobPlan', clean, false))
       .catch(e => { console.error('fbSaveJobPlanRows error', e); throw e; });
+  };
+  // Reassignment uses a durable reservation on the plan row, followed by one
+  // transaction for both employee records and an idempotent plan finalization.
+  // A lost connection can be retried using the same operation id.
+  window.fbReassignDispatchedJob = async function(expectedRow,targetId,operationId) {
+    const role=adminRole;
+    const authorized=()=>adminMode&&adminRole===role&&(role==='super'||role==='viewer');
+    if(!authorized())throw new Error('เฉพาะผู้ดูแลหรือแอดมินเท่านั้น');
+    if(!window._fbConnected||navigator.onLine===false||!window._employeeListSynced||!window.fbDataReady(['jobPlan']))throw new Error('กรุณาเชื่อมต่อส่วนกลางและรอข้อมูลล่าสุดก่อน');
+    if(window._jpMonthDeleteBusy||_obHasFresh('jobPlan')||_recordWriteBusy.jobPlan||_obHasFresh('employees')||_recordWriteBusy.employees)throw new Error('กำลังบันทึกแผนงานหรือข้อมูลพนักงาน กรุณารอให้เสร็จก่อน');
+    const planSnap=await _withTimeout(get(ref(db,'jobPlan')),SKE_WRITE_TIMEOUT_MS,'โหลดแผนงานล่าสุดไม่สำเร็จ');
+    let planKey=null,serverRow=null;
+    planSnap.forEach(child=>{const item=child.val();if(item&&String(item.id)===String(expectedRow.id)){planKey=child.key;serverRow=item;return true;}return false;});
+    if(planKey===null||!serverRow)throw new Error('ไม่พบแผนงานล่าสุด');
+    let pending=serverRow.pendingReassignment;
+    if(pending){
+      if(!expectedRow.pendingReassignment||pending.id!==expectedRow.pendingReassignment.id)throw new Error('มีการส่งใหม่ค้างอยู่ กรุณาโหลดรายการล่าสุด');
+    }else{
+      if(expectedRow.pendingReassignment||_jobReassignPlanSignature(serverRow)!==_jobReassignPlanSignature(expectedRow))throw new Error('แผนงานเปลี่ยนแล้ว กรุณาตรวจรายการล่าสุด');
+      if(!serverRow.dispatched||isCancelledJobPlanRow(serverRow)||JOB_ASSIGNMENT_DONE_STATES.has(serverRow.assignmentState)||!serverRow.workDate||isPastWorkDate(serverRow.workDate))throw new Error('ส่งใหม่ได้เฉพาะงานที่ยังไม่จบและไม่ใช่งานย้อนหลัง');
+      if(!serverRow.route?.trim()||!serverRow.standbyTime||!targetId||String(targetId)===String(serverRow.empId))throw new Error('กรุณาเลือกพนักงานใหม่และตรวจรายละเอียดงาน');
+      const empSnap=await _withTimeout(get(ref(db,'employees')),SKE_WRITE_TIMEOUT_MS,'โหลดพนักงานล่าสุดไม่สำเร็จ');
+      const all=Object.values(empSnap.val()||{}).filter(Boolean);
+      const oldEmp=all.find(e=>String(e.id)===String(serverRow.empId));
+      const newEmp=all.find(e=>String(e.id)===String(targetId));
+      if(_isEmployeeDeleted(serverRow.empId)||_isEmployeeDeleted(targetId))throw new Error('บัญชีพนักงานถูกลบแล้ว');
+      _validateJobReassignmentEmployees(serverRow,oldEmp,newEmp);
+      const other=(normalizeList(planSnap.val())||[]).some(r=>r&&String(r.id)!==String(serverRow.id)&&r.dispatched&&String(r.empId)===String(oldEmp.id)&&r.workDate&&!isPastWorkDate(r.workDate)&&!isCancelledJobPlanRow(r)&&!JOB_ASSIGNMENT_DONE_STATES.has(r.assignmentState));
+      if(other)throw new Error('คนเดิมมีงานอื่นค้างอยู่ กรุณาจัดการงานอื่นก่อนเปลี่ยนรายชื่อ');
+      pending={id:operationId,oldId:String(oldEmp.id),newId:String(newEmp.id),planSignature:_jobReassignPlanSignature(serverRow),oldSignature:_jobReassignEmployeeSignature(oldEmp),newSignature:_jobReassignEmployeeSignature(newEmp)};
+      if(!/^reassign_[a-zA-Z0-9_]+$/.test(pending.id||''))throw new Error('รหัสรายการไม่ถูกต้อง');
+      const reserved=await runTransaction(ref(db,'jobPlan/'+planKey),current=>{
+        if(!authorized()||!current||current.pendingReassignment||_jobReassignPlanSignature(current)!==pending.planSignature)return;
+        return {...current,pendingReassignment:pending};
+      },{applyLocally:false});
+      if(!reserved.committed)throw new Error('แผนงานเปลี่ยนระหว่างบันทึก กรุณาตรวจรายการล่าสุด');
+      serverRow=reserved.snapshot.val();
+    }
+    if(!pending||!/^reassign_[a-zA-Z0-9_]+$/.test(pending.id||'')||String(serverRow.empId)!==pending.oldId||_jobReassignPlanSignature(serverRow)!==pending.planSignature)throw new Error('ข้อมูลส่งใหม่ไม่ตรงกัน กรุณาตรวจรายการล่าสุด');
+    if(_statusWrites.has(pending.oldId)||_statusWrites.has(pending.newId))throw new Error('กำลังบันทึกสถานะ กรุณารอแล้วกดดำเนินการต่อ');
+    const now=new Date(Date.now()+_firebaseServerTimeOffset).toISOString();
+    let reason='สถานะพนักงานเปลี่ยนแล้ว กรุณาตรวจรายการล่าสุด';
+    const employeeTx=await runTransaction(ref(db,'employees'),current=>{
+      if(!authorized()||!current||typeof current!=='object'||_isEmployeeDeleted(pending.oldId)||_isEmployeeDeleted(pending.newId))return;
+      try{return _jobReassignEmployeeTransaction(current,serverRow,pending,now);}catch(error){reason=error.message;return;}
+    },{applyLocally:false});
+    if(!employeeTx.committed){
+      // Fence any concurrent retry before releasing the reservation. A retry
+      // that races this transaction will see changed revisions and cannot write.
+      if(typeof employeeTx.snapshot?.val!=='function')throw new Error('ยังตรวจสอบผลไม่ได้ กรุณากดดำเนินการต่อ');
+      const snapshotRows=Object.values(employeeTx.snapshot.val()||{}).filter(Boolean);
+      const hasReceipt=snapshotRows.some(e=>e.jobReassignmentReceipts?.[pending.id]);
+      if(!hasReceipt){
+        const fenced=await runTransaction(ref(db,'employees'),current=>{
+          if(!authorized()||!current||typeof current!=='object')return;
+          const entries=Object.entries(current),oldEntry=entries.find(([,e])=>e&&String(e.id)===pending.oldId),newEntry=entries.find(([,e])=>e&&String(e.id)===pending.newId);
+          if(!oldEntry||!newEntry||oldEntry[1].jobReassignmentReceipts?.[pending.id]||newEntry[1].jobReassignmentReceipts?.[pending.id])return;
+          const next=Array.isArray(current)?current.slice():{...current};
+          next[oldEntry[0]]={...oldEntry[1],statusRevision:(Number(oldEntry[1].statusRevision)||0)+1};
+          next[newEntry[0]]={...newEntry[1],statusRevision:(Number(newEntry[1].statusRevision)||0)+1};
+          return next;
+        },{applyLocally:false});
+        if(fenced.committed)await runTransaction(ref(db,'jobPlan/'+planKey),current=>{
+          if(!authorized()||current?.pendingReassignment?.id!==pending.id)return;
+          const next={...current};delete next.pendingReassignment;return next;
+        },{applyLocally:false});
+      }
+      throw new Error(reason);
+    }
+    const updated=Object.entries(employeeTx.snapshot.val()||{}).filter(([,employee])=>employee);
+    const oldEntry=updated.find(([,e])=>String(e.id)===pending.oldId),newEntry=updated.find(([,e])=>String(e.id)===pending.newId);
+    const oldSaved=oldEntry?.[1],newSaved=newEntry?.[1];
+    const receipt=newSaved?.jobReassignmentReceipts?.[pending.id];
+    if(!oldSaved?.jobReassignmentReceipts?.[pending.id]||receipt?.id!==pending.id)throw new Error('ยังยืนยันผลการส่งใหม่ไม่ได้ กรุณากดดำเนินการต่อ');
+    const finalized=await runTransaction(ref(db,'jobPlan/'+planKey),current=>{
+      if(!authorized()||!current)return;
+      if(current.lastReassignmentId===pending.id&&String(current.empId)===pending.newId)return current;
+      if(current.pendingReassignment?.id!==pending.id||_jobReassignPlanSignature(current)!==pending.planSignature)return;
+      const next={...current,empId:pending.newId,empName:receipt.name,plate:receipt.plate,phone:receipt.phone,
+        assignmentState:'active',activatedAt:receipt.at,queuedAt:null,completedAt:null,dispatched:true,dispatchedAt:receipt.at,
+        previousEmployeeStatus:receipt.previousStatus||'standby',previousEmployeeProvince:receipt.previousProvince||'',
+        previousEmployeeNote:receipt.previousNote||'',previousEmployeeStandbyAt:receipt.previousStandbyAt??null,lastReassignmentId:pending.id};
+      delete next.pendingReassignment;return next;
+    },{applyLocally:false});
+    if(!finalized.committed)throw new Error('ส่งสถานะแล้ว แต่แผนงานยังไม่ยืนยัน กรุณากดดำเนินการต่อ');
+    _acceptStatusAcknowledgement(oldSaved);_acceptStatusAcknowledgement(newSaved);
+    // Once the plan is confirmed, receipts are no longer needed for recovery.
+    // Cleanup is best-effort and never changes the reported result or status.
+    void Promise.all([oldEntry,newEntry].map(([key,employee])=>runTransaction(ref(db,'employees/'+key),current=>{
+      if(!authorized()||!current||String(current.id)!==String(employee.id)||!current.jobReassignmentReceipts?.[pending.id])return;
+      const receipts={...current.jobReassignmentReceipts};delete receipts[pending.id];
+      const next={...current};if(Object.keys(receipts).length)next.jobReassignmentReceipts=receipts;else delete next.jobReassignmentReceipts;
+      return next;
+    },{applyLocally:false}))).catch(error=>console.warn('reassignment receipt cleanup',error));
+    return finalized.snapshot.val();
   };
   window.fbDeleteJobPlanRow = rowId => window._jpMonthDeleteBusy
     ? Promise.reject(new Error('กำลังลบแผนเดือนเก่า กรุณารอส่วนกลางยืนยันก่อน'))
@@ -4447,7 +4545,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.80P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.81R</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4455,7 +4553,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.80P</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.81R</div>
       </div>
     </div>
 
@@ -4573,7 +4671,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.80P</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.81R</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4831,7 +4929,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.80P</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.81R</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5524,7 +5622,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.80P';
+const SKE_APP_VERSION='v3.2.81R';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -12958,28 +13056,34 @@ function _jobTypeOptionsHTML(value){
 function renderJobPlanRowTR(row){
   const hasRemark=!!(row.remark&&row.remark.trim());
   const unassigned=!row.empId;
+  const pending=!!row.pendingReassignment;
+  const inFlight=String(window._jobReassignmentInFlightId||'')===String(row.id);
+  const draft=window._jobReassignDrafts?.get(String(row.id));
+  const activeDraft=draft&&draft.signature===_jobReassignPlanSignature(row)?draft:null;
+  const selectedId=row.pendingReassignment?.newId||activeDraft?.targetId||row.empId;
+  const lock=(pending||inFlight)?'disabled title="รอส่งงานใหม่ให้เสร็จ"':'';
   const bg=hasRemark?'#FEE2E2':(unassigned?'#FDF2F8':'#fff');
   return `<tr style="background:${bg};border-bottom:1px solid #F1F5F9;">
     <td style="padding:6px;width:100px;min-width:100px;">
-      <select aria-label="งาน" onchange="updateJobPlanField('${row.id}','jobType',this.value)" style="width:100%;min-height:32px;border:1px solid #CBD5E1;border-radius:7px;padding:4px 6px;background:#fff;font-size:11.5px;font-weight:700;color:#1E40AF;">${_jobTypeOptionsHTML(row.jobType)}</select>
+      <select aria-label="งาน" ${lock} onchange="updateJobPlanField('${row.id}','jobType',this.value)" style="width:100%;min-height:32px;border:1px solid #CBD5E1;border-radius:7px;padding:4px 6px;background:#fff;font-size:11.5px;font-weight:700;color:#1E40AF;">${_jobTypeOptionsHTML(row.jobType)}</select>
     </td>
     <td style="padding:6px;min-width:150px;">
-      <input value="${esc(row.route||'')}" placeholder="พิมพ์เส้นทาง..." onblur="updateJobPlanField('${row.id}','route',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;font-weight:${hasRemark?'700':'500'};color:${hasRemark?'#B91C1C':'#1a1a2e'};">
+      <input value="${esc(row.route||'')}" ${lock} placeholder="พิมพ์เส้นทาง..." onblur="updateJobPlanField('${row.id}','route',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;font-weight:${hasRemark?'700':'500'};color:${hasRemark?'#B91C1C':'#1a1a2e'};">
     </td>
     <td style="padding:6px;min-width:88px;">
-      <select onchange="updateJobPlanField('${row.id}','standbyTime',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;">${jobPlanTimeOptionsHTML(row.standbyTime)}</select>
+      <select ${lock} onchange="updateJobPlanField('${row.id}','standbyTime',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;">${jobPlanTimeOptionsHTML(row.standbyTime)}</select>
     </td>
     <td style="padding:6px;min-width:150px;">
-      <select onchange="onJobPlanEmpChange('${row.id}',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;font-weight:700;color:${unassigned?'#DB2777':'#1a1a2e'};">${jobPlanEmpOptionsHTML(row.empId)}</select>
+      <select ${lock} onchange="onJobPlanEmpChange('${row.id}',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;font-weight:700;color:${unassigned?'#DB2777':'#1a1a2e'};">${jobPlanEmpOptionsHTML(selectedId)}</select>${pending?'<div style="font-size:10px;color:#B45309;">การส่งใหม่ยังไม่เสร็จ · กดดำเนินการต่อ</div>':activeDraft?'<div style="font-size:10px;color:#B45309;">รอกดส่งใหม่ · คนเดิมยังรับงานอยู่</div>':''}
     </td>
     <td style="padding:6px;min-width:85px;color:#475569;font-size:11.5px;white-space:nowrap;">${esc(row.plate||'-')}</td>
     <td style="padding:6px;min-width:100px;color:#475569;font-size:11.5px;white-space:nowrap;">${esc(row.phone||'-')}</td>
     <td style="padding:6px;min-width:140px;">
-      <input value="${esc(row.remark||'')}" placeholder="หมายเหตุ..." onblur="updateJobPlanField('${row.id}','remark',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;color:#B91C1C;">
+      <input value="${esc(row.remark||'')}" ${lock} placeholder="หมายเหตุ..." onblur="updateJobPlanField('${row.id}','remark',this.value)" style="width:100%;border:none;background:transparent;font-size:11.5px;color:#B91C1C;">
     </td>
     <td style="padding:6px;text-align:center;min-width:76px;white-space:nowrap;position:sticky;right:0;background:${bg};box-shadow:-4px 0 6px -4px rgba(0,0,0,.15);">
       <button onclick="copyRouteToDate('${row.id}')" title="คัดลอกเส้นทางนี้ไปวันอื่น" style="background:none;border:none;color:#1E90D6;font-size:14px;cursor:pointer;">📋</button>
-      ${row.dispatched?`<span title="${row.assignmentState==='queued'?'จ่ายงานแล้ว — อยู่ในคิวงานถัดไป':(row.assignmentState==='completed'?'พนักงานจบงานนี้แล้ว':'จ่ายงานแล้ว')}">${row.assignmentState==='completed'?'🏁 จบงาน':(row.assignmentState==='queued'?'⏳ ✅':'✅')}</span>`:`
+      ${inFlight?'<span style="font-size:11px;color:#B45309;">กำลังรอส่วนกลาง…</span>':pending?`<button type="button" onclick="sendJobReassignment('${row.id}')" class="btn btn-blue btn-sm">ดำเนินการต่อ</button>`:row.dispatched?(activeDraft?`<button type="button" onclick="sendJobReassignment('${row.id}')" class="btn btn-blue btn-sm">ส่งใหม่</button>`:`<span title="${row.assignmentState==='queued'?'จ่ายงานแล้ว — อยู่ในคิวงานถัดไป':(row.assignmentState==='completed'?'พนักงานจบงานนี้แล้ว':'จ่ายงานแล้ว')}">${row.assignmentState==='completed'?'🏁 จบงาน':(row.assignmentState==='queued'?'⏳ ✅':'✅')}</span>`):`
         ${row.empId?`<button onclick="dispatchJobPlanRow('${row.id}')" title="จ่ายงานเส้นทางนี้เลย" style="background:none;border:none;color:#059669;font-size:14px;cursor:pointer;">🚀</button>`:''}
         <button onclick="delJobPlanRow('${row.id}')" title="ลบเส้นทางนี้" style="background:none;border:none;color:#DC2626;font-size:14px;cursor:pointer;">🗑️</button>`}
     </td>
@@ -13079,6 +13183,7 @@ function validateJobPlanMonthDeletion(month,rows){
   const ids=new Set();
   for(const row of rows){
     if(!row||!String(row.id||'')||String(row.workDate||'').slice(0,7)!==month||ids.has(String(row.id)))throw new Error('ข้อมูลแผนงานไม่ครบหรือรหัสซ้ำ กรุณาตรวจสอบก่อนลบ');
+    if(row.pendingReassignment)throw new Error('มีงานส่งใหม่ค้างอยู่ กรุณาดำเนินการให้เสร็จก่อนลบเดือน');
     ids.add(String(row.id));
   }
   // The admin explicitly deletes ALL plans in a past month, including legacy unfinished rows.
@@ -13391,6 +13496,7 @@ async function delJobPlanRow(id){
   try{
   const row=jobPlanRows.find(r=>r.id===id);
   if(!row)return;
+  if(row.pendingReassignment)throw new Error('กรุณาดำเนินการส่งงานใหม่ให้เสร็จก่อนลบ');
   if(!confirm('ลบเส้นทางนี้?'))return;
   // คืนสถานะพนักงานเฉพาะตอนที่ "จ่ายงานไปแล้วจริง" เท่านั้น — ถ้าแค่เลือกชื่อไว้ในแผนร่างยังไม่เคยกดจ่ายงาน ไม่เคยไปแตะสถานะเขาเลยตั้งแต่แรก ไม่ต้องคืนอะไร
   if(row.dispatched&&row.empId){
@@ -13423,6 +13529,7 @@ async function delJobPlanRow(id){
 
 function updateJobPlanField(id,field,value){
   if(window._jpMonthDeleteBusy){alert('กำลังลบแผนเดือนเก่า กรุณารอให้เสร็จก่อน');return;}
+  if(jobPlanRows.find(r=>r.id===id)?.pendingReassignment||String(window._jobReassignmentInFlightId||'')===String(id)){alert('กรุณาดำเนินการส่งงานใหม่ให้เสร็จก่อนแก้ไข');renderJobPlan();return;}
   if(field==='jobType'){
     if(value&&!_jobTypeValue(value)){alert('กรุณาเลือกงาน FLASH, SPX หรือ KEX');return;}
     value=_jobTypeValue(value);
@@ -13435,6 +13542,54 @@ function updateJobPlanField(id,field,value){
 
 function canDispatchJobPlan(){
   return Boolean(adminMode&&(adminRole==='super'||adminRole==='viewer'));
+}
+
+function _jobReassignPlanSignature(row){
+  const clean={...row};delete clean.pendingReassignment;
+  // RTDB removes null object fields on write; treat absent and null equally.
+  const normalize=value=>Array.isArray(value)?value.map(item=>item==null?null:normalize(item)):value&&typeof value==='object'
+    ?Object.fromEntries(Object.entries(value).filter(([,item])=>item!=null).map(([key,item])=>[key,normalize(item)])):value;
+  return jobPlanMonthSignature([normalize(clean)]);
+}
+function _jobReassignEmployeeSignature(emp){
+  // Store a compact consistency fingerprint, not the employee's note, in the plan.
+  const text=JSON.stringify([_skeStatusFingerprint(emp),emp?.leaveRevisionAt||'',_leaveStage(emp),emp?.previousStatus||'',emp?.previousProvince||'',emp?.previousNote||'',emp?.previousStandbyAt||'']);
+  let a=2166136261,b=2246822519;
+  for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b^text.charCodeAt(i),3266489917);}
+  return text.length+':'+(a>>>0).toString(16)+':'+(b>>>0).toString(16);
+}
+function _jobReassignHistory(emp){
+  const history=emp?.statusHistory;
+  return Array.isArray(history)?history:(history&&typeof history==='object'?Object.values(history).filter(item=>item&&typeof item==='object'):[]);
+}
+function _validateJobReassignmentEmployees(row,oldEmp,newEmp){
+  if(!oldEmp||!newEmp||String(oldEmp.id)===String(newEmp.id))throw new Error('ไม่พบพนักงานเดิมหรือพนักงานใหม่');
+  if(oldEmp.status!=='got_job'||String(oldEmp.currentJobPlanId||'')!==String(row.id)||_leaveStage(oldEmp)==='active')throw new Error('คนเดิมเริ่มงานหรือสถานะเปลี่ยนแล้ว ไม่สามารถดึงงานกลับได้');
+  const assignedAt=Date.parse(row.dispatchedAt||row.activatedAt||'');
+  if(Number.isFinite(assignedAt)&&_jobReassignHistory(oldEmp).some(event=>event?.to==='traveling'&&Date.parse(event.at||'')>=assignedAt))throw new Error('คนเดิมเคยเริ่มเดินทางในงานนี้แล้ว ไม่สามารถส่งใหม่');
+  if(_leaveStage(newEmp)==='active')throw new Error('พนักงานใหม่กำลังลา กรุณาเลือกรายชื่ออื่น');
+}
+function _jobReassignEmployeeTransaction(current,row,pending,at){
+  const entries=Object.entries(current||{}),oldEntry=entries.find(([,e])=>e&&String(e.id)===pending.oldId),newEntry=entries.find(([,e])=>e&&String(e.id)===pending.newId);
+  if(!oldEntry||!newEntry)throw new Error('ไม่พบพนักงานล่าสุด');
+  const old=oldEntry[1],target=newEntry[1];
+  // Both markers are written in the same transaction. A retry must not repeat it.
+  if(old.jobReassignmentReceipts?.[pending.id]&&target.jobReassignmentReceipts?.[pending.id])return current;
+  if(old.jobReassignmentReceipts?.[pending.id]||target.jobReassignmentReceipts?.[pending.id])throw new Error('ยังตรวจสอบผลเดิมไม่ได้ กรุณาติดต่อผู้ดูแล');
+  if(isPastWorkDate(row.workDate)||_jobReassignEmployeeSignature(old)!==pending.oldSignature||_jobReassignEmployeeSignature(target)!==pending.newSignature)throw new Error('สถานะพนักงานเปลี่ยนแล้ว กรุณาตรวจรายการล่าสุด');
+  _validateJobReassignmentEmployees(row,old,target);
+  const restoreStatus=row.previousEmployeeStatus||old.previousStatus||'standby';
+  const restoreProvince=row.previousEmployeeProvince??old.previousProvince??'';
+  const restoreNote=row.previousEmployeeNote??old.previousNote??'';
+  const restoreStandbyAt=row.previousEmployeeStandbyAt??old.previousStandbyAt??null;
+  const oldPatch={status:restoreStatus,province:restoreProvince,note:restoreNote,standbyAt:restoreStatus==='standby'?(restoreStandbyAt||at):null,jobWorkDate:null,currentJobPlanId:null,previousStatus:null,previousProvince:null,previousNote:null,previousStandbyAt:null};
+  const cleanRow={...row,empId:target.id,previousEmployeeStatus:null,previousEmployeeProvince:null,previousEmployeeNote:null,previousEmployeeStandbyAt:null};
+  const newPatch=_buildJobDispatchPatch(cleanRow,target,at);
+  const event=(emp,to)=>({id:pending.id,at,from:emp.status||'',to,source:'admin-reassign',actor:'admin',actorRole:adminRole,version:SKE_APP_VERSION});
+  const updatedOld={...old,...oldPatch,updatedAt:at,statusRevision:(Number(old.statusRevision)||0)+1,lastStatusChange:event(old,oldPatch.status),statusHistory:_jobReassignHistory(old).concat(event(old,oldPatch.status)).slice(-20),jobReassignmentReceipts:{...(old.jobReassignmentReceipts||{}),[pending.id]:{id:pending.id,role:'old'}}};
+  const receipt={id:pending.id,role:'new',at,name:String(target.name||''),plate:String(target.plate||''),phone:String(target.phone||''),previousStatus:newPatch.previousStatus,previousProvince:newPatch.previousProvince,previousNote:newPatch.previousNote,previousStandbyAt:newPatch.previousStandbyAt};
+  const updatedNew={...target,...newPatch,updatedAt:at,statusRevision:(Number(target.statusRevision)||0)+1,lastStatusChange:event(target,newPatch.status),statusHistory:_jobReassignHistory(target).concat(event(target,newPatch.status)).slice(-20),jobReassignmentReceipts:{...(target.jobReassignmentReceipts||{}),[pending.id]:receipt}};
+  const next=Array.isArray(current)?current.slice():{...current};next[oldEntry[0]]=updatedOld;next[newEntry[0]]=updatedNew;return next;
 }
 
 // Client-side role scope only: viewer may send a draft job, not edit arbitrary employee fields.
@@ -13567,6 +13722,21 @@ async function revertJobAssignment(empId,excludeRowId){
 // แต่ถ้าแถวถูกจ่ายแล้ว การเปลี่ยนชื่อจะคืนคนเดิมสู่สถานะก่อนรับงาน และส่ง "ได้งานแล้ว" ให้คนใหม่ทันที
 async function onJobPlanEmpChange(id,empId){
   if(window._jobStatusActionBusy){alert('กรุณารอรายการก่อนหน้ายืนยันก่อน');return;}
+  const selectedRow=jobPlanRows.find(r=>r.id===id);
+  if(selectedRow?.pendingReassignment){alert('กรุณากดดำเนินการต่อให้เสร็จก่อน');renderJobPlan();return;}
+  if(selectedRow?.dispatched){
+    if(!canDispatchJobPlan()){alert('เฉพาะผู้ดูแลหรือแอดมินเท่านั้น');renderJobPlan();return;}
+    const drafts=window._jobReassignDrafts||(window._jobReassignDrafts=new Map());
+    if(!empId||String(empId)===String(selectedRow.empId)){drafts.delete(String(id));renderJobPlan();return;}
+    const oldEmp=employees.find(e=>String(e.id)===String(selectedRow.empId));
+    const newEmp=employees.find(e=>String(e.id)===String(empId));
+    try{
+      if(!selectedRow.workDate||isPastWorkDate(selectedRow.workDate)||isCancelledJobPlanRow(selectedRow)||JOB_ASSIGNMENT_DONE_STATES.has(selectedRow.assignmentState))throw new Error('เปลี่ยนได้เฉพาะงานที่ยังไม่จบและไม่ใช่งานย้อนหลัง');
+      _validateJobReassignmentEmployees(selectedRow,oldEmp,newEmp);
+      drafts.set(String(id),{targetId:String(empId),signature:_jobReassignPlanSignature(selectedRow),operationId:'reassign_'+Date.now()+'_'+Math.random().toString(36).slice(2,12)});
+    }catch(error){drafts.delete(String(id));alert(error.message);}
+    renderJobPlan();return;
+  }
   window._jobStatusActionBusy=true;
   try{
   const row=jobPlanRows.find(r=>r.id===id);
@@ -13624,6 +13794,28 @@ async function onJobPlanEmpChange(id,empId){
 
     renderJobPlan();
   }
+}
+
+async function sendJobReassignment(id){
+  if(!canDispatchJobPlan()){alert('เฉพาะผู้ดูแลหรือแอดมินเท่านั้น');return;}
+  if(window._jobStatusActionBusy){alert('กรุณารอรายการก่อนหน้ายืนยันก่อน');return;}
+  const row=jobPlanRows.find(r=>r.id===id),draft=window._jobReassignDrafts?.get(String(id));
+  if(!row||(!row.pendingReassignment&&(!draft||draft.signature!==_jobReassignPlanSignature(row)))){alert('ข้อมูลเปลี่ยนแล้ว กรุณาเลือกพนักงานใหม่อีกครั้ง');renderJobPlan();return;}
+  const targetId=row.pendingReassignment?.newId||draft.targetId;
+  const target=employees.find(e=>String(e.id)===String(targetId));
+  if(!confirm(`ยืนยันดึงงานจากคนเดิมและส่งให้ ${target?.name||'พนักงานที่เลือก'} หรือไม่?\nส่งใหม่ได้เฉพาะก่อนคนเดิมเริ่มเดินทาง`))return;
+  if(!window.fbReassignDispatchedJob){alert('ระบบส่งงานใหม่ยังไม่พร้อม กรุณาลองใหม่');return;}
+  window._jobStatusActionBusy=true;
+  window._jobReassignmentInFlightId=String(id);
+  const planList=document.getElementById('jobPlanList');if(planList)planList.inert=true;
+  const waitNotice=setTimeout(()=>{if(window._jobReassignmentInFlightId===String(id)){if(planList)planList.inert=false;renderJobPlan();showDocUploadToast('ยังรอส่วนกลางยืนยัน สามารถเปิดดูส่วนอื่นระหว่างรอได้',false);}},12000);
+  try{
+    const saved=await window.fbReassignDispatchedJob(row,targetId,draft?.operationId);
+    window._jobReassignDrafts?.delete(String(id));
+    jobPlanRows=jobPlanRows.map(current=>current.id===id&&(current.pendingReassignment?.id===saved.lastReassignmentId||_jobReassignPlanSignature(current)===_jobReassignPlanSignature(row))?saved:current);
+    showDocUploadToast('ดึงงานจากคนเดิมและส่งให้คนใหม่แล้ว',true);
+  }catch(error){alert('ยังยืนยันการส่งใหม่ไม่ได้: '+(error.message||error)+'\nหากแสดง “ดำเนินการต่อ” ให้กดหลังเชื่อมต่ออีกครั้ง');}
+  finally{clearTimeout(waitNotice);window._jobReassignmentInFlightId=null;window._jobStatusActionBusy=false;if(planList)planList.inert=false;renderJobPlan();}
 }
 
 // ══ Export แผนงานทั้งหมดเป็น CSV (เปิดใน Excel ได้) — ไว้เก็บสำเนา/บันทึกภาพรวมแยกในคอม ══
