@@ -834,7 +834,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.81R');
+console.log('[SKE TRUCK] app version: v3.2.82C');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1431,7 +1431,7 @@ console.log('[SKE TRUCK] app version: v3.2.81R');
         if(current.lastStatusChange?.id===requestId)return current;
         if(source==='admin-quick-status'&&(_leaveStage(current)==='active'||!['done','standby'].includes(current.status)))return;
         if(_skeStatusFingerprint(current)!==expected)return;
-        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.81R'};
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.82C'};
         const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
         return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
           ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
@@ -1787,25 +1787,56 @@ console.log('[SKE TRUCK] app version: v3.2.81R');
       return saved;
     }finally{active=false;}
   };
-  window.fbSetCashRequestStatus = async function(id,status) {
-    const authorized=()=>adminMode&&adminRole==='super';
-    if(!authorized())throw new Error('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้นที่ยืนยันการจ่ายได้');
-    if(!['pending','done'].includes(status))throw new Error('สถานะการจ่ายไม่ถูกต้อง');
-    if(window._fbConnected!==true||navigator.onLine===false)throw new Error('กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนยืนยันการจ่าย');
+  async function _cashRequestKey(id) {
     const snap=_deferredData.get('cashRequests')?.snapshot||await _withTimeout(get(ref(db,'cashRequests')),SKE_WRITE_TIMEOUT_MS,'โหลดรายการเบิกเงินไม่สำเร็จ');
     let key=null;
     snap.forEach(child=>{if(String(child.val()?.id)===String(id)){key=child.key;return true;}return false;});
     if(key===null)throw new Error('ไม่พบรายการเบิกเงินนี้ กรุณาโหลดรายการใหม่');
+    return key;
+  }
+  function _acceptCashAcknowledgement(saved,expected) {
+    const shadow=_recordShadows.cashRequests||new Map(), current=shadow.get(String(saved.id));
+    // A realtime event may have arrived while the transaction response was in flight.
+    if(!current||_cashFingerprint(current)===_cashFingerprint(expected)||_cashFingerprint(current)===_cashFingerprint(saved))
+      shadow.set(String(saved.id),_cloneRecord(saved));
+    _recordShadows.cashRequests=shadow;
+  }
+  window.fbUpdateCashAmount = async function(expected,amount) {
+    const owner=String(currentUser?.id??'');
+    const owns=()=>owner!==''&&currentUser&&String(currentUser.id)===owner&&String(expected?.empId)===owner&&!_isEmployeeDeleted(owner);
+    if(!owns())throw new Error('กรุณาเข้าสู่บัญชีพนักงานของคุณอีกครั้ง');
+    if(window._fbConnected!==true||navigator.onLine===false)throw new Error('กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนแก้ไข');
+    if(!expected?.id||!Number.isFinite(amount)||amount<=0||!Number.isSafeInteger(Math.round(amount*100))||Math.abs(amount*100-Math.round(amount*100))>0.000001)throw new Error('กรุณากรอกยอดเงินที่ถูกต้อง ไม่เกิน 2 ตำแหน่งทศนิยม');
+    const key=await _cashRequestKey(expected.id);
+    let active=true,reason='รายการเปลี่ยนแปลงหรือถูกลบ กรุณาปิดและเปิดรายการใหม่';
+    try{
+      const tx=await _withTimeout(runTransaction(ref(db,'cashRequests/'+key),current=>{
+        if(!active||!owns()||window._fbConnected!==true||navigator.onLine===false||!current||String(current.id)!==String(expected.id)||String(current.empId)!==owner)return;
+        if(current.status==='done'){reason='รายการนี้ถูกกดจ่ายแล้ว จึงแก้ไขยอดไม่ได้';return;}
+        if(_cashFingerprint(current)!==_cashFingerprint(expected)){reason='รายการหรือยอดเงินเปลี่ยนแล้ว กรุณาปิดและเปิดรายการใหม่';return;}
+        return {...current,amount,amountRevision:(Number(current.amountRevision)||0)+1,amountUpdatedAt:new Date().toISOString()};
+      },{applyLocally:false}),SKE_WRITE_TIMEOUT_MS,'ยังยืนยันการแก้ไขไม่ได้ กรุณาตรวจยอดล่าสุดก่อนลองใหม่');
+      if(!tx.committed)throw new Error(reason);
+      const saved=tx.snapshot.val();_acceptCashAcknowledgement(saved,expected);return saved;
+    }finally{active=false;}
+  };
+  window.fbSetCashRequestStatus = async function(id,status,expected) {
+    const authorized=()=>adminMode&&adminRole==='super';
+    if(!authorized())throw new Error('เฉพาะผู้ดูแลสิทธิ์เต็มเท่านั้นที่ยืนยันการจ่ายได้');
+    if(!['pending','done'].includes(status))throw new Error('สถานะการจ่ายไม่ถูกต้อง');
+    if(window._fbConnected!==true||navigator.onLine===false)throw new Error('กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนยืนยันการจ่าย');
+    if(!expected||String(expected.id)!==String(id))throw new Error('กรุณาตรวจยอดรายการล่าสุดก่อนยืนยัน');
+    const key=await _cashRequestKey(id);
     let active=true;
     try{
       const tx=await _withTimeout(runTransaction(ref(db,'cashRequests/'+key),current=>{
         if(!active||!authorized()||window._fbConnected!==true||navigator.onLine===false||!current||String(current.id)!==String(id))return;
+        if(_cashFingerprint(current)!==_cashFingerprint(expected))return;
         if(current.status===status)return current;
         return {...current,status,paidAt:status==='done'?new Date().toISOString():null,paidByRole:status==='done'?'super':null};
       },{applyLocally:false}),SKE_WRITE_TIMEOUT_MS,'ยังยืนยันการจ่ายไม่ได้ กรุณาตรวจรายการจากส่วนกลาง');
-      if(!tx.committed)throw new Error('รายการเปลี่ยนแปลงหรือถูกลบ กรุณาโหลดใหม่');
-      const saved=tx.snapshot.val(),shadow=_recordShadows.cashRequests||new Map();
-      shadow.set(String(saved.id),_cloneRecord(saved));_recordShadows.cashRequests=shadow;
+      if(!tx.committed)throw new Error('ยอดหรือสถานะเปลี่ยนแล้ว กรุณาตรวจรายการล่าสุดก่อนกดจ่ายอีกครั้ง');
+      const saved=tx.snapshot.val();_acceptCashAcknowledgement(saved,expected);
       return saved;
     }finally{active=false;}
   };
@@ -4545,7 +4576,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.81R</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.82C</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4553,7 +4584,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.81R</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.82C</div>
       </div>
     </div>
 
@@ -4671,7 +4702,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.81R</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.82C</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4929,7 +4960,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.81R</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.82C</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5622,7 +5653,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.81R';
+const SKE_APP_VERSION='v3.2.82C';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -9140,6 +9171,62 @@ async function _saveCashOpeningApproval(date,approved){
 }
 // ── แจ้งลาพนักงาน — กรอกคำขอได้ทุกเมื่อ แต่วันที่ลาต้องอยู่ในช่วง 16-25 ของเดือนเท่านั้น (ตรวจใน doRequestLeave/_isLeaveDayAllowed) ──
 function fmtBaht(n){const num=Number(n)||0;return num.toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:2});}
+// Compare the values relevant to a payment so an edit and a payment cannot silently race.
+function _cashFingerprint(row){
+  if(!row)return '';
+  return JSON.stringify([String(row.id??''),String(row.empId??''),row.status||'pending',Number(row.amount),Number(row.amountRevision)||0,row.amountUpdatedAt||'',row.paidAt||'']);
+}
+function _applyConfirmedCash(saved,expected){
+  const current=cashRequests.find(row=>String(row.id)===String(saved.id));
+  if(current&&(_cashFingerprint(current)===_cashFingerprint(expected)||_cashFingerprint(current)===_cashFingerprint(saved))){
+    cashRequests=cashRequests.map(row=>String(row.id)===String(saved.id)?saved:row);
+    _cacheSet('ske_cash',cashRequests);
+  }
+}
+let _cashAmountEdit=null,_cashAmountSaving=false;
+function openCashAmountEdit(id){
+  if(_cashAmountSaving||!currentUser)return;
+  const row=cashRequests.find(s=>String(s.id)===String(id)&&String(s.empId)===String(currentUser.id));
+  if(!row||row.status==='done'){alert('รายการนี้ไม่พบหรือจ่ายแล้ว กรุณาตรวจรายการล่าสุด');return;}
+  _cashAmountEdit={...row};
+  let modal=document.getElementById('cashAmountEditModal');
+  if(!modal){
+    modal=document.createElement('div');modal.id='cashAmountEditModal';
+    modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-labelledby','cashAmountEditTitle');
+    modal.style.cssText='position:fixed;inset:0;z-index:10020;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.5)';
+    modal.innerHTML=`<div style="background:white;border-radius:18px;padding:20px;width:100%;max-width:440px;box-shadow:0 12px 40px #0003;">
+      <h3 id="cashAmountEditTitle" style="margin:0 0 8px;color:#1a1a2e;">แก้ไขยอดเบิก</h3>
+      <p style="color:#667085;font-size:13px;line-height:1.5;">แก้ได้เฉพาะรายการที่ยังไม่จ่าย เหตุผลและรูปบิลเดิมยังอยู่</p>
+      <label for="cashEditAmountInput" style="font-weight:700;">จำนวนเงิน (บาท)</label>
+      <input id="cashEditAmountInput" type="number" inputmode="decimal" min="0.01" step="0.01" style="display:block;width:100%;box-sizing:border-box;margin:8px 0 14px;padding:12px;border:1px solid #ccd2dd;border-radius:10px;font-size:18px;">
+      <div style="display:flex;gap:8px;"><button class="btn btn-gray" style="flex:1;" onclick="closeCashAmountEdit()">ยกเลิก</button><button id="cashEditSaveBtn" class="btn btn-blue" style="flex:1;" onclick="saveCashAmountEdit()">บันทึกยอด</button></div></div>`;
+    document.body.appendChild(modal);
+  }
+  modal.style.display='flex';document.getElementById('cashEditAmountInput').value=String(row.amount);
+  document.getElementById('cashEditAmountInput').focus();
+}
+function closeCashAmountEdit(){
+  if(_cashAmountSaving)return;
+  const modal=document.getElementById('cashAmountEditModal');if(modal)modal.style.display='none';
+  _cashAmountEdit=null;
+}
+async function saveCashAmountEdit(){
+  if(_cashAmountSaving||!_cashAmountEdit)return;
+  const raw=document.getElementById('cashEditAmountInput').value.trim();
+  const amount=Number(raw);
+  if(!/^\d+(?:\.\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<=0||!Number.isSafeInteger(Math.round(amount*100))){alert('กรุณากรอกยอดมากกว่า 0 และมีทศนิยมไม่เกิน 2 ตำแหน่ง');return;}
+  const expected={..._cashAmountEdit};
+  if(Number(expected.amount)===amount){closeCashAmountEdit();return;}
+  _cashAmountSaving=true;const btn=document.getElementById('cashEditSaveBtn');btn.disabled=true;btn.textContent='กำลังบันทึก...';
+  try{
+    if(!window.fbUpdateCashAmount)throw new Error('ระบบส่วนกลางยังไม่พร้อม');
+    const saved=await window.fbUpdateCashAmount(expected,amount);
+    _applyConfirmedCash(saved,expected);
+    _cashAmountSaving=false;closeCashAmountEdit();refreshCashViews();
+    alert('✅ บันทึกยอดเบิกแล้ว');
+  }catch(error){alert('❌ ยังยืนยันการแก้ไขไม่ได้: '+(error?.message||'กรุณาตรวจรายการล่าสุดก่อนลองใหม่'));}
+  finally{_cashAmountSaving=false;btn.disabled=false;btn.textContent='บันทึกยอด';}
+}
 // แสดงรูปบิลที่แนบไว้ในคำขอเบิกเงิน — รองรับทั้งแบบหลายรูป (s.photos array แบบใหม่) และรูปเดียว (s.photo แบบเก่าก่อนอัปเดต)
 function _cashPhotosHTML(s,maxH){
   const ids=Array.isArray(s.photos)&&s.photos.length?s.photos:(s.photo?[s.photo]:[]);
@@ -9168,6 +9255,8 @@ function openCashModal(){
   m.classList.remove('hidden');m.style.display='flex';
 }
 function closeCashModal(){
+  if(_cashAmountSaving)return;
+  closeCashAmountEdit();
   const m=document.getElementById('cashModal');
   m.classList.add('hidden');m.style.display='none';
 }
@@ -9353,7 +9442,8 @@ function renderCashList(){
         <span style="color:#aaa;font-size:11px;">${fmt(s.createdAt)}</span>
       </div>
       <div class="row-btns" style="margin-top:10px;">
-        ${_isTollCashRequest(s)&&!done&&!(adminMode&&adminRole==='super')?'<span style="font-size:11px;color:#92400E;">ค่าทางด่วนรอจ่าย — หากกรอกผิด ให้ผู้ดูแลตรวจแก้รายการ</span>':`<button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelCash('${s.id}')">🗑️ ลบรายการ</button>`}
+        ${!done?`<button class="btn btn-blue btn-sm" style="flex:1;" data-cash-id="${esc(s.id)}" onclick="openCashAmountEdit(this.dataset.cashId)">✏️ แก้ไขยอดเบิก</button>`:''}
+        ${_isTollCashRequest(s)&&!done&&!(adminMode&&adminRole==='super')?'':`<button class="btn btn-red btn-sm" style="flex:1;" onclick="doDelCash('${s.id}')">🗑️ ลบรายการ</button>`}
       </div>
     </div>`;
   }).join('');
@@ -9361,7 +9451,7 @@ function renderCashList(){
 }
 async function doDelCash(id){
   const row=cashRequests.find(s=>String(s.id)===String(id));
-  if(_isTollCashRequest(row)&&row.status!=='done'&&!(adminMode&&adminRole==='super')){alert('ค่าทางด่วนยังรอจ่าย หากกรอกผิดกรุณาแจ้งผู้ดูแล');return;}
+  if(_isTollCashRequest(row)&&row.status!=='done'&&!(adminMode&&adminRole==='super')){alert('ค่าทางด่วนยังรอจ่าย หากกรอกยอดผิดสามารถกดแก้ไขยอดเบิกได้');return;}
   if(!confirm('ลบรายการเบิกเงินนี้?'))return;
   try{
     if(window.fbDeleteCashRequest)await window.fbDeleteCashRequest(id);
@@ -9377,11 +9467,13 @@ async function doDelCash(id){
 async function toggleCashStatus(id){
   if(!adminMode||adminRole!=='super'||_cashStatusBusy.has(String(id)))return;
   const row=cashRequests.find(s=>String(s.id)===String(id));if(!row)return;
+  const expected={...row};
+  if(row.status!=='done'&&!confirm('ยืนยันว่าจ่ายเงินให้ '+(row.empName||'พนักงาน')+' จำนวน '+fmtBaht(row.amount)+' บาทแล้วใช่ไหม?'))return;
   _cashStatusBusy.add(String(id));
   try{
     if(!window.fbSetCashRequestStatus)throw new Error('ระบบส่วนกลางยังไม่พร้อม');
-    const saved=await window.fbSetCashRequestStatus(id,row.status==='done'?'pending':'done');
-    cashRequests=cashRequests.map(s=>String(s.id)===String(id)?saved:s);_cacheSet('ske_cash',cashRequests);
+    const saved=await window.fbSetCashRequestStatus(id,row.status==='done'?'pending':'done',expected);
+    _applyConfirmedCash(saved,expected);
   }catch(error){alert('❌ ยังยืนยันการจ่ายไม่ได้: '+(error?.message||'กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่'));}
   finally{_cashStatusBusy.delete(String(id));refreshCashViews();}
 }
@@ -9990,6 +10082,7 @@ function renderAdminCashList(){
       ${g.reqs.map(s=>{
         return`<div class="maint-card" style="margin-bottom:8px;">
           <div style="color:#F47920;font-size:17px;font-weight:900;">฿${fmtBaht(s.amount)}</div>
+          ${s.amountUpdatedAt?`<div style="color:#9a5200;font-size:11px;">✏️ พนักงานแก้ไขยอดล่าสุด ${fmt(s.amountUpdatedAt)}</div>`:''}
           <div style="color:#666;font-size:12.5px;margin-top:3px;line-height:1.6;white-space:pre-wrap;">${esc(s.reason)}</div>
           ${_cashPhotosHTML(s,84)}
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
