@@ -31,6 +31,7 @@
      https://api.open-meteo.com;
   worker-src 'self';
   frame-src 'self'
+    https://*.asia-southeast1.firebasedatabase.app/.lp
     https://www.google.com/recaptcha/
     https://recaptcha.google.com/recaptcha/;
   object-src 'none';
@@ -49,7 +50,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
   import { initializeAppCheck, ReCaptchaV3Provider, onTokenChanged, getToken as getAppCheckToken } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app-check.js";
-  import { getDatabase, ref, set, onValue, get, update, remove, runTransaction, goOffline, goOnline } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+  import { getDatabase, ref, set, onValue, get, update, remove, runTransaction, goOffline, goOnline, forceLongPolling } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
   import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging.js";
 
   const firebaseConfig = {
@@ -74,6 +75,23 @@
   // จะเลือก HTTP long-polling ก่อน รุ่นเก่ามี CSP ที่บล็อก long-polling จึงค้างถาวร
   // ล้างเฉพาะคีย์ transport นี้หนึ่งครั้ง ไม่แตะข้อมูลล็อกอิน/outbox/ข้อมูลแอป
   const FIREBASE_WS_FAILURE_KEY = 'firebase:previous_websocket_failure';
+  // Select the fallback before the first RTDB reference, only in the Android wrapper.
+  const _nativeConnection = window.Capacitor?.getPlatform?.() === 'android';
+  const _transportHintKey = 'ske_android_transport_v1';
+  function _chooseNativePolling(){
+    if(!_nativeConnection)return false;
+    try{
+      const hint=JSON.parse(localStorage.getItem(_transportHintKey)||'null');
+      if(hint && hint.until>Date.now())return hint.mode==='poll';
+      return localStorage.getItem(FIREBASE_WS_FAILURE_KEY)==='true';
+    }catch(_){return false;}
+  }
+  const _nativePolling=_chooseNativePolling();
+  if(_nativePolling)forceLongPolling();
+  function _rememberAlternateTransport(){
+    if(!_nativeConnection)return;
+    try{localStorage.setItem(_transportHintKey,JSON.stringify({mode:_nativePolling?'auto':'poll',until:Date.now()+3600000}));}catch(_){}
+  }
   const TRANSPORT_MIGRATION_KEY = 'ske_transport_storage_migration_v322';
   let _transportFallbackFlagCleared = false;
   try {
@@ -129,6 +147,7 @@
   let _handoffTimer = null;
   let _handoffRunning = false;
   let _handoffEverConnected = false;
+  let _nativeAttempts = 0;
   let _lastTransportRestartAt = 0;
 
   const HANDOFF_GRACE_MS = 30000;
@@ -268,13 +287,14 @@
   }
 
   function _scheduleHandoffRecovery(source){
-    _cancelHandoffTimer();
-    if (navigator.onLine === false) return;
+    // Keep the earliest deadline: WebView often emits focus, pageshow and network changes together.
+    if (_handoffTimer!==null || navigator.onLine===false || document.visibilityState!=='visible')return;
+    const delay=_nativeConnection ? Math.max(7000,_lastRecoveryAttemptAt+60000-Date.now()) : HANDOFF_GRACE_MS;
 
     _handoffTimer = setTimeout(() => {
       _handoffTimer = null;
-      _runHandoffRecovery(source);
-    }, HANDOFF_GRACE_MS);
+      void _runHandoffRecovery(source);
+    }, delay);
   }
 
   window.addEventListener('online', () => _scheduleHandoffRecovery('online'));
@@ -289,7 +309,7 @@
     else _cancelHandoffTimer();
   });
   // ครอบคลุมกรณีเปิดแอปมาแล้ว client ติด false ตั้งแต่ต้น ซึ่งค่า everConnected ยังไม่เคยเป็น true
-  setTimeout(() => _scheduleHandoffRecovery('startup-watchdog'), 6000);
+  setTimeout(() => _scheduleHandoffRecovery('startup-watchdog'), _nativeConnection?0:6000);
 
   // ปุ่มแถบแดง: probe → restart transport → reload เป็นทางเลือกสุดท้าย
   let _reconnecting = false;
@@ -333,7 +353,8 @@
   }
   async function _runConnectionRecovery(source,manual=false){
     // Only this controller owns the busy indicator, including all early exits.
-    if(_handoffRunning)return;
+    if(_handoffRunning || (!manual && document.visibilityState!=='visible'))return;
+    let attempted=false;
     _handoffRunning=true;
     _reconnecting=true;
     window._setReconnecting?.(true);
@@ -343,16 +364,25 @@
       if(!manual&&document.visibilityState!=='visible')return;
       if(!manual&&Date.now()-_lastRecoveryAttemptAt<60000)return;
       _lastRecoveryAttemptAt=Date.now();
+      attempted=true;
       _setConnectionIssue('');
       // Verify the protected client first; an unauthenticated REST 401 says only 'server reachable'.
       if(!await _checkConnectionVerification())return;
       if(navigator.onLine===false){_setConnectionIssue('offline');return;}
+      if(!manual&&document.visibilityState!=='visible')return;
       if(_employeeReadFailed)_startEmployeesListener();
       if(window._fbConnected===true)return;
       const reachable=await _probeFirebaseRest();
-      if(!reachable){_setConnectionIssue('unreachable');return;}
+      if(navigator.onLine===false){_setConnectionIssue('offline');return;}
+      if(!manual&&document.visibilityState!=='visible')return;
       if(window._fbConnected===true)return;
-      if(!await _restartFirebaseTransport(source))_setConnectionIssue('waiting');
+      if(!reachable){_setConnectionIssue('unreachable');return;}
+      if(!await _restartFirebaseTransport(source)){
+        if(_nativeConnection && navigator.onLine!==false && document.visibilityState==='visible'){
+          _rememberAlternateTransport();
+          _setConnectionIssue('native-waiting');
+        }else _setConnectionIssue('waiting');
+      }
       // Never auto-reload on weak data. Preserve forms, GPS, login and pending outbox writes.
     }catch(error){
       _setConnectionIssue('waiting');
@@ -361,6 +391,10 @@
       _handoffRunning=false;
       _reconnecting=false;
       window._setReconnecting?.(false);
+      if(attempted && _nativeConnection && !window._fbConnected && navigator.onLine!==false &&
+         document.visibilityState==='visible' && ['native-waiting','unreachable'].includes(_connectionIssue) && ++_nativeAttempts<=2){
+        _scheduleHandoffRecovery('android-retry');
+      }
     }
   }
 
@@ -374,6 +408,10 @@
   }
 
   window.forceReconnectNow = async function(source){
+    if(source==='resume' && _nativeConnection){
+      _scheduleHandoffRecovery('resume');
+      return;
+    }
     return _runConnectionRecovery(source||'manual',true);
   };
 
@@ -400,7 +438,8 @@
     skeDebugLog('Promise Rejected', (e.reason && (e.reason.message || e.reason.code || e.reason)) || 'unknown');
   });
   document.addEventListener('securitypolicyviolation', (e) => {
-    skeDebugLog('CSP blocked', (e.violatedDirective || 'unknown') + ' → ' + (e.blockedURI || 'inline'));
+    let origin='inline';try{origin=new URL(e.blockedURI).origin;}catch(_){}
+    skeDebugLog('CSP blocked', (e.violatedDirective || 'unknown') + ' → ' + origin);
   });
 
   // แสดง log ทั้งหมดเป็นหน้าต่างดูได้ — เรียกจากการแตะข้อความเวอร์ชันรัวๆ 5 ครั้ง
@@ -413,6 +452,7 @@
       'เวลาเปิดดู: ' + new Date().toLocaleString('th-TH'),
       'navigator.onLine: ' + navigator.onLine,
       'Firebase .info/connected: ' + window._fbConnected,
+      'RTDB mode: ' + (_nativePolling?'Android HTTPS fallback':'SDK auto'),
       'Firebase previous websocket failure: ' + transportFlag,
       'User Agent: ' + navigator.userAgent
     ].join('\n');
@@ -834,7 +874,7 @@
   // ทางแก้: ทุกครั้งที่เริ่มบันทึกจะขึ้น "งานค้าง" ไว้ใน localStorage (outbox) ก่อน แล้วค่อยลบออกเมื่อสำเร็จ
   // ตราบใดที่ยังมีงานค้างของชุดข้อมูลไหนอยู่ onValue ของชุดนั้นจะ "ไม่เอาข้อมูลเซิร์ฟเวอร์มาทับข้อมูลเครื่อง"
   // และระบบจะพยายามส่งซ้ำอัตโนมัติทุก 8 วิ และทันทีที่เน็ตกลับมา (.info/connected) จนกว่าจะสำเร็จ
-console.log('[SKE TRUCK] app version: v3.2.82C');
+console.log('[SKE TRUCK] app version: v3.2.83N');
   // ใช้คิว V2 แยกจากคิวรุ่นเก่าที่เก็บ payload ทั้งก้อน เพื่อไม่ให้คิวเก่าถูกส่งย้อนมาทับข้อมูลใหม่
   const SKE_OUTBOX_KEY = 'ske_outbox_v2_record_ops';
   try {
@@ -1246,6 +1286,7 @@ console.log('[SKE TRUCK] app version: v3.2.82C');
           :issue==='verification-throttled'?'🔒 การยืนยันแอปถูกพักชั่วคราว — กรุณารอแล้วลองใหม่'
           :issue==='verification'?'🔒 ยังยืนยันการเชื่อมต่อแอปไม่ได้ — แตะลองใหม่ หากยังไม่ได้ให้แจ้งผู้ดูแล'
           :issue==='unreachable'?'📡 ติดต่อเซิร์ฟเวอร์ไม่ได้ — ตรวจสัญญาณแล้วแตะลองใหม่'
+          :issue==='native-waiting'?'📡 ยังติดต่อส่วนกลางไม่ได้ — แตะลองใหม่ ถ้ายังค้างให้เปิดแอปใหม่เมื่อไม่มีงานรอส่ง'
           :issue==='waiting'?'📡 ยังเชื่อมต่อส่วนกลางไม่ได้ — แตะลองใหม่ (ข้อมูลรอส่งยังอยู่)'
           :'🔄 กำลังเชื่อมต่อส่วนกลาง — แตะเพื่อลองใหม่';
         // ปิดการเด้ง debug log อัตโนมัติแล้ว (เลือกใช้แบบแตะเวอร์ชัน 5 ครั้งเองแทน ตามที่ผู้ใช้ต้องการ)
@@ -1431,7 +1472,7 @@ console.log('[SKE TRUCK] app version: v3.2.82C');
         if(current.lastStatusChange?.id===requestId)return current;
         if(source==='admin-quick-status'&&(_leaveStage(current)==='active'||!['done','standby'].includes(current.status)))return;
         if(_skeStatusFingerprint(current)!==expected)return;
-        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.82C'};
+        const event={id:requestId,at,from:current.status||'',to:patch.status,source,actor,actorRole:roleAtStart||'employee',version:'v3.2.83N'};
         const history=Array.isArray(current.statusHistory)?current.statusHistory:[];
         return {...current,..._cleanPatch(patch),id:current.id,updatedAt:at,
           ...(patch.standbyAt&&patch.standbyAt===patch.updatedAt?{standbyAt:at}:{}),
@@ -2283,6 +2324,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
     window._fbConnected = connected;
     if (connected) {
       _handoffEverConnected = true;
+      _nativeAttempts=0;
       if(!_connectionIssue.startsWith('verification'))_setConnectionIssue('');
       _cancelHandoffTimer();
       _clearReloadLock();
@@ -2671,7 +2713,7 @@ window.fbApplyLeaveAction = async function(empId, action, input) {
     _firstSync.feedbacks = true;
   });
 
-
+  window._skeConnectionClientLoaded=true;
 </script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -4566,6 +4608,10 @@ select.inp option{background:#fff;color:#1a1a2e;}
         <span>กำลังเชื่อมต่อระบบ SKE</span><span class="ske-splash-dots" aria-hidden="true"></span>
       </div>
       <div class="ske-splash-pulses" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div id="skeBootRetry" hidden style="margin-top:12px;position:relative;z-index:1">
+        <p role="status">ยังโหลดระบบเชื่อมต่อไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองใหม่</p>
+        <button type="button" class="btn btn-blue" onclick="skeRetryClientBoot()">ลองโหลดระบบใหม่</button>
+      </div>
     </div>
   </div>
   <div id="splashInstallBtn"></div>
@@ -4576,7 +4622,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.82C</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.83N</span></div></div>
   </div>
 
   <div class="login-inner">
@@ -4584,7 +4630,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
       <div class="logo-lg"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
       <div style="text-align:center;">
         <div style="font-size:22px;font-weight:800;color:#1a1a2e;">สถานะรถ SKE</div>
-        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.82C</div>
+        <div class="ske-version-tag" style="color:#888;font-size:13px;">SK EVO LOGISTICS · v3.2.83N</div>
       </div>
     </div>
 
@@ -4702,7 +4748,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <!-- topbar -->
   <div class="topbar">
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.82C</span></div></div>
+    <div style="flex:1;"><div class="topbar-title">สถานะรถ SKE</div><div class="topbar-sub">SK EVO LOGISTICS · <span class="ske-version-tag" style="opacity:.7">v3.2.83N</span></div></div>
     <span id="adminBadge" class="badge-admin hidden">ADMIN</span>
   </div>
   <!-- breadcrumb back bar -->
@@ -4960,7 +5006,7 @@ select.inp option{background:#fff;color:#1a1a2e;}
   <div class="topbar">
     <button class="topbar-back" id="adminBackBtn" onclick="goBack()">←</button>
     <div class="topbar-logo"><img class="ske-real-logo" src="ske-logo.png" alt="SKE LOGISTICS"></div>
-    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.82C</div></div>
+    <div style="flex:1;"><div class="topbar-title" id="adminPanelTitle">แผงควบคุม SKE</div><div class="ske-version-tag" style="font-size:11px;color:#aaa;">v3.2.83N</div></div>
     <button type="button" class="topbar-back" id="adminRefreshBtn" onclick="return refreshAdmin(event)" aria-label="รีเฟรชข้อมูลล่าสุด" title="รีเฟรชข้อมูลล่าสุดจาก Firebase" style="font-size:18px;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;">🔄</button>
     <button class="topbar-back hidden" id="adminViewerLogout" onclick="doLogout()" title="ออกจากระบบ" style="font-size:18px;">🚪</button>
     <span class="badge-admin" id="adminTopBadge">ADMIN</span>
@@ -5653,7 +5699,7 @@ function lineLink(lineId){
   return ` • <a href="https://line.me/ti/p/~${encodeURIComponent(lid)}" target="_blank" onclick="event.stopPropagation()" style="color:#06C755;font-weight:600;text-decoration:none;white-space:nowrap;">💬 LINE ด่วน</a>`;
 }
 
-const SKE_APP_VERSION='v3.2.82C';
+const SKE_APP_VERSION='v3.2.83N';
 
 // ══ เช็คเวอร์ชันใหม่อัตโนมัติจากเลขเวอร์ชันจริงใน index.html ══
 // ไม่ใช้ ETag/Last-Modified เพราะค่า header ของ GitHub Pages/CDN อาจเปลี่ยนได้ทั้งที่ไฟล์เดิม
@@ -7511,11 +7557,25 @@ function skeInitApp(){
 }
 // สคริปต์นี้อยู่ท้าย body ทำให้ DOM พร้อมใช้งานแล้วเกือบตลอด แต่กันเคสที่ DOMContentLoaded
 // ยิงไปก่อนแล้ว (เช่นโหลดจาก cache) ด้วยการเช็ค readyState ก่อน
-if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded',skeInitApp);
-} else {
+function skeRetryClientBoot(){
+  // Only before the app opens; never reload a form or discard an in-flight edit.
+  if(!window._skeConnectionClientLoaded && !document.getElementById('splash').classList.contains('hidden'))location.reload();
+}
+function skeStartAfterModules(){
+  if(window.Capacitor?.getPlatform?.()==='android' && !window._skeConnectionClientLoaded){
+    document.getElementById('skeBootRetry').hidden=false;
+    return;
+  }
+  document.getElementById('skeBootRetry').hidden=true;
   skeInitApp();
 }
+// A stalled module download also delays DOMContentLoaded. Show the retry action independently.
+if(window.Capacitor?.getPlatform?.()==='android')setTimeout(()=>{
+  if(!window._skeConnectionClientLoaded&&!document.getElementById('splash').classList.contains('hidden'))
+    document.getElementById('skeBootRetry').hidden=false;
+},12000);
+if(document.readyState!=='complete')document.addEventListener('DOMContentLoaded',skeStartAfterModules,{once:true});
+else skeStartAfterModules();
 
 // ── กลับเข้าแอปจาก background: ตรวจสถานะก่อน แล้วกู้ transport เฉพาะเมื่อค้าง ──
 let _lastVisibleRefresh=0;
